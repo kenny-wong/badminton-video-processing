@@ -1,4 +1,5 @@
-// GET /api/settings: the settings, the app version and whether FFmpeg was found.
+// GET /api/settings: the settings, the app version, whether FFmpeg was found, and a
+//   frame of the latest linked video for the scoreboard preview.
 // PUT /api/settings: saves them.
 
 import { readFileSync } from 'node:fs';
@@ -15,7 +16,8 @@ function status(settings) {
 
 export function onRequestGet({ app }) {
   const settings = readSettings(app.db);
-  return json({ settings, ...status(settings) });
+  const latest = app.db.prepare('SELECT match_id FROM videos WHERE match_id IS NOT NULL AND missing = 0 ORDER BY recorded_at DESC LIMIT 1').get();
+  return json({ settings, ...status(settings), previewThumb: latest ? `/media/thumb/${latest.match_id}` : null });
 }
 
 export async function onRequestPut({ request, app }) {

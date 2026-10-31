@@ -1,7 +1,8 @@
 // GET /api/matches/:id: the match, its videos, tagging and the playable source.
-// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl? }:
+// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle? }:
 //   saves tagging, the score the video starts at, where the match starts and
-//   ends in the video, and the YouTube link once uploaded ('' or null clears).
+//   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
+//   own scoreboard preset and corner (null uses Settings).
 // PUT /api/matches/:id/videos { videoIds }: links these videos, in this order. A match
 //   left with no video is cleared and its tagging goes with the video, arriving on the
 //   next match it is linked to (if that match has none of its own).
@@ -29,6 +30,7 @@ import { suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
 import { isMine } from '../public/shared/names.js';
+import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
 
 const MAX_VIDEOS = 12;
 
@@ -40,7 +42,8 @@ function load(app, params) {
 export function onRequestGet({ params, app }) {
   const loaded = load(app, params);
   if (!loaded) return fail(404, 'notFound', 'No such match');
-  const { players } = readSettings(app.db);
+  const settings = readSettings(app.db);
+  const { players } = settings;
   const { match } = loaded;
   const source = sourceFor(loaded);
   const jobs = Object.fromEntries(['prepare', 'analyse', 'render', 'track'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
@@ -51,7 +54,8 @@ export function onRequestGet({ params, app }) {
     tracking: { ready: tracker().ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
     formatChosen: Boolean(match.format),
     mine: { a: isMine(match.teamA, players), b: isMine(match.teamB, players) },
-    nameStyle: readSettings(app.db).nameStyle,
+    nameStyle: settings.nameStyle,
+    board: resolveBoard(settings.board, match.boardStyle),
     output: { ...describeOutput(loaded, null), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
     highlights: { ...describeOutput(loaded, null, { highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
@@ -106,6 +110,7 @@ export async function onRequestPut({ request, params, app }) {
     if (body.corners !== null && !corners) return fail(400, 'badInput', 'Those four corners can’t be a court');
   }
   const nearAtStart = body.nearAtStart === 'a' || body.nearAtStart === 'b' ? body.nearAtStart : body.nearAtStart === null ? null : match.nearAtStart;
+  const boardStyle = body.boardStyle !== undefined ? cleanBoardOverride(body.boardStyle) : match.boardStyle;
   let link = match.youtubeUrl;
   let uploadedAt = match.uploadedAt;
   if (body.youtubeUrl !== undefined) {
@@ -120,10 +125,11 @@ export async function onRequestPut({ request, params, app }) {
     }
   }
   app.db.prepare(`UPDATE matches SET rallies = ?, format = ?, first_server = ?, start_score = ?, match_start = ?, match_end = ?,
-      youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, updated_at = ? WHERE id = ?`)
+      youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, board_style = ?, updated_at = ? WHERE id = ?`)
     .run(JSON.stringify(rallies), format ? JSON.stringify(format) : null, firstServer, startScore ? JSON.stringify(startScore) : null,
-      matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, nowIso(), match.id);
-  return json({ ok: true, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart });
+      matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, boardStyle ? JSON.stringify(boardStyle) : null, nowIso(), match.id);
+  return json({ ok: true, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle,
+    board: resolveBoard(readSettings(app.db).board, boardStyle) });
 }
 
 export async function linkVideos({ request, params, app }) {

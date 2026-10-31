@@ -31,7 +31,7 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
 
 ## Using it
 
-1. **Settings**: add the folders you copy phone videos into, and your players' names (to pick out their matches). You can also choose how names appear on the scoreboard, separately for singles and doubles (CHAN, THAI, T. CHAN or THAI CHAN).
+1. **Settings**: add the folders you copy phone videos into, and your players' names (to pick out their matches). You can also choose how names appear on the scoreboard, separately for singles and doubles (CHAN, THAI, T. CHAN or THAI CHAN). The scoreboard's look (preset or your own colours, font, opacity, size, corner, a heading line, the scores of finished games, GAME POINT / MATCH POINT flags and interval or game banners) is set there too, with a preview; each match can pick its own preset and corner on the editor's Export tab.
 2. **Import** a tournament with its badminfo or Badminton England link.
 3. **Scan video folders**. Each video's recording time comes from the iPhone's clock, the phone's file name (`20261024_091233.mp4`, `VID_…`, `PXL_…`), the video's own timestamp, or as a last resort the file date.
 4. On the tournament page, **link** the suggested videos (or choose one per match). A match with several games can also be linked **game by game**: each game then has its own video, tagging, render and YouTube link, grouped under the match. Linked the wrong match? Unlink it: that match is cleared, and the video's tagging goes with it to the next match you link it to. Switch between a list and a grid of video thumbnails; your players' matches show by default, and *Hide matches without a video* narrows it further.
@@ -58,7 +58,7 @@ The server writes `data\logs\app.log`: starts and stops, and when each backgroun
 ## How it works
 
 - `server.js`: a small Node HTTP server bound to 127.0.0.1 only. It serves `public/`, the JSON API in `api/` and match videos with byte ranges. Writes are accepted only from the app's own origin.
-- `lib/`: server logic. `badminfo.js` and `schedule.js` read the tournament sources. `media.js` reads recording times, `matching.js` suggests links, `hits.js` and `analyse.js` find rallies by sound, `overlay.js` writes the ASS scoreboard, `render.js` plans cuts, chapters and FFmpeg commands, `pipeline.js` runs them, and `db.js` holds the SQLite database (`node:sqlite`) with `migrations/`.
+- `lib/`: server logic. `badminfo.js` and `schedule.js` read the tournament sources. `media.js` reads recording times, `matching.js` suggests links, `hits.js` and `analyse.js` find rallies by sound, `overlay.js` writes the ASS scoreboard (laid out by `public/shared/board.js`, which the Settings preview also draws), `render.js` plans cuts, chapters and FFmpeg commands, `pipeline.js` runs them, and `db.js` holds the SQLite database (`node:sqlite`) with `migrations/`.
 - `public/`: the page (plain HTML, CSS and ES modules). `public/shared/` holds the scoring rules and name helpers, used by both the page and the server.
 - Rendering cuts each kept part with the scoreboard drawn by FFmpeg's `ass` filter, several parts at once, then joins them without re-encoding. iPhone HDR footage is tone-mapped to standard video.
 

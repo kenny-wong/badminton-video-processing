@@ -13,6 +13,8 @@ import { clock } from './shared/time.js';
 import { renderEditor } from './editor.js';
 import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
+import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, PRESETS } from './shared/board.js';
+import { boardPreview } from './board-preview.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
@@ -419,6 +421,59 @@ async function renderSettings() {
   singlesSel.addEventListener('change', showExample);
   doublesSel.addEventListener('change', showExample);
   showExample();
+
+  // ---- scoreboard look, with a preview drawn from the same layout as the video ----
+  const b = s.board;
+  const select = (id, options, value) => h('select', { id }, Object.entries(options).map(([k, label]) => h('option', { value: k, selected: k === value }, label)));
+  const presetSel = select('board-preset', { ...Object.fromEntries(Object.entries(PRESETS).map(([k, p]) => [k, p.label])), custom: 'Your own colours' }, b.preset);
+  const colours = Object.fromEntries([['box', 'Board'], ['text', 'Names'], ['accent', 'Highlight'], ['pointsText', 'Score']].map(([k, label]) =>
+    [k, { label, input: h('input', { type: 'color', id: `board-${k}`, value: b[k] }) }]));
+  const fontSel = select('board-font', Object.fromEntries(Object.keys(FONTS).map((f) => [f, f])), b.font);
+  const opacity = h('input', { type: 'range', id: 'board-opacity', min: 30, max: 100, step: 5, value: b.opacity });
+  const scale = h('input', { type: 'range', id: 'board-scale', min: 60, max: 160, step: 5, value: b.scale });
+  const cornerSel = select('board-corner', CORNERS, b.corner);
+  const headingSel = select('board-heading', HEADINGS, b.heading);
+  const ticks = Object.fromEntries([['showGames', 'Scores of finished games'], ['flags', 'GAME POINT / MATCH POINT'], ['banners', 'Interval and game banners']].map(([k, label]) =>
+    [k, { label, input: h('input', { type: 'checkbox', id: `board-${k}`, checked: b[k] }) }]));
+  const readBoard = () => ({
+    preset: presetSel.value,
+    ...Object.fromEntries(Object.entries(colours).map(([k, c]) => [k, c.input.value])),
+    font: fontSel.value, opacity: Number(opacity.value), scale: Number(scale.value), corner: cornerSel.value, heading: headingSel.value,
+    ...Object.fromEntries(Object.entries(ticks).map(([k, c]) => [k, c.input.checked])),
+  });
+  const preview = h('div', { class: 'preview-frame' });
+  const sample = h('select', { 'aria-label': 'Moment to preview' },
+    h('option', { value: 'point' }, 'Game 2, match point'), h('option', { value: 'interval' }, 'Interval'), h('option', { value: 'start' }, 'Start of the match'));
+  const showBoard = () => {
+    const style = readBoard();
+    const names = boardNames([['Thai Chan'], ['Amy Lee']], { singles: singlesSel.value, doubles: doublesSel.value });
+    const moment = {
+      point: { state: { games: [[21, 18]], points: [20, 17], won: [1, 0], server: 'a' }, banner: '' },
+      interval: { state: { games: [[21, 18]], points: [11, 8], won: [1, 0], server: 'a' }, banner: 'INTERVAL' },
+      start: { state: { games: [], points: [0, 0], won: [0, 0], server: 'b' }, banner: '' },
+    }[sample.value];
+    const flags = boardFlags(moment.state, { points: 21, setting: true, bestOf: 3 });
+    const heading = boardHeading(style, { tournament: { name: 'Example Open' }, match: { draw: 'MS U15', round: 'Final' } });
+    fill(preview, boardPreview({ names, ...moment, style, flags, heading, background: data.previewThumb }));
+  };
+  presetSel.addEventListener('change', () => {
+    const p = PRESETS[presetSel.value];
+    if (p) {
+      for (const [k, c] of Object.entries(colours)) c.input.value = p[k];
+      fontSel.value = p.font;
+      opacity.value = p.opacity;
+    }
+    showBoard();
+  });
+  // Changing a colour, the font or the opacity makes the look your own.
+  for (const el of [...Object.values(colours).map((c) => c.input), fontSel, opacity]) {
+    el.addEventListener('input', () => {
+      presetSel.value = 'custom';
+      showBoard();
+    });
+  }
+  for (const el of [scale, cornerSel, headingSel, sample, singlesSel, doublesSel, ...Object.values(ticks).map((c) => c.input)]) el.addEventListener('input', showBoard);
+  showBoard();
   const tools = (d) => (d.ffmpeg
     ? h('div', { class: 'notice ok' }, `FFmpeg found. Encoder: ${d.encoder === 'h264_nvenc' ? 'NVIDIA (fast)' : 'CPU (x264)'}.`)
     : h('div', { class: 'notice bad' }, 'FFmpeg wasn’t found. Install it with ', h('kbd', {}, 'winget install Gyan.FFmpeg'), ' or give its bin folder below.'));
@@ -439,7 +494,7 @@ async function renderSettings() {
           const saved = await api('/api/settings', {
             method: 'PUT',
             body: { videoFolders: lines(folders.value), players: lines(players.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
-              nameStyle: { singles: singlesSel.value, doubles: doublesSel.value } },
+              nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard() },
           });
           fill(toolsBox, tools(saved));
           fill(msg, h('div', { class: 'notice ok' }, icon('check', 16), 'Saved.'));
@@ -458,6 +513,16 @@ async function renderSettings() {
       section('Scoreboard names', 'How players’ names appear on the scoreboard. Two players who would look the same get an initial added.',
         h('div', { class: 'row' }, h('label', { for: 'names-singles' }, 'Singles'), singlesSel, h('label', { for: 'names-doubles' }, 'Doubles'), doublesSel),
         example),
+      section('Scoreboard look', 'Colours, font, size and corner of the score in the video. Each match can also choose its own preset and corner (Export tab).',
+        h('div', { class: 'board-settings' },
+          h('div', { class: 'stack' },
+            h('div', { class: 'row' }, h('label', { for: 'board-preset' }, 'Look'), presetSel, h('label', { for: 'board-font' }, 'Font'), fontSel),
+            h('div', { class: 'row colour-row' }, Object.entries(colours).map(([k, c]) => h('label', { for: `board-${k}`, class: 'colour' }, c.input, c.label))),
+            h('div', { class: 'row' }, h('label', { for: 'board-opacity' }, 'Opacity'), opacity, h('label', { for: 'board-scale' }, 'Size'), scale),
+            h('div', { class: 'row' }, h('label', { for: 'board-corner' }, 'Corner'), cornerSel),
+            h('div', { class: 'row' }, h('label', { for: 'board-heading' }, 'Heading'), headingSel),
+            h('div', { class: 'stack small' }, Object.entries(ticks).map(([k, c]) => h('label', { class: 'row', for: `board-${k}` }, c.input, c.label)))),
+          h('div', { class: 'stack' }, preview, h('div', { class: 'row small' }, 'Preview:', sample)))),
       section('Cutting', 'How much of the play around each rally to keep when the gaps are cut.',
         h('div', { class: 'row' }, h('label', { for: 'pre' }, 'Keep'), pre, h('label', { for: 'post' }, 'seconds before each rally, and'), post, h('span', {}, 'after.'))),
       h('div', { class: 'label last' }, h('h3', {}, 'FFmpeg'), h('p', {}, 'Optional: its bin folder, if it isn’t found by itself.')),

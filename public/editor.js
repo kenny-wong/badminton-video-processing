@@ -9,6 +9,8 @@ import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, me
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { icon } from './icons.js';
+import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
+import { boardPreview } from './board-preview.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -372,11 +374,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const key = JSON.stringify(s);
     if (key !== lastBoard) {
       lastBoard = key;
+      const flags = boardFlags(s, format);
       fill(board, [0, 1].map((k) => {
         const side = k ? 'b' : 'a';
         return [
           h('span', { class: s.server === side ? 'serve' : '' }),
-          h('span', { class: `side-${side}` }, h('span', { class: `chip ${side}` }, side.toUpperCase()), ' ', k ? nameB : nameA),
+          h('span', { class: `side-${side}` }, h('span', { class: `chip ${side}` }, side.toUpperCase()), ' ', k ? nameB : nameA, flags[k] ? h('span', { class: 'flag' }, flags[k]) : null),
           h('span', { class: 'games', title: 'Games won' }, s.games.map((g) => g[k]).join(' ') || ''),
           h('span', { class: 'pts' }, s.points[k]),
         ];
@@ -811,6 +814,39 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     h('button', { class: 'small', onclick: () => api(`/api/matches/${id}/reveal`, { method: 'POST', body: { highlights: true } }).catch((e) => say(e.message)) }, 'Show in folder')) : null);
   showHighlights(data.highlights.exists);
 
+  // ---- this match's own scoreboard preset and corner, over Settings ----
+  let boardStyle = match.boardStyle;
+  const lookSel = h('select', { 'aria-label': 'Scoreboard look for this match' },
+    h('option', { value: '' }, 'Look from Settings'), Object.entries(PRESETS).map(([k, p]) => h('option', { value: k, selected: boardStyle?.preset === k }, p.label)));
+  const cornerSel = h('select', { 'aria-label': 'Scoreboard corner for this match' },
+    h('option', { value: '' }, 'Corner from Settings'), Object.entries(CORNERS).map(([k, label]) => h('option', { value: k, selected: boardStyle?.corner === k }, label)));
+  const boardBox = h('div', { class: 'preview-frame small-preview' });
+  const drawBoardPreview = () => {
+    const style = data.board;
+    const s = scoreAt(rallies, steps, video.currentTime, initial);
+    const i = rallies.findLastIndex((r, j) => r.end <= video.currentTime && steps[j]?.counted);
+    const st = steps[i];
+    const banner = st?.event && video.currentTime - rallies[i].end < 6 ? bannerText({ kind: st.event, winner: rallies[i].winner, before: st.before, after: st.after }, [nameA, nameB], format) : '';
+    fill(boardBox, boardPreview({
+      names: [nameA, nameB], state: s, style, flags: boardFlags(s, format), heading: boardHeading(style, { tournament, match }), banner,
+      background: `/media/thumb/${id}`, width: data.source.width || 1920, height: data.source.height || 1080,
+    }));
+  };
+  const lookChanged = async () => {
+    boardStyle = { ...(lookSel.value ? { preset: lookSel.value } : {}), ...(cornerSel.value ? { corner: cornerSel.value } : {}) };
+    try {
+      const r = await api(`/api/matches/${id}`, { method: 'PUT', body: { boardStyle } });
+      boardStyle = r.boardStyle;
+      data.board = r.board; // Settings' look with this match's choice on top, as the render will use
+      drawBoardPreview();
+      say('Scoreboard look saved');
+    } catch (err) {
+      say(err.message);
+    }
+  };
+  lookSel.addEventListener('change', lookChanged);
+  cornerSel.addEventListener('change', lookChanged);
+
   // ---- the YouTube link, once uploaded by hand ----
   const ytInput = h('input', { type: 'url', placeholder: 'https://youtu.be/…', value: match.youtubeUrl ?? '', 'aria-label': 'YouTube link' });
   const ytBox = h('div');
@@ -1007,6 +1043,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         renderBox,
         highlightsResult,
         renderResult),
+      card('Scoreboard', 'sliders',
+        h('div', { class: 'row small' }, lookSel, cornerSel),
+        boardBox,
+        h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
+        h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.')),
       card('YouTube', 'youtube',
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox)),
@@ -1026,6 +1067,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       drawTrackingPanel();
     }
     padPlayer();
+    if (tab === 'export' && steps.length) drawBoardPreview();
     // Opening Tracking on a court not marked yet goes straight to marking it.
     if (onTracking && !corners && !marking && data.tracking.ready) startMarking();
   };
@@ -1056,6 +1098,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   drawList();
   drawCheck();
   showTime();
+  if (tab === 'export') drawBoardPreview();
+  // The scoreboard preview follows the video while it is paused.
+  video.addEventListener('seeked', () => { if (tab === 'export' && video.paused) drawBoardPreview(); });
 
   return () => {
     window.removeEventListener('keydown', onKey);

@@ -429,3 +429,13 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .name-example b { font-weight: 500; color: rgb(255 255 255 / 60%); margin-right: 4px; letter-spacing: 0; }
 .game-score b { font-weight: 800; }
 .meta span.result .game-score b { color: var(--text); }
+
+/* Scoreboard look (Settings) and its preview */
+.board-settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 18px; align-items: start; }
+@media (max-width: 1000px) { .board-settings { grid-template-columns: 1fr; } }
+.colour-row { gap: 14px; }
+label.colour { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); }
+input[type="color"] { width: 34px; height: 28px; padding: 0 2px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); cursor: pointer; }
+.preview-frame { border-radius: var(--radius-sm); overflow: hidden; background: #0d110f; box-shadow: var(--shadow); line-height: 0; }
+.preview-frame svg { width: 100%; height: auto; display: block; }
+.board .flag { margin-left: 8px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 4px; background: var(--gold); color: #0f3b2d; vertical-align: 2px; }
