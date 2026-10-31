@@ -38,13 +38,17 @@ export function boardPreview({ names, state, style, flags, heading = '', banner 
   for (const it of [...items].sort((a, b) => a.layer - b.layer)) {
     if (it.type === 'rect') {
       root.append(svg('rect', { x: it.x, y: it.y, width: it.w, height: it.h, fill: it.colour, 'fill-opacity': it.opacity }));
+    } else if (it.type === 'poly') {
+      root.append(svg('polygon', { points: it.points.map((p) => p.join(',')).join(' '), fill: it.colour, 'fill-opacity': it.opacity }));
     } else {
-      const t = svg('text', {
-        x: it.x, y: it.y, fill: it.colour, 'fill-opacity': it.opacity, 'font-family': style.font, 'font-size': it.size,
-        'font-weight': it.bold ? 700 : 400, 'text-anchor': it.anchor, 'dominant-baseline': 'central',
+      // Narrow lettering is drawn squeezed sideways, as the video's subtitles do.
+      const k = (it.stretch ?? 100) / 100;
+      const text = (dx, attrs) => svg('text', {
+        x: 0, y: 0, transform: `translate(${it.x + dx},${it.y + dx}) scale(${k},1)`, 'font-family': style.font, 'font-size': it.size,
+        'font-weight': it.bold ? 700 : 400, 'text-anchor': it.anchor, 'dominant-baseline': 'central', ...attrs,
       }, it.text);
-      if (it.shadow) root.append(svg('text', { x: it.x + 1, y: it.y + 1, fill: '#000', 'fill-opacity': 0.4 * it.opacity, 'font-family': style.font, 'font-size': it.size, 'font-weight': it.bold ? 700 : 400, 'text-anchor': it.anchor, 'dominant-baseline': 'central' }, it.text));
-      root.append(t);
+      if (it.shadow) root.append(text(1, { fill: '#000', 'fill-opacity': 0.4 * it.opacity }));
+      root.append(text(0, { fill: it.colour, 'fill-opacity': it.opacity }));
     }
   }
   return root;

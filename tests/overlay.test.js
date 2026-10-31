@@ -3,7 +3,9 @@ import { test } from 'node:test';
 
 import { assAlpha, assColour, assScript, assText, assTime, scoreSpans } from '../lib/overlay.js';
 import { replay } from '../public/shared/score.js';
-import { DEFAULT_BOARD } from '../public/shared/board.js';
+import { DEFAULT_BOARD, PRESETS } from '../public/shared/board.js';
+
+const CLASSIC = { ...DEFAULT_BOARD, ...PRESETS.tv, preset: 'tv' };
 
 test('assTime writes h:mm:ss.cc', () => {
   assert.equal(assTime(0), '0:00:00.00');
@@ -40,7 +42,7 @@ test('scoreSpans carries the interval and game events for banners', () => {
 test('assScript draws a two-row scoreboard for each span, sized to the video', () => {
   const rallies = [{ start: 10, end: 15, winner: 'b' }];
   const { steps } = replay(rallies);
-  const ass = assScript({ width: 1920, height: 1080, teams: [['Amy Lee', 'Ben Ng'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30) });
+  const ass = assScript({ width: 1920, height: 1080, teams: [['Amy Lee', 'Ben Ng'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30), style: CLASSIC });
   assert.match(ass, /PlayResX: 1920\nPlayResY: 1080/);
   assert.match(ass, /\}A\. LEE \/ B\. NG\n/); // doubles: initial and surname by default
   assert.match(ass, /\}CAT HO\n/); // singles: full name by default
@@ -50,7 +52,7 @@ test('assScript draws a two-row scoreboard for each span, sized to the video', (
   const dialogue = ass.split('\n').filter((l) => l.startsWith('Dialogue:'));
   // Per span: box, points column, a serve dot, and name and points for each side (no game finished yet).
   assert.equal(dialogue.length, 2 * 7);
-  const counts = assScript({ width: 1920, height: 1080, teams: [['Amy Lee'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30), style: { showGames: false } });
+  const counts = assScript({ width: 1920, height: 1080, teams: [['Amy Lee'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30), style: { ...CLASSIC, showGames: false } });
   assert.equal(counts.split('\n').filter((l) => l.startsWith('Dialogue:')).length, 2 * 9); // plus games won for each side
   assert.ok(dialogue.some((l) => l.includes('0:00:15.00,0:00:30.00') && l.endsWith('}1')));
 });
@@ -69,4 +71,15 @@ test('assScript adds game point flags, banners, a heading and the look chosen', 
   assert.match(ass, /\}WS U15 · FINAL\n/);
   // The interval banner (after the 11th rally ends at 105 s) shows for 6 s.
   assert.ok(ass.split('\n').some((l) => l.includes('0:01:45.00,0:01:51.00') && l.endsWith('}INTERVAL')));
+});
+
+test('the default broadcast board draws the shuttle as a shape and narrows the lettering', () => {
+  const rallies = [{ start: 10, end: 15, winner: 'b' }];
+  const { steps } = replay(rallies);
+  const ass = assScript({ width: 1920, height: 1080, teams: [['Amy Lee'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30) });
+  assert.match(ass, /Style: Text,Bahnschrift,/);
+  assert.match(ass, /\\fscx84\\b1\\shad0\\1c&H1D1816&\\1a&H00&\}AMY LEE\n/);
+  const lines = ass.split('\n');
+  assert.equal(lines.filter((l) => /\\1a&H4D&\}m( \d+ \d+){1} l( \d+ \d+){3}\{/.test(l)).length, 2); // the see-through skirt, in each of the two spans
+  assert.equal(lines.filter((l) => /\}m \d+ \d+ l( \d+ \d+){7}\{/.test(l)).length, 2); // the eight-sided cork
 });

@@ -16,7 +16,7 @@ import { clock } from './shared/time.js';
 import { renderEditor } from './editor.js';
 import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
-import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, PRESETS } from './shared/board.js';
+import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, LAYOUTS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
 import { percents } from './shared/players.js';
@@ -686,6 +686,7 @@ async function renderSettings() {
   const colours = Object.fromEntries([['box', 'Board'], ['text', 'Names'], ['accent', 'Highlight'], ['pointsText', 'Score']].map(([k, label]) =>
     [k, { label, input: h('input', { type: 'color', id: `board-${k}`, value: b[k] }) }]));
   const fontSel = select('board-font', Object.fromEntries(Object.keys(FONTS).map((f) => [f, f])), b.font);
+  const layoutSel = select('board-layout', LAYOUTS, b.layout);
   const opacity = h('input', { type: 'range', id: 'board-opacity', min: 30, max: 100, step: 5, value: b.opacity });
   const scale = h('input', { type: 'range', id: 'board-scale', min: 60, max: 160, step: 5, value: b.scale });
   const cornerSel = select('board-corner', CORNERS, b.corner);
@@ -696,7 +697,7 @@ async function renderSettings() {
   const readBoard = () => ({
     preset: presetSel.value,
     ...Object.fromEntries(Object.entries(colours).map(([k, c]) => [k, c.input.value])),
-    font: fontSel.value, opacity: Number(opacity.value), scale: Number(scale.value), corner: cornerSel.value, heading: headingSel.value, longRally: Number(longRally.value) || 0,
+    font: fontSel.value, layout: layoutSel.value, opacity: Number(opacity.value), scale: Number(scale.value), corner: cornerSel.value, heading: headingSel.value, longRally: Number(longRally.value) || 0,
     ...Object.fromEntries(Object.entries(ticks).map(([k, c]) => [k, c.input.checked])),
   });
   const preview = h('div', { class: 'preview-frame' });
@@ -719,12 +720,13 @@ async function renderSettings() {
     if (p) {
       for (const [k, c] of Object.entries(colours)) c.input.value = p[k];
       fontSel.value = p.font;
+      layoutSel.value = p.layout;
       opacity.value = p.opacity;
     }
     showBoard();
   });
   // Changing a colour, the font or the opacity makes the look your own.
-  for (const el of [...Object.values(colours).map((c) => c.input), fontSel, opacity]) {
+  for (const el of [...Object.values(colours).map((c) => c.input), fontSel, layoutSel, opacity]) {
     el.addEventListener('input', () => {
       presetSel.value = 'custom';
       showBoard();
@@ -870,6 +872,7 @@ async function renderSettings() {
         h('div', { class: 'board-settings' },
           h('div', { class: 'stack' },
             h('div', { class: 'row' }, h('label', { for: 'board-preset' }, 'Look'), presetSel, h('label', { for: 'board-font' }, 'Font'), fontSel),
+            h('div', { class: 'row' }, h('label', { for: 'board-layout' }, 'Layout'), layoutSel),
             h('div', { class: 'row colour-row' }, Object.entries(colours).map(([k, c]) => h('label', { for: `board-${k}`, class: 'colour' }, c.input, c.label))),
             h('div', { class: 'row' }, h('label', { for: 'board-opacity' }, 'Opacity'), opacity, h('label', { for: 'board-scale' }, 'Size'), scale),
             h('div', { class: 'row' }, h('label', { for: 'board-corner' }, 'Corner'), cornerSel),
