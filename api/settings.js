@@ -15,6 +15,7 @@ import { cleanSettings, readSettings, writeSettings } from '../lib/settings.js';
 import { findTools, pickEncoder } from '../lib/ffmpeg.js';
 import { BOOT, listJobs } from '../lib/jobs.js';
 import { restartSoon } from '../lib/restart.js';
+import { voiceRemover } from '../lib/voices.js';
 
 // Read once at start: the version this server runs, even if the files are updated under it.
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -36,7 +37,7 @@ export async function restart({ request, app }) {
 
 function status(settings) {
   const tools = findTools(settings.ffmpegFolder);
-  return { version, ffmpeg: Boolean(tools), encoder: tools ? pickEncoder(tools) : null };
+  return { version, ffmpeg: Boolean(tools), encoder: tools ? pickEncoder(tools) : null, voices: voiceRemover().ready };
 }
 
 export function onRequestGet({ app }) {

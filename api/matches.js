@@ -30,6 +30,7 @@ import { cleanFormat, cleanRallies, cleanStart, defaultServer, startFor } from '
 import { cleanCorners, courtMapping } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
+import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
 import { suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
@@ -65,6 +66,7 @@ export function onRequestGet({ params, app }) {
     board: resolveBoard(settings.board, match.boardStyle),
     cards: settings.cards,
     replays: settings.output.replays,
+    voices: { remove: settings.output.removeVoices, ready: voiceRemover().ready },
     output: { ...describeOutput(loaded, null, described), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
     highlights: { ...describeOutput(loaded, null, { ...described, highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
@@ -276,8 +278,9 @@ export async function clip({ request, params, app }) {
   const index = Number.isInteger(body.rally) ? body.rally : -1;
   if (!loaded.match.rallies[index]) return fail(400, 'badInput', 'Choose a rally first');
   const upright = body.upright !== false;
+  const removeVoices = typeof body.removeVoices === 'boolean' ? body.removeVoices : settings.output.removeVoices;
   const id = loaded.match.id;
-  const job = startJob('clip', `clip:${id}:${index}:${upright ? 'u' : 'w'}`, (j, signal) => renderClip(app.db, t, settings, id, { index, upright, signal, job: j }),
+  const job = startJob('clip', `clip:${id}:${index}:${upright ? 'u' : 'w'}`, (j, signal) => renderClip(app.db, t, settings, id, { index, upright, removeVoices, signal, job: j }),
     { queue: 'gpu', label: `Clip of rally ${index + 1}${upright ? ' (upright)' : ''}: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);
 }
@@ -333,7 +336,8 @@ export function startRender(app, t, settings, match, body = {}) {
   return startJob('render', `render:${id}`, (j, signal) => renderMatch(app.db, t, settings, id, {
     cut: body.cut !== false, overlay: body.overlay !== false, highlights: body.highlights === true,
     titleCard: typeof body.titleCard === 'boolean' ? body.titleCard : settings.cards.title, endCard: typeof body.endCard === 'boolean' ? body.endCard : settings.cards.end,
-    replays: typeof body.replays === 'boolean' ? body.replays : settings.output.replays, signal, job: j,
+    replays: typeof body.replays === 'boolean' ? body.replays : settings.output.replays,
+    removeVoices: typeof body.removeVoices === 'boolean' ? body.removeVoices : settings.output.removeVoices, signal, job: j,
   }), { queue: 'gpu', label: `${what}: ${matchLabel(match)}` });
 }
 

@@ -56,7 +56,7 @@ test('music is looped under the court sound and faded out at the end', () => {
 });
 
 test('output and music settings are cleaned; music is used only where chosen', () => {
-  assert.deepEqual(cleanOutput({ size: 1080, maxRate: 500, replays: 'yes' }), { size: '1080', maxRate: 100, replays: DEFAULT_OUTPUT.replays });
+  assert.deepEqual(cleanOutput({ size: 1080, maxRate: 500, replays: 'yes' }), { size: '1080', maxRate: 100, replays: DEFAULT_OUTPUT.replays, removeVoices: false });
   assert.deepEqual(cleanMusic({ volume: 150, use: 'loud', file: 'C:/x.mp3' }), { ...DEFAULT_MUSIC, volume: 100 });
   const settings = { music: { ...DEFAULT_MUSIC, file: 'C:/no/such/music.mp3' } };
   assert.equal(musicFor(settings, true), null); // the file isn't there

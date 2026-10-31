@@ -68,6 +68,12 @@ In a match: **Mark the court** (click its four outer corners), choose who is at 
 
 Tracking takes about 1½ minutes per minute of video on an RTX 3090 (a 6-minute game: 9 minutes). `analysis\run_tracknet.py` runs TrackNetV3 with a faster frame reader that gives it exactly the same input; `analysis\check_tracknet_reader.py <TrackNetV3 folder> <video>` checks that. Each run's full output is in `tracking.log` in the match's work folder (`<output>\.work\match-<id>\track\`).
 
+## Removing voices
+
+Optional. [Demucs](https://github.com/facebookresearch/demucs) (MIT licence) takes players' shouts, coaching and talk by the court out of the sound and keeps everything else, shuttle hits included. `analysis\setup.ps1` installs it with the shuttle tracker (run it again if you set tracking up before this was added). Switch it on in Settings → Video size, or per render in the editor's Export tab; reels and clips follow Settings and the Export tab's box.
+
+Only the vocals model of Demucs' fine-tuned set runs, and the result is the original sound minus the voices, so nothing else is changed. The first render of a match works out its voice-free sound (about 15 seconds for a 6-minute video on an RTX 3090) and keeps it as `court.flac` in the match's work folder (`<output>\.work\match-<id>\voices\`); later renders reuse it until the video file changes. Loud shouts go; very quiet distant talk may partly stay.
+
 ## Logs
 
 The server writes `data\logs\app.log`: starts and stops, and when each background job started, finished or failed, with the full error. When something fails, the red box's **Details** shows the longer story, the job's log (**Show log**), and buttons to open the log file and copy the details. Closing or restarting the server stops any job that is running.
