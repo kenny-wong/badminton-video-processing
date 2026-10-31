@@ -1,3 +1,4 @@
+// GET /api/version: the version this server runs, its run id and when it started.
 // GET /api/settings: the settings, the app version, whether FFmpeg was found, and a
 //   frame of the latest linked video for the scoreboard preview.
 // PUT /api/settings: saves them.
@@ -11,8 +12,13 @@ import { join } from 'node:path';
 import { fail, json, readJson } from '../lib/http.js';
 import { cleanSettings, readSettings, writeSettings } from '../lib/settings.js';
 import { findTools, pickEncoder } from '../lib/ffmpeg.js';
+import { BOOT } from '../lib/jobs.js';
 
+// Read once at start: the version this server runs, even if the files are updated under it.
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const STARTED = new Date().toISOString();
+
+export const versionRoute = () => json({ version, boot: BOOT, startedAt: STARTED });
 
 function status(settings) {
   const tools = findTools(settings.ffmpegFolder);

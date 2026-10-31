@@ -30,6 +30,7 @@ export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
 
 const ROUTES = [
+  ['GET', '/api/version', settings.versionRoute],
   ['GET', '/api/settings', settings.onRequestGet],
   ['PUT', '/api/settings', settings.onRequestPut],
   ['PUT', '/api/settings/logo', settings.putLogo],

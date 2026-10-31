@@ -48,6 +48,7 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
 - **Jobs** (in the header while anything runs) lists the background work. Renders and shuttle tracking take turns on the graphics card: start several and they queue. **Render all tagged** on a tournament page queues every filmed match whose rallies all have a winner and that has no video yet.
 - On a tournament page, drag an unlinked video's chip, or the video file itself from Explorer, onto its match (or game) to link it.
 - The editor's timeline zooms with the mouse wheel or + / − (0 shows the whole video; Shift+wheel moves along), with a strip of frames above it and the sound level below it, where shuttle hits show as spikes and missed rallies stand out.
+- The header shows this window's version; hovering it shows the server's. When they differ (after an update) a bar says whether to reload the window or restart the server.
 - In the editor, **?** shows every keyboard shortcut. The header's theme button switches between light, dark and Windows' own setting.
 
 ## Statistics

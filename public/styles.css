@@ -554,3 +554,5 @@ canvas.wave { display: block; width: 100%; height: 26px; color: color-mix(in srg
 svg.momentum { width: 100%; height: auto; display: block; background: var(--surface-2); border-radius: var(--radius-sm); }
 svg.landing-map { width: 100%; max-width: 260px; height: auto; display: block; margin: 0 auto; }
 .panel-tabs button { padding: 6px 4px; gap: 4px; }
+.server-version { color: #3d2f00; background: var(--gold); font-weight: 700; font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; margin-left: -20px; }
+.version-banner { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 8px 20px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, transparent); font-size: var(--fs-sm); font-weight: 600; }

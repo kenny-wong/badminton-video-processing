@@ -21,6 +21,7 @@ import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
 import { percents } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
+import { versionAdvice } from './shared/version.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
@@ -52,6 +53,39 @@ document.getElementById('theme')?.addEventListener('click', () => {
 });
 const jobsLink = document.querySelector('.jobs-link');
 if (jobsLink) watchJobs(jobsLink);
+
+// The header's version is this window's (from the files on disk); the server says which version it runs.
+// They differ after an update until the server is restarted and this window reloaded.
+const PAGE_VERSION = document.querySelector('.version')?.textContent.trim() ?? '';
+async function checkServerVersion() {
+  const chip = document.querySelector('.version');
+  const shown = document.querySelector('.server-version');
+  const banner = document.querySelector('.version-banner');
+  if (!chip || !shown || !banner) return;
+  let server;
+  try {
+    // A server from before 1.16.1 has no /api/version, but its settings carry the version.
+    server = await api('/api/version').catch((err) => (err.status === 404 ? api('/api/settings') : Promise.reject(err)));
+  } catch {
+    chip.title = `This window: ${PAGE_VERSION}. The server can’t be reached.`;
+    return;
+  }
+  const since = server.startedAt ? new Date(server.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
+  chip.title = `This window: ${PAGE_VERSION}. Server: ${server.version}${since ? `, running since ${since}` : ''}.`;
+  const advice = versionAdvice(PAGE_VERSION, server.version);
+  shown.hidden = !advice;
+  shown.textContent = advice ? `server ${server.version}` : '';
+  banner.hidden = !advice;
+  fill(banner, advice === 'reload'
+    ? [h('span', {}, `The server now runs ${server.version}, but this window still shows ${PAGE_VERSION}. Reload it to use the new version.`),
+      h('button', { class: 'small primary', onclick: () => location.reload() }, 'Reload (Ctrl+R)')]
+    : advice === 'restart'
+      ? h('span', {}, `This window is ${PAGE_VERSION}, but the server is still running ${server.version}${since ? ` (started ${since})` : ''}. Restart the server: close it and run npm start, then reload this window.`)
+      : null);
+}
+checkServerVersion();
+setInterval(checkServerVersion, 30000);
+window.addEventListener('focus', checkServerVersion);
 
 function setTab(name) {
   for (const a of document.querySelectorAll('.tabs a')) {
