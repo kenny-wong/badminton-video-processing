@@ -101,10 +101,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // Whole match and each game, for moving between a match's game videos from here.
   function unitSwitch() {
-    const games = data.units.filter((u) => u.game > 0);
-    if (!games.length) return null;
+    const all = data.units ?? []; // a server older than 1.9.0 doesn't send them
+    const games = all.filter((u) => u.game > 0);
+    if (!games.length) return unitGame ? h('div', { class: 'unit-switch' }, h('nav', {}, h('span', { class: 'current' }, `Game ${unitGame}`))) : null;
     const played = Math.max(match.games.length, ...games.map((u) => u.game));
-    const whole = data.units.find((u) => u.game === 0);
+    const whole = all.find((u) => u.game === 0);
     const units = [...(whole?.linked ? [whole] : []), ...Array.from({ length: played }, (_, k) => games.find((u) => u.game === k + 1) ?? { id: null, game: k + 1, linked: false })];
     return h('div', { class: 'unit-switch' },
       h('nav', { 'aria-label': 'Games of this match' }, units.map((u) => {
