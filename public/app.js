@@ -77,10 +77,10 @@ async function checkServerVersion() {
   shown.textContent = advice ? `server ${server.version}` : '';
   banner.hidden = !advice;
   fill(banner, advice === 'reload'
-    ? [h('span', {}, `The server now runs ${server.version}, but this window still shows ${PAGE_VERSION}. Reload it to use the new version.`),
-      h('button', { class: 'small primary', onclick: () => location.reload() }, 'Reload (Ctrl+R)')]
+    ? [h('span', {}, `Server version ${server.version} doesn’t match this window (${PAGE_VERSION}). Reload this window.`),
+      h('button', { class: 'small primary', onclick: () => location.reload() }, 'Reload')]
     : advice === 'restart'
-      ? h('span', {}, `This window is ${PAGE_VERSION}, but the server is still running ${server.version}${since ? ` (started ${since})` : ''}. Restart the server: close it and run npm start, then reload this window.`)
+      ? h('span', {}, `Server version ${server.version} doesn’t match this app (${PAGE_VERSION}). The server needs to be restarted.`)
       : null);
 }
 checkServerVersion();
