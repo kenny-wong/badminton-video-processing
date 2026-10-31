@@ -5,7 +5,7 @@ const words = (s) => String(s ?? '').toLowerCase().split(/[^\p{L}\p{N}'’-]+/u)
 
 /**
  * True when the draw name holds every word of the saved name, whole words, in
- * any case or order: "Chloe" matches "Chloe Wong", "Ann" doesn't match "Anna".
+ * any case or order: "Man" matches "Man Chan", "Ann" doesn't match "Anna".
  */
 export function namesMatch(saved, name) {
   const want = words(saved);
@@ -25,10 +25,10 @@ export const teamName = (team) => (team ?? []).join(' / ');
  * doubles in Settings. All in capitals, TV-style.
  */
 export const NAME_STYLES = {
-  surname: 'Surname (WONG)',
-  first: 'First name (HAYLEY)',
-  initial: 'Initial and surname (H. WONG)',
-  full: 'Full name (HAYLEY WONG)',
+  surname: 'Surname (CHAN)',
+  first: 'First name (THAI)',
+  initial: 'Initial and surname (T. CHAN)',
+  full: 'Full name (THAI CHAN)',
 };
 export const DEFAULT_NAME_STYLE = { singles: 'full', doubles: 'initial' };
 
@@ -45,8 +45,8 @@ const nameParts = (n) => {
 /**
  * Both teams' scoreboard names (teams = [teamA, teamB], each an array of names)
  * in the chosen styles. When two of the players would look the same (two
- * WONGs by surname, two HAYLEYs by first name), those get an initial added:
- * H. WONG, HAYLEY W.
+ * CHANs by surname, two THAIs by first name), those get an initial added:
+ * T. CHAN, THAI C.
  */
 export function boardNames(teams, styles = DEFAULT_NAME_STYLE) {
   const chosen = cleanNameStyle(styles);

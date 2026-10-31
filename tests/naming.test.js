@@ -39,8 +39,8 @@ test('tournament links from badminfo and Badminton England', () => {
 });
 
 test('player names: matching my players and scoreboard names', () => {
-  assert.ok(namesMatch('Chloe', 'Chloe Wong'));
-  assert.ok(namesMatch('wong chloe', 'Chloe Wong'));
+  assert.ok(namesMatch('Man', 'Man Chan'));
+  assert.ok(namesMatch('chan man', 'Man Chan'));
   assert.ok(!namesMatch('Ann', 'Anna Lee'));
   assert.ok(!namesMatch('', 'Anna Lee'));
   assert.ok(isMine(['Amy Lee', 'Ben Ng'], ['Ben']));
@@ -49,13 +49,13 @@ test('player names: matching my players and scoreboard names', () => {
 });
 
 test('scoreboard names in each style, with an initial when two players would look the same', () => {
-  const doubles = [['Hayley Wong', 'Chloe Wong'], ['Amy Lee', "Fin O'Neil"]];
+  const doubles = [['Thai Chan', 'Man Chan'], ['Amy Lee', "Fin O'Neil"]];
   const style = (d) => ({ singles: 'full', doubles: d });
-  assert.deepEqual(boardNames(doubles), ['H. WONG / C. WONG', "A. LEE / F. O'NEIL"]); // default for doubles
-  assert.deepEqual(boardNames(doubles, style('surname')), ['H. WONG / C. WONG', "LEE / O'NEIL"]); // the two WONGs get initials
-  assert.deepEqual(boardNames(doubles, style('first')), ['HAYLEY / CHLOE', 'AMY / FIN']);
+  assert.deepEqual(boardNames(doubles), ['T. CHAN / M. CHAN', "A. LEE / F. O'NEIL"]); // default for doubles
+  assert.deepEqual(boardNames(doubles, style('surname')), ['T. CHAN / M. CHAN', "LEE / O'NEIL"]); // the two CHANs get initials
+  assert.deepEqual(boardNames(doubles, style('first')), ['THAI / MAN', 'AMY / FIN']);
   assert.deepEqual(boardNames([['Amy Lee', 'Amy Ng'], ['Cat Ho', 'Dan Wu']], style('first')), ['AMY L. / AMY N.', 'CAT / DAN']);
-  assert.deepEqual(boardNames(doubles, style('full')), ['HAYLEY WONG / CHLOE WONG', "AMY LEE / FIN O'NEIL"]);
+  assert.deepEqual(boardNames(doubles, style('full')), ['THAI CHAN / MAN CHAN', "AMY LEE / FIN O'NEIL"]);
   assert.deepEqual(boardNames([['Sai Pranav Karthik'], ['Cher']]), ['SAI PRANAV KARTHIK', 'CHER']); // default for singles; one-word names stay whole
   assert.deepEqual(boardNames([['Sai Pranav Karthik'], ['Amy Lee']], { singles: 'initial' }), ['S. KARTHIK', 'A. LEE']);
   assert.deepEqual(cleanNameStyle({ singles: 'nonsense' }), { singles: 'full', doubles: 'initial' });

@@ -412,8 +412,8 @@ async function renderSettings() {
   const example = h('div', { class: 'name-example' });
   const showExample = () => {
     const style = { singles: singlesSel.value, doubles: doublesSel.value };
-    const [single] = boardNames([['Hayley Wong'], ['Amy Lee']], style);
-    const doubles = boardNames([['Hayley Wong', 'Chloe Wong'], ['Amy Lee', 'Ben Ng']], style);
+    const [single] = boardNames([['Thai Chan'], ['Amy Lee']], style);
+    const doubles = boardNames([['Thai Chan', 'Man Chan'], ['Amy Lee', 'Ben Ng']], style);
     fill(example, h('span', {}, h('b', {}, 'Singles '), single), h('span', {}, h('b', {}, 'Doubles '), doubles.join(' v ')));
   };
   singlesSel.addEventListener('change', showExample);
@@ -452,7 +452,7 @@ async function renderSettings() {
       section('Video folders', 'Copy videos off your phone into one of these, then scan. Subfolders are included.',
         folders, h('p', { class: 'hint' }, 'One folder per line.')),
       section('My players', 'Their matches are picked out on tournament pages.',
-        players, h('p', { class: 'hint' }, 'One name per line, as in the draws. A first name alone works when it’s unambiguous (“Chloe” matches “Chloe Wong”).')),
+        players, h('p', { class: 'hint' }, 'One name per line, as in the draws. A first name alone works when it’s unambiguous (“Man” matches “Man Chan”).')),
       section('Finished videos', 'Rendered videos go here, by year and tournament, each with a .txt of its YouTube title and description.',
         h('div', { class: 'row' }, output)),
       section('Scoreboard names', 'How players’ names appear on the scoreboard. Two players who would look the same get an initial added.',
