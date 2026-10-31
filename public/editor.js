@@ -607,6 +607,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     sel = i;
     drawTimeline();
     drawList();
+    if (tab === 'export') showClipTarget();
     if (seek && rallies[i]) video.currentTime = Math.max(0, rallies[i].start - lead);
     listBox.querySelector('tr.sel')?.scrollIntoView({ block: 'nearest' });
   }
@@ -918,6 +919,28 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     h('button', { class: 'small', onclick: () => api(`/api/matches/${id}/reveal`, { method: 'POST', body: { highlights: true } }).catch((e) => say(e.message)) }, 'Show in folder')) : null);
   showHighlights(data.highlights.exists);
 
+  // ---- a clip of one rally, upright (following the shuttle) or as filmed ----
+  const clipBox = h('div');
+  const clipTarget = h('div', { class: 'small muted' });
+  const clipIndex = () => (sel >= 0 ? sel : rallyAtOrBefore(video.currentTime));
+  const showClipTarget = () => {
+    const i = clipIndex();
+    fill(clipTarget, i >= 0 ? `Rally ${i + 1} (${clock(rallies[i].start)}, ${Math.round(rallies[i].end - rallies[i].start)} s)${sel >= 0 ? ', selected' : ', at the playhead'}` : 'Select a rally, or play to one.');
+  };
+  const makeClip = async (upright) => {
+    const i = clipIndex();
+    if (i < 0) return say('Select a rally first');
+    clearTimeout(saveTimer);
+    await save();
+    try {
+      const r = await runJob(clipBox, () => api(`/api/matches/${id}/clip`, { method: 'POST', body: { rally: i, upright } }));
+      fill(clipBox, h('div', { class: 'notice ok row small' }, `Clip of rally ${i + 1}: ${r.seconds} s${r.upright ? (r.followed ? ', following the shuttle' : ', centred on the court') : ''}.`,
+        h('button', { class: 'small', onclick: () => api('/api/reveal', { method: 'POST', body: { path: r.path } }).catch((e) => say(e.message)) }, 'Show in folder')));
+    } catch (err) {
+      fill(clipBox, errorNotice(err));
+    }
+  };
+
   // ---- this match's own scoreboard preset and corner, over Settings ----
   let boardStyle = match.boardStyle;
   const lookSel = h('select', { 'aria-label': 'Scoreboard look for this match' },
@@ -1191,6 +1214,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         renderBox,
         highlightsResult,
         renderResult),
+      card('Clip of one rally', 'film',
+        clipTarget,
+        h('div', { class: 'row' }, h('button', { class: 'small primary', onclick: () => makeClip(true) }, 'Upright 9:16 clip'), h('button', { class: 'small', onclick: () => makeClip(false) }, 'Clip as filmed')),
+        h('p', { class: 'hint' }, 'For Shorts, Reels or a message: the rally with the seconds from Settings either side and the scoreboard. Upright clips follow the shuttle once it has been tracked.'),
+        clipBox),
       card('Scoreboard', 'sliders',
         h('div', { class: 'row small' }, lookSel, cornerSel),
         boardBox,
@@ -1215,7 +1243,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       drawTrackingPanel();
     }
     padPlayer();
-    if (tab === 'export' && steps.length) drawBoardPreview();
+    if (tab === 'export' && steps.length) {
+      drawBoardPreview();
+      showClipTarget();
+    }
     // Opening Tracking on a court not marked yet goes straight to marking it.
     if (onTracking && !corners && !marking && data.tracking.ready) startMarking();
   };
@@ -1256,7 +1287,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   drawFrames();
   loadLevels();
   // The scoreboard preview follows the video while it is paused.
-  video.addEventListener('seeked', () => { if (tab === 'export' && video.paused) drawBoardPreview(); });
+  video.addEventListener('seeked', () => {
+    if (tab === 'export' && video.paused) {
+      drawBoardPreview();
+      showClipTarget();
+    }
+  });
 
   return () => {
     window.removeEventListener('keydown', onKey);

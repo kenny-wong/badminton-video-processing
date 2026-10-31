@@ -3,7 +3,7 @@
 // rating over time and every match of theirs in imported tournaments.
 
 import { h, fill, day, gamesView } from './dom.js';
-import { api } from './api.js';
+import { api, waitJob } from './api.js';
 import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
 import { teamName } from './shared/names.js';
@@ -110,10 +110,28 @@ export async function renderPlayer(main, id) {
   };
   drawChart(data);
   const filmed = data.matches.filter((m) => m.filmed);
+  const reelBox = h('div');
+  const reelBtn = h('button', {
+    title: 'All their filmed matches’ ★ rallies in one video',
+    onclick: async () => {
+      reelBtn.disabled = true;
+      try {
+        const job = await api('/api/reels', { method: 'POST', body: { playerId: id } });
+        const r = await waitJob(job, (j) => fill(reelBox, h('div', { class: 'notice info' }, j.status === 'queued' ? 'Waiting for the graphics card…' : `${j.message || 'Working…'} ${Math.round(j.progress * 100)}%`)));
+        fill(reelBox, h('div', { class: 'notice ok row' }, `Highlight reel done: ${r.matches} matches.`,
+          h('button', { class: 'small', onclick: () => api('/api/reveal', { method: 'POST', body: { path: r.path } }) }, 'Show in folder')));
+      } catch (err) {
+        fill(reelBox, errorNotice(err));
+      }
+      reelBtn.disabled = false;
+    },
+  }, icon('star', 16), 'Highlight reel');
   fill(main,
     h('a', { class: 'crumb', href: '#/players' }, icon('back', 15), 'Players'),
     pageHead(p.name, [p.county, p.beNumber ? `BE ${p.beNumber}` : null].filter(Boolean).join(' · ') || null,
+      reelBtn,
       h('a', { class: 'btn', href: p.url, target: '_blank', rel: 'noopener' }, 'badminfo ↗')),
+    reelBox,
     standings(p),
     h('div', { class: 'stats summary' },
       h('div', { class: 'stat' }, h('b', {}, data.matches.length), h('span', {}, 'imported matches')),

@@ -459,6 +459,46 @@ async function renderTournament(id, notice = null) {
     },
   }, `Link all ${suggestions.length} suggested`) : null;
 
+  // ---- highlight reel: everyone's ★ rallies here, or one of my players' ----
+  const reelBtn = h('button', {
+    title: 'Join the ★ rallies of the filmed matches here into one video',
+    onclick: async () => {
+      const mine = data.players.filter((p) => matches.some((m) => isMine(m.teamA, [p]) || isMine(m.teamB, [p])));
+      const who = h('select', { 'aria-label': 'Whose rallies' }, h('option', { value: '' }, 'Everyone’s ★ rallies'), mine.map((p) => h('option', { value: p }, `${p}’s matches`)));
+      const info = h('span', { class: 'small muted' });
+      const jobBox = h('div');
+      const count = async () => {
+        try {
+          const r = await api(`/api/reels?tournamentId=${id}&player=${encodeURIComponent(who.value)}`);
+          fill(info, `${r.favourites} ★ rall${r.favourites === 1 ? 'y' : 'ies'} from ${r.matches} filmed match${r.matches === 1 ? '' : 'es'}`);
+          make.disabled = !r.favourites;
+        } catch (err) {
+          fill(info, err.message);
+        }
+      };
+      const make = h('button', {
+        class: 'primary small',
+        onclick: async () => {
+          make.disabled = true;
+          try {
+            const r = await runJob(jobBox, () => api('/api/reels', { method: 'POST', body: { tournamentId: Number(id), player: who.value || undefined } }));
+            fill(jobBox, h('div', { class: 'notice ok row' }, `Done: ${clock(r.seconds)} from ${r.matches} matches.`,
+              h('button', { class: 'small', onclick: () => api('/api/reveal', { method: 'POST', body: { path: r.path } }) }, 'Show in folder')));
+          } catch (err) {
+            fill(jobBox, errorNotice(err));
+          }
+          make.disabled = false;
+        },
+      }, icon('star', 15), 'Make the reel');
+      who.addEventListener('change', count);
+      fill(msg, h('div', { class: 'card stack' }, h('h3', { class: 'card-title' }, icon('star'), 'Highlight reel'),
+        h('div', { class: 'row' }, who, make, info),
+        h('p', { class: 'hint' }, 'Each match gets a short card with its event and players, then its ★ rallies with its own scoreboard. Size, replays, logo and music follow Settings.'),
+        jobBox));
+      count();
+    },
+  }, icon('star', 16), 'Highlight reel');
+
   const renderAllBtn = h('button', {
     title: 'Queue a render of every filmed match whose rallies all have a winner and that isn’t rendered yet; they run one after another',
     onclick: async () => {
@@ -495,6 +535,7 @@ async function renderTournament(id, notice = null) {
       [tournament.start === tournament.end ? day(tournament.start) : `${day(tournament.start)} – ${day(tournament.end)}`, ' · ',
         h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
         tournament.badminfoId ? [' · ', h('a', { href: `https://badminfo.com/Tournament/${tournament.badminfoId}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗')] : null],
+      reelBtn,
       renderAllBtn,
       refreshBtn,
       h('button', {

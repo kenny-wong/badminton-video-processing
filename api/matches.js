@@ -14,6 +14,8 @@
 // POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
 // GET /api/matches/:id/levels: the sound level along the video (404 until worked out); POST starts working it out (a job).
+// POST /api/matches/:id/clip { rally (0-based), upright }: queues a clip of one rally, upright 9:16 following the shuttle or as filmed.
+// POST /api/reveal { path }: shows a finished file (inside the output folder) in Explorer.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -28,6 +30,7 @@ import { cleanFormat, cleanRallies, cleanStart, defaultServer, startFor } from '
 import { cleanCorners, courtMapping } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
+import { renderClip } from '../lib/clip.js';
 import { suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
@@ -262,6 +265,30 @@ export function startLevels({ params, app }) {
   const id = loaded.match.id;
   const job = startJob('levels', `levels:${id}`, (j, signal) => matchLevels(app.db, t, settings, id, { signal, job: j }), { label: `Sound levels: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);
+}
+
+export async function clip({ request, params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const { settings, tools: t } = tools(app);
+  if (!t) return noFfmpeg();
+  const body = (await readJson(request)) ?? {};
+  const index = Number.isInteger(body.rally) ? body.rally : -1;
+  if (!loaded.match.rallies[index]) return fail(400, 'badInput', 'Choose a rally first');
+  const upright = body.upright !== false;
+  const id = loaded.match.id;
+  const job = startJob('clip', `clip:${id}:${index}:${upright ? 'u' : 'w'}`, (j, signal) => renderClip(app.db, t, settings, id, { index, upright, signal, job: j }),
+    { queue: 'gpu', label: `Clip of rally ${index + 1}${upright ? ' (upright)' : ''}: ${matchLabel(loaded.match)}` });
+  return json(jobView(job), 202);
+}
+
+export async function revealPath({ request, app }) {
+  const body = (await readJson(request)) ?? {};
+  const root = normalize(readSettings(app.db).outputFolder).toLowerCase();
+  const path = typeof body.path === 'string' ? normalize(body.path) : '';
+  if (!path || !path.toLowerCase().startsWith(root) || !existsSync(path)) return fail(404, 'notFound', 'That file isn’t in the output folder any more');
+  if (process.platform === 'win32') spawn('explorer.exe', [selectArg(path)], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
+  return json({ ok: true, path });
 }
 
 export function prepare({ params, app }) {

@@ -24,6 +24,7 @@ import * as videos from './api/videos.js';
 import * as jobs from './api/jobs.js';
 import * as players from './api/players.js';
 import * as overview from './api/overview.js';
+import * as reels from './api/reels.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
@@ -56,6 +57,10 @@ const ROUTES = [
   ['GET', '/api/matches/:id/track', matches.trackData],
   ['GET', '/api/matches/:id/levels', matches.levels],
   ['POST', '/api/matches/:id/levels', matches.startLevels],
+  ['POST', '/api/matches/:id/clip', matches.clip],
+  ['POST', '/api/reveal', matches.revealPath],
+  ['GET', '/api/reels', reels.onRequestGet],
+  ['POST', '/api/reels', reels.onRequestPost],
   ['GET', '/api/matches/:id/suggestions', matches.suggestions],
   ['GET', '/api/matches/:id/people', players.matchPeopleRoute],
   ['GET', '/api/players', players.onRequestGet],
