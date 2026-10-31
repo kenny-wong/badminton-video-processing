@@ -11,7 +11,7 @@
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
 // GET /api/matches/:id/suggestions: a suggested winner for each rally, from the tracking.
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
-// POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights }: starts a job.
+// POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
 
 import { spawn } from 'node:child_process';
@@ -56,6 +56,7 @@ export function onRequestGet({ params, app }) {
     mine: { a: isMine(match.teamA, players), b: isMine(match.teamB, players) },
     nameStyle: settings.nameStyle,
     board: resolveBoard(settings.board, match.boardStyle),
+    cards: settings.cards,
     output: { ...describeOutput(loaded, null), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
     highlights: { ...describeOutput(loaded, null, { highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
@@ -270,7 +271,10 @@ export async function render({ request, params, app }) {
   if (!t) return noFfmpeg();
   const body = (await readJson(request)) ?? {};
   const id = loaded.match.id;
-  const job = startJob('render', `render:${id}`, (j, signal) => renderMatch(app.db, t, settings, id, { cut: body.cut !== false, overlay: body.overlay !== false, highlights: body.highlights === true, signal, job: j }));
+  const job = startJob('render', `render:${id}`, (j, signal) => renderMatch(app.db, t, settings, id, {
+    cut: body.cut !== false, overlay: body.overlay !== false, highlights: body.highlights === true,
+    titleCard: typeof body.titleCard === 'boolean' ? body.titleCard : settings.cards.title, endCard: typeof body.endCard === 'boolean' ? body.endCard : settings.cards.end, signal, job: j,
+  }));
   return json(jobView(job), 202);
 }
 

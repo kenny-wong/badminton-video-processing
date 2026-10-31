@@ -17,13 +17,24 @@ function svg(tag, attrs = {}, ...children) {
  * The SVG for one moment: `names` [A, B], `state` (games, points, won, server),
  * `style` (a board look), `flags`, `heading`, `banner`, `background` (an image URL).
  */
-export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, width = 1280, height = 720 }) {
+export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720 }) {
   const { items } = boardLayout({ width, height, names, state, style, flags, heading, banner });
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'board-preview', role: 'img', 'aria-label': 'Scoreboard preview' });
   const defs = svg('defs', {}, svg('linearGradient', { id: 'court-bg', x1: 0, y1: 0, x2: 1, y2: 1 },
     svg('stop', { offset: '0', 'stop-color': '#2d4a3e' }), svg('stop', { offset: '1', 'stop-color': '#16251f' })));
   root.append(defs, svg('rect', { x: 0, y: 0, width, height, fill: 'url(#court-bg)' }));
   if (background) root.append(svg('image', { href: background, x: 0, y: 0, width, height, preserveAspectRatio: 'xMidYMid slice' }));
+  if (logo?.url) {
+    // A square box as wide as the logo, the picture kept in its corner of it.
+    const w = (width * logo.size) / 100;
+    const right = logo.corner[1] === 'r';
+    const bottom = logo.corner[0] === 'b';
+    root.append(svg('image', {
+      href: logo.url, width: w, height: w, opacity: logo.opacity / 100,
+      x: right ? width - width * 0.025 - w : width * 0.025, y: bottom ? height - height * 0.04 - w : height * 0.04,
+      preserveAspectRatio: `${right ? 'xMax' : 'xMin'}${bottom ? 'YMax' : 'YMin'} meet`,
+    }));
+  }
   for (const it of [...items].sort((a, b) => a.layer - b.layer)) {
     if (it.type === 'rect') {
       root.append(svg('rect', { x: it.x, y: it.y, width: it.w, height: it.h, fill: it.colour, 'fill-opacity': it.opacity }));

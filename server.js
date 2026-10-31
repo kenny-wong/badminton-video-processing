@@ -29,6 +29,8 @@ const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
 const ROUTES = [
   ['GET', '/api/settings', settings.onRequestGet],
   ['PUT', '/api/settings', settings.onRequestPut],
+  ['PUT', '/api/settings/logo', settings.putLogo],
+  ['DELETE', '/api/settings/logo', settings.deleteLogo],
   ['GET', '/api/tournaments', tournaments.onRequestGet],
   ['POST', '/api/tournaments', tournaments.onRequestPost],
   ['GET', '/api/tournaments/:id', tournaments.getOne],
@@ -142,6 +144,16 @@ export function createApp(app) {
         createReadStream(file).pipe(res);
         return;
       }
+      if (url.pathname === '/media/logo' && req.method === 'GET') {
+        const { file } = readSettings(app.db).logo;
+        if (!file || !existsSync(file)) {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': file.endsWith('.png') ? 'image/png' : 'image/jpeg', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+        createReadStream(file).pipe(res);
+        return;
+      }
       const media = /^\/media\/match\/(\d+)$/.exec(url.pathname);
       if (media && (req.method === 'GET' || req.method === 'HEAD')) {
         const loaded = loadMatch(app.db, idParam(media[1]));
@@ -200,7 +212,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv
     process.exit(1);
   });
   const db =openDb(process.env.DB_PATH || join(dataDir, `badminton-video.db`));
-  const server = createApp({ db, port: PORT, thumbDir: join(dataDir, 'thumbs') });
+  const server = createApp({ db, port: PORT, thumbDir: join(dataDir, 'thumbs'), dataDir });
   server.listen(PORT, '127.0.0.1', () => {
     const address = `http://127.0.0.1:${PORT}/`;
     console.log(`Badminton Video running at ${address}`);

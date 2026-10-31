@@ -454,7 +454,7 @@ async function renderSettings() {
     }[sample.value];
     const flags = boardFlags(moment.state, { points: 21, setting: true, bestOf: 3 });
     const heading = boardHeading(style, { tournament: { name: 'Example Open' }, match: { draw: 'MS U15', round: 'Final' } });
-    fill(preview, boardPreview({ names, ...moment, style, flags, heading, background: data.previewThumb }));
+    fill(preview, boardPreview({ names, ...moment, style, flags, heading, background: data.previewThumb, logo: readLogo() }));
   };
   presetSel.addEventListener('change', () => {
     const p = PRESETS[presetSel.value];
@@ -472,7 +472,52 @@ async function renderSettings() {
       showBoard();
     });
   }
-  for (const el of [scale, cornerSel, headingSel, sample, singlesSel, doublesSel, ...Object.values(ticks).map((c) => c.input)]) el.addEventListener('input', showBoard);
+  // ---- logo and cards ----
+  let logoFile = s.logo.file;
+  let logoVersion = Date.now(); // a new upload must not show the old picture from the cache
+  const logoCorner = select('logo-corner', CORNERS, s.logo.corner);
+  const logoSize = h('input', { type: 'range', id: 'logo-size', min: 4, max: 40, step: 1, value: s.logo.size });
+  const logoOpacity = h('input', { type: 'range', id: 'logo-opacity', min: 20, max: 100, step: 5, value: s.logo.opacity });
+  const readLogo = () => ({ url: logoFile ? `/media/logo?v=${logoVersion}` : null, corner: logoCorner.value, size: Number(logoSize.value), opacity: Number(logoOpacity.value) });
+  const logoMsg = h('div');
+  const logoInput = h('input', { type: 'file', accept: 'image/png,image/jpeg', id: 'logo-file', class: 'visually-hidden' });
+  const logoState = h('span', { class: 'small muted' });
+  const drawLogoState = () => {
+    fill(logoState, logoFile ? logoFile.split(/[\\/]/).pop() : 'No logo');
+    removeLogo.hidden = !logoFile;
+  };
+  const removeLogo = h('button', {
+    type: 'button', class: 'small',
+    onclick: async () => {
+      const r = await api('/api/settings/logo', { method: 'DELETE' });
+      logoFile = r.settings.logo.file;
+      drawLogoState();
+      showBoard();
+    },
+  }, 'Remove');
+  logoInput.addEventListener('change', async () => {
+    const file = logoInput.files[0];
+    if (!file) return;
+    try {
+      const res = await fetch('/api/settings/logo', { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.message || `HTTP ${res.status}`);
+      logoFile = r.settings.logo.file;
+      logoVersion = Date.now();
+      fill(logoMsg);
+      drawLogoState();
+      showBoard();
+    } catch (err) {
+      fill(logoMsg, errorNotice(err));
+    }
+    logoInput.value = '';
+  });
+  drawLogoState();
+  const cardTitle = h('input', { type: 'checkbox', id: 'card-title', checked: s.cards.title });
+  const cardEnd = h('input', { type: 'checkbox', id: 'card-end', checked: s.cards.end });
+  const cardSeconds = h('input', { type: 'number', id: 'card-seconds', min: 2, max: 8, step: 1, value: s.cards.seconds });
+
+  for (const el of [scale, cornerSel, headingSel, sample, singlesSel, doublesSel, logoCorner, logoSize, logoOpacity, ...Object.values(ticks).map((c) => c.input)]) el.addEventListener('input', showBoard);
   showBoard();
   const tools = (d) => (d.ffmpeg
     ? h('div', { class: 'notice ok' }, `FFmpeg found. Encoder: ${d.encoder === 'h264_nvenc' ? 'NVIDIA (fast)' : 'CPU (x264)'}.`)
@@ -494,7 +539,8 @@ async function renderSettings() {
           const saved = await api('/api/settings', {
             method: 'PUT',
             body: { videoFolders: lines(folders.value), players: lines(players.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
-              nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard() },
+              nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
+              logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value) } },
           });
           fill(toolsBox, tools(saved));
           fill(msg, h('div', { class: 'notice ok' }, icon('check', 16), 'Saved.'));
@@ -523,6 +569,14 @@ async function renderSettings() {
             h('div', { class: 'row' }, h('label', { for: 'board-heading' }, 'Heading'), headingSel),
             h('div', { class: 'stack small' }, Object.entries(ticks).map(([k, c]) => h('label', { class: 'row', for: `board-${k}` }, c.input, c.label)))),
           h('div', { class: 'stack' }, preview, h('div', { class: 'row small' }, 'Preview:', sample)))),
+      section('Logo', 'A club or channel logo in a corner of every rendered video. A PNG with a see-through background looks best.',
+        h('div', { class: 'row' }, h('label', { class: 'btn small', for: 'logo-file' }, 'Choose picture…'), logoInput, logoState, removeLogo),
+        h('div', { class: 'row' }, h('label', { for: 'logo-corner' }, 'Corner'), logoCorner, h('label', { for: 'logo-size' }, 'Size'), logoSize, h('label', { for: 'logo-opacity' }, 'Opacity'), logoOpacity),
+        h('p', { class: 'hint' }, 'Shown in the scoreboard preview above. Pick a corner the scoreboard isn’t in.'),
+        logoMsg),
+      section('Title and end cards', 'A few seconds before the first rally with the players and the event, and after the last with the result. Each render can switch them on or off.',
+        h('div', { class: 'row' }, h('label', { class: 'row', for: 'card-title' }, cardTitle, 'Title card'), h('label', { class: 'row', for: 'card-end' }, cardEnd, 'End card'),
+          h('label', { for: 'card-seconds' }, 'for'), cardSeconds, h('span', {}, 'seconds each'))),
       section('Cutting', 'How much of the play around each rally to keep when the gaps are cut.',
         h('div', { class: 'row' }, h('label', { for: 'pre' }, 'Keep'), pre, h('label', { for: 'post' }, 'seconds before each rally, and'), post, h('span', {}, 'after.'))),
       h('div', { class: 'label last' }, h('h3', {}, 'FFmpeg'), h('p', {}, 'Optional: its bin folder, if it isn’t found by itself.')),
