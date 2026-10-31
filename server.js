@@ -22,6 +22,7 @@ import * as tournaments from './api/tournaments.js';
 import * as matches from './api/matches.js';
 import * as videos from './api/videos.js';
 import * as jobs from './api/jobs.js';
+import * as players from './api/players.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
@@ -48,6 +49,11 @@ const ROUTES = [
   ['POST', '/api/matches/:id/track', matches.track],
   ['GET', '/api/matches/:id/track', matches.trackData],
   ['GET', '/api/matches/:id/suggestions', matches.suggestions],
+  ['GET', '/api/matches/:id/people', players.matchPeopleRoute],
+  ['GET', '/api/players', players.onRequestGet],
+  ['POST', '/api/players/refresh', players.refresh],
+  ['PUT', '/api/players/link', players.link],
+  ['GET', '/api/players/:id', players.getOne],
   ['GET', '/api/videos', videos.onRequestGet],
   ['POST', '/api/videos/scan', videos.scan],
   ['PUT', '/api/videos/:id', videos.onRequestPut],

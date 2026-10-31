@@ -14,6 +14,7 @@ import { isMine } from '../public/shared/names.js';
 import { checkResult, replayMatch } from '../public/shared/score.js';
 import { matchFormat } from '../lib/pipeline.js';
 import { beTournamentUrl } from '../lib/links.js';
+import { myPlayers, refreshProfiles, tournamentPeople } from '../lib/players.js';
 
 const STATUS = { badLink: 400, notFound: 404, unavailable: 502 };
 
@@ -31,7 +32,12 @@ async function importLink(app, link) {
   try {
     const t = await fetchTournament(link);
     const id = saveTournament(app.db, t);
-    return json({ id, matches: t.matches.length }, 201);
+    // My players' profiles (for win chances) are read in the background; the page doesn't wait.
+    const settings = readSettings(app.db);
+    const entered = new Set((t.players ?? []).map((p) => p.id));
+    const mine = myPlayers(app.db, settings.players, settings.playerLinks).map((p) => p.id).filter((pid) => entered.has(pid));
+    refreshProfiles(app.db, mine).catch((err) => console.error('reading player profiles', err));
+    return json({ id, matches: t.matches.length, players: t.players?.length ?? 0 }, 201);
   } catch (err) {
     if (err.code in STATUS) return fail(STATUS[err.code], err.code, err.message);
     return serverError(err, 'import tournament');
@@ -89,8 +95,10 @@ export function getOne({ params, app }) {
       check: m.rallies.length ? checkResult(games, official) : null,
     };
   };
+  const peopleOf = tournamentPeople(app.db, tournament);
   const shown = matches.map((m) => ({
     ...status(m),
+    people: peopleOf(m),
     mine: isMine(m.teamA, players) || isMine(m.teamB, players),
     // One slot per game played (or with a row already); a slot without a row has no id yet.
     units: Array.from({ length: Math.max(m.games.length, ...rows.filter((g) => g.parentId === m.id).map((g) => g.game)) }, (_, k) => {

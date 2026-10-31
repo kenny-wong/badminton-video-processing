@@ -42,6 +42,10 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
    - The score after each tagged rally shows in small type under the timeline. Press **H** (or ☆ in the list) to mark a favourite rally; *Highlights only* renders just those to a separate file.
 6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. Upload it in YouTube Studio as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
 
+## Players (from badminfo)
+
+Tournaments imported from a badminfo link also bring everyone entered, with their badminfo grades and ratings. The **Players** page lists your players (from Settings; paste a badminfo link for any that aren't found by name) and each player has a page with their rating over time and every match of theirs in imported tournaments. Tournament pages show each player's rating for the event, badminfo's win chance for matches it has rated, and upsets (the side with under a 35% chance won). The editor's Players tab adds earlier meetings between the same players and the opponents' other filmed matches. Settings choose whether the YouTube description adds the players' badminfo pages and the win chance, and whether an upset goes in the title.
+
 ## Shuttle tracking (who won each rally)
 
 Optional. [TrackNetV3](https://github.com/qaz812345/TrackNetV3) (MIT licence) follows the shuttle on an NVIDIA GPU. Set it up once with

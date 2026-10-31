@@ -11,6 +11,7 @@ import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js
 import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
+import { percent, percents } from './shared/players.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -890,6 +891,32 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     },
   }, 'Render video');
 
+  // ---- players: badminfo ratings, win chance, earlier meetings ----
+  const peopleBox = h('div', { class: 'stack' }, h('p', { class: 'hint' }, 'Reading the players from badminfo…'));
+  const listMatches = (list, empty) => (list.length
+    ? h('ul', { class: 'match-list' }, list.map((m) => h('li', {},
+      h('div', { class: 'row spread' },
+        h('span', {}, `${teamName(m.teamA)} v ${teamName(m.teamB)}`),
+        m.filmed ? h('a', { class: 'btn small primary', href: `#/m/${m.id}` }, 'Open') : null),
+      h('div', { class: 'muted' }, [day(m.date), m.tournament, [m.draw, m.round].filter(Boolean).join(' ')].filter(Boolean).join(' · '), ' ', m.games.length ? gamesView(m.games) : '',
+        m.youtubeUrl ? [' ', h('a', { href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null))))
+    : h('p', { class: 'hint' }, empty));
+  const drawPeople = (p) => {
+    const person = (x) => h('div', {},
+      h('div', {}, x.id ? h('a', { href: `#/p/${x.id}` }, x.name) : x.name, x.rating ? h('span', { class: 'rating-chip' }, x.rating) : null, x.grade ? h('span', { class: 'grade' }, x.grade) : null),
+      x.county ? h('div', { class: 'small muted' }, x.county) : null);
+    fill(peopleBox,
+      p.chance ? h('div', { class: 'stack small' },
+        h('div', { class: 'muted' }, 'badminfo’s chance before the match', p.upset ? [' ', h('span', { class: 'pill upset' }, 'Upset')] : null),
+        h('div', { class: 'chance' }, h('span', { class: 'side-a' }, percent(p.chance.a)), h('div', { class: 'bar' }, h('span', { style: { width: percent(p.chance.a) } })), h('span', { class: 'side-b' }, percents(p.chance.a)[1])))
+        : h('p', { class: 'hint' }, 'No win chance: badminfo works it out once the match is played and rated, and only for imports from a badminfo link.'),
+      h('div', { class: 'people' }, [0, 1].map((k) => h('div', { class: `team ${k ? 'b' : 'a'}` }, p.teams[k].map(person)))),
+      h('div', { class: 'subhead' }, 'Earlier meetings'),
+      listMatches(p.meetings, 'None in imported tournaments.'),
+      p.opponents ? [h('div', { class: 'subhead' }, 'Opponents’ other filmed matches'), listMatches(p.scouting, 'None filmed yet.')] : null);
+  };
+  api(`/api/matches/${id}/people?refresh=1`).then(drawPeople).catch((err) => fill(peopleBox, errorNotice(err)));
+
   // ---- keyboard ----
   function now() { return Math.round(video.currentTime * 100) / 100; }
 
@@ -1031,6 +1058,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'subhead' }, 'Match in the video'),
         boundsBox,
         h('p', { class: 'hint' }, 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering and of finding rallies.'))),
+    players: h('div', {}, card('Players', 'user', peopleBox)),
     tracking: h('div', {},
       card('Who won each rally', 'target',
         h('p', { class: 'hint' }, 'TrackNetV3 follows the shuttle. The winner of a rally serves the next one, so the direction of each serve, checked against where the shuttle landed, suggests who won.'),
@@ -1055,7 +1083,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox)),
   };
-  const TABS = [['rallies', 'Rallies', 'list'], ['scoring', 'Scoring', 'sliders'], ['tracking', 'Tracking', 'target'], ['export', 'Export', 'scissors']];
+  const TABS = [['rallies', 'Rallies', 'list'], ['scoring', 'Scoring', 'sliders'], ['players', 'Players', 'user'], ['tracking', 'Tracking', 'target'], ['export', 'Export', 'scissors']];
   let tab = TABS.some(([k]) => k === readTab()) ? readTab() : 'rallies';
   const tabBar = h('div', { class: 'panel-tabs', role: 'tablist' });
   const panel = h('div', { class: 'panel' });

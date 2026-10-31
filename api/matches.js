@@ -31,6 +31,7 @@ import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
 import { isMine } from '../public/shared/names.js';
 import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
+import { matchPeople } from '../lib/players.js';
 
 const MAX_VIDEOS = 12;
 
@@ -46,6 +47,7 @@ export function onRequestGet({ params, app }) {
   const { players } = settings;
   const { match } = loaded;
   const source = sourceFor(loaded);
+  const described = { people: matchPeople(app.db, loaded), options: settings.description };
   const jobs = Object.fromEntries(['prepare', 'analyse', 'render', 'track'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
   return json({
     ...loaded,
@@ -57,8 +59,8 @@ export function onRequestGet({ params, app }) {
     nameStyle: settings.nameStyle,
     board: resolveBoard(settings.board, match.boardStyle),
     cards: settings.cards,
-    output: { ...describeOutput(loaded, null), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
-    highlights: { ...describeOutput(loaded, null, { highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
+    output: { ...describeOutput(loaded, null, described), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
+    highlights: { ...describeOutput(loaded, null, { ...described, highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
     stranded: strandedTagging(app.db, match.tournamentId, match.id).map((r) => ({
       id: r.id, date: r.match_date, time: r.match_time, draw: r.draw, round: r.round, teamA: JSON.parse(r.team_a), teamB: JSON.parse(r.team_b), rallies: rallyCount(r),

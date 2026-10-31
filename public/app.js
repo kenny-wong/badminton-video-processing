@@ -2,6 +2,8 @@
 //   #/            tournaments, import, scan
 //   #/t/<id>      a tournament's matches and their videos
 //   #/m/<id>      the match editor
+//   #/players     my players' badminfo ratings (players-page.js)
+//   #/p/<id>      one player, by badminfo id
 //   #/videos      every video found
 //   #/settings    folders, players, cutting
 
@@ -15,6 +17,8 @@ import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
 import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
+import { renderPlayer, renderPlayers } from './players-page.js';
+import { percents } from './shared/players.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
@@ -27,7 +31,7 @@ function setTab(name) {
 }
 
 // Icons in the header's section links.
-for (const [tab, name] of [['home', 'trophy'], ['videos', 'film'], ['settings', 'settings']]) {
+for (const [tab, name] of [['home', 'trophy'], ['players', 'user'], ['videos', 'film'], ['settings', 'settings']]) {
   document.querySelector(`.tabs a[data-tab="${tab}"]`)?.prepend(icon(name, 17));
 }
 
@@ -228,6 +232,11 @@ async function renderTournament(id, notice = null) {
       if (m.check && m.games?.length) bits.push(h('span', { class: `pill ${m.check.ok ? 'ok' : 'bad'}`, title: `Tagged: ${gamesText(m.tagGames)}` }, m.check.ok ? 'score ✓' : 'score ≠ result'));
     }
     if (m.favourites) bits.push(h('span', { class: 'pill', title: 'Favourite rallies' }, `★ ${m.favourites}`));
+    if (typeof m.people?.chance === 'number') {
+      const [pa, pb] = percents(m.people.chance);
+      bits.push(h('span', { class: 'pill', title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` }, `${pa}–${pb}`));
+    }
+    if (m.people?.upset) bits.push(h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset'));
     if (m.outputPath) bits.push(h('span', { class: 'pill ok' }, 'rendered'));
     if (m.youtubeUrl) bits.push(h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener', title: m.youtubeUrl }, 'on YouTube ↗'));
     return h('div', { class: 'row' }, bits);
@@ -235,10 +244,17 @@ async function renderTournament(id, notice = null) {
 
   const gameLabel = (u) => [h('strong', {}, `Game ${u.game}`), u.parent.games[u.game - 1] ? h('span', { class: 'muted' }, ` (${u.parent.games[u.game - 1].join('-')})`) : null];
 
+  // Each name links to the player's page and carries their badminfo rating for this event, when known.
+  const named = (m, k) => (k ? m.teamB : m.teamA).map((n, i) => {
+    const id = m.people?.ids?.[k]?.[i];
+    const st = m.people?.teams?.[k]?.[i];
+    return [i ? ' / ' : '', id ? h('a', { class: 'plain', href: `#/p/${id}` }, n) : n,
+      st?.rating ? h('span', { class: 'rating-chip', title: `badminfo rating${st.grade ? `, grade ${st.grade}` : ''}` }, st.rating) : null];
+  });
   const teams = (m) => [
-    h('div', { class: isMine(m.teamA, data.players) ? 'team-mine' : '' }, teamName(m.teamA)),
+    h('div', { class: isMine(m.teamA, data.players) ? 'team-mine' : '' }, named(m, 0)),
     h('div', { class: 'muted small' }, 'v'),
-    h('div', { class: isMine(m.teamB, data.players) ? 'team-mine' : '' }, teamName(m.teamB)),
+    h('div', { class: isMine(m.teamB, data.players) ? 'team-mine' : '' }, named(m, 1)),
   ];
 
   const listView = (list) => h('div', { class: 'table-scroll' }, h('table', {},
@@ -513,6 +529,8 @@ async function renderSettings() {
     logoInput.value = '';
   });
   drawLogoState();
+  const describe = Object.fromEntries([['playerLinks', 'Players’ badminfo pages'], ['winChance', 'badminfo’s win chance before the match'], ['upsetInTitle', '“(upset)” in the title when the underdog won']]
+    .map(([k, label]) => [k, { label, input: h('input', { type: 'checkbox', id: `desc-${k}`, checked: s.description[k] }) }]));
   const cardTitle = h('input', { type: 'checkbox', id: 'card-title', checked: s.cards.title });
   const cardEnd = h('input', { type: 'checkbox', id: 'card-end', checked: s.cards.end });
   const cardSeconds = h('input', { type: 'number', id: 'card-seconds', min: 2, max: 8, step: 1, value: s.cards.seconds });
@@ -540,7 +558,8 @@ async function renderSettings() {
             method: 'PUT',
             body: { videoFolders: lines(folders.value), players: lines(players.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
-              logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value) } },
+              logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value) },
+              description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])) },
           });
           fill(toolsBox, tools(saved));
           fill(msg, h('div', { class: 'notice ok' }, icon('check', 16), 'Saved.'));
@@ -555,7 +574,9 @@ async function renderSettings() {
       section('My players', 'Their matches are picked out on tournament pages.',
         players, h('p', { class: 'hint' }, 'One name per line, as in the draws. A first name alone works when it’s unambiguous (“Man” matches “Man Chan”).')),
       section('Finished videos', 'Rendered videos go here, by year and tournament, each with a .txt of its YouTube title and description.',
-        h('div', { class: 'row' }, output)),
+        h('div', { class: 'row' }, output),
+        h('div', { class: 'stack small' }, h('div', { class: 'muted' }, 'The YouTube description also gives (from badminfo, for badminfo imports):'),
+          Object.entries(describe).map(([k, c]) => h('label', { class: 'row', for: `desc-${k}` }, c.input, c.label)))),
       section('Scoreboard names', 'How players’ names appear on the scoreboard. Two players who would look the same get an initial added.',
         h('div', { class: 'row' }, h('label', { for: 'names-singles' }, 'Singles'), singlesSel, h('label', { for: 'names-doubles' }, 'Doubles'), doublesSel),
         example),
@@ -598,6 +619,12 @@ async function router() {
       setTab('home');
       main.classList.add('wide');
       leaving = await renderEditor(main, Number(id), { runJob, errorNotice, progressBar });
+    } else if (section === 'players') {
+      setTab('players');
+      await renderPlayers(main);
+    } else if (section === 'p' && id) {
+      setTab('players');
+      await renderPlayer(main, id);
     } else if (section === 'videos') await renderVideos();
     else if (section === 'settings') await renderSettings();
     else await renderHome();
