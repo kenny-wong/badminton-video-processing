@@ -42,7 +42,7 @@ export async function waitJob(job, onUpdate = () => {}) {
   let j = job;
   let lostSince = null;
   onUpdate(j);
-  while (j.status === 'running') {
+  while (j.status === 'running' || j.status === 'queued') {
     await sleep(lostSince ? 1500 : 600);
     let next;
     try {

@@ -4,6 +4,7 @@
 //   filmed game by game), their videos and suggested links.
 // POST /api/tournaments/:id/refresh: re-reads its matches and results.
 // DELETE /api/tournaments/:id: forgets it (video files are untouched).
+// POST /api/tournaments/:id/render-all: queues a render of every filmed match (or game) whose rallies all have a winner and that isn't rendered yet.
 
 import { fail, idParam, json, readJson, serverError } from '../lib/http.js';
 import { fetchTournament, saveTournament } from '../lib/tournaments.js';
@@ -15,6 +16,11 @@ import { checkResult, replayMatch } from '../public/shared/score.js';
 import { matchFormat } from '../lib/pipeline.js';
 import { beTournamentUrl } from '../lib/links.js';
 import { myPlayers, refreshProfiles, tournamentPeople } from '../lib/players.js';
+import { findTools } from '../lib/ffmpeg.js';
+import { jobView } from '../lib/jobs.js';
+import { startRender } from './matches.js';
+import { stageOf } from '../lib/overview.js';
+import { existsSync } from 'node:fs';
 
 const STATUS = { badLink: 400, notFound: 404, unavailable: 502 };
 
@@ -62,6 +68,19 @@ export function onRequestDelete({ params, app }) {
   if (!id) return fail(404, 'notFound', 'No such tournament');
   app.db.prepare('DELETE FROM tournaments WHERE id = ?').run(id);
   return json({ ok: true });
+}
+
+export function renderAll({ params, app }) {
+  const id = idParam(params.id);
+  if (!id || !app.db.prepare('SELECT 1 FROM tournaments WHERE id = ?').get(id)) return fail(404, 'notFound', 'No such tournament');
+  const settings = readSettings(app.db);
+  const tools = findTools(settings.ffmpegFolder);
+  if (!tools) return fail(503, 'noFfmpeg', 'FFmpeg wasn’t found. Install it (winget install Gyan.FFmpeg) or set its folder in Settings.');
+  const rows = app.db.prepare(`SELECT m.* FROM matches m WHERE m.tournament_id = ? AND EXISTS (SELECT 1 FROM videos v WHERE v.match_id = m.id)
+    ORDER BY m.match_date, m.match_time, m.game`).all(id).map(matchFromRow);
+  const ready = rows.filter((m) => stageOf(m, Boolean(m.outputPath && existsSync(m.outputPath))) === 'render');
+  const jobs = ready.map((m) => jobView(startRender(app, tools, settings, m)));
+  return json({ queued: jobs.length, jobs }, jobs.length ? 202 : 200);
 }
 
 const DAY_MS = 86400000;

@@ -1,13 +1,15 @@
-// GET /api/jobs/:id: a background job's progress. POST /api/jobs/:id/stop: stops it.
+// GET /api/jobs: every job kept (newest first). GET /api/jobs/:id: a background job's progress. POST /api/jobs/:id/stop: stops it.
 // GET /api/jobs/:id/log: the job's log as text. POST /api/jobs/:id/log/open: shows its log file in Explorer.
 // POST /api/log/open: shows the app's log file (data/logs/app.log) in Explorer.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fail, idParam, json } from '../lib/http.js';
-import { getJob, jobLog, jobView, stopJob } from '../lib/jobs.js';
+import { getJob, jobLog, jobView, listJobs, stopJob } from '../lib/jobs.js';
 import { appLog } from '../lib/log.js';
 import { selectArg } from './matches.js';
+
+export const list = () => json({ jobs: listJobs().map(jobView) });
 
 export function onRequestGet({ params }) {
   const job = getJob(idParam(params.id));

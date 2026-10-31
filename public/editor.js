@@ -3,7 +3,7 @@
 // say who won), watch the score build up, and render the edited video.
 
 import { h, fill, day, gamesView } from './dom.js';
-import { api } from './api.js';
+import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, mergeWinners, parseGames, replay, scoreAt, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
@@ -81,6 +81,8 @@ const KEYS = [
   ['H', '★ favourite (selected rally, or the one just played)'],
   ['Delete', 'remove selected rally'],
   ['Ctrl+Z', 'undo'],
+  ['+ / − / 0', 'zoom the timeline in / out / to the whole video (or the mouse wheel; Shift+wheel moves along)'],
+  ['?', 'this list of keys'],
 ];
 
 export async function renderEditor(main, id, { runJob, errorNotice, progressBar }) {
@@ -183,6 +185,98 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const scoreStrip = h('div', { class: 'score-strip' });
   const videoError = h('div');
   const duration = () => (Number.isFinite(video.duration) ? video.duration : data.source.duration || 1);
+  const frames = h('div', { class: 'frame-strip', 'aria-hidden': 'true' });
+  const wave = h('canvas', { class: 'wave', title: 'Sound level: shuttle hits show as spikes' });
+  const zoomText = h('span', { class: 'small muted zoom-text' });
+
+  // The part of the video the timeline shows: all of it, or a window zoomed into with the mouse wheel or + / −.
+  const view = { from: 0, to: null }; // to null: the end of the video
+  const MIN_SPAN = 10;
+  const viewTo = () => view.to ?? duration();
+  const span = () => Math.max(1, viewTo() - view.from);
+  const pct = (t) => ((t - view.from) / span()) * 100;
+  function setView(from, to) {
+    const d = duration();
+    const len = Math.min(d, Math.max(MIN_SPAN, to - from));
+    view.from = Math.max(0, Math.min(from, d - len));
+    view.to = len >= d - 0.01 ? null : view.from + len;
+    if (view.to === null) view.from = 0;
+    drawTimeline();
+    drawWave();
+    drawFrames();
+    drawZoom();
+    showTime();
+  }
+  const zoomBy = (k, at = video.currentTime) => {
+    const frac = Math.min(1, Math.max(0, (at - view.from) / span()));
+    const len = span() * k;
+    setView(at - frac * len, at - frac * len + len);
+  };
+  timeline.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const box = timeline.getBoundingClientRect();
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      const move = ((e.deltaX || e.deltaY) / box.width) * span();
+      setView(view.from + move, viewTo() + move);
+      return;
+    }
+    zoomBy(e.deltaY < 0 ? 0.75 : 1 / 0.75, view.from + ((e.clientX - box.left) / box.width) * span());
+  }, { passive: false });
+  function drawZoom() {
+    fill(zoomText, view.to === null ? 'Whole video' : `${clock(view.from)}–${clock(viewTo())}`);
+  }
+
+  // ---- sound level along the video, worked out once per video ----
+  let levels = null; // { step, levels, floor, top }
+  async function loadLevels() {
+    let got = null;
+    try {
+      got = await api(`/api/matches/${id}/levels`);
+    } catch (err) {
+      if (err.status !== 404) return;
+      try {
+        got = await waitJob(await api(`/api/matches/${id}/levels`, { method: 'POST' }));
+      } catch {
+        return; // no FFmpeg, no sound: the strip stays empty
+      }
+    }
+    const sorted = [...got.levels].sort((a, b) => a - b);
+    const at = (p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
+    levels = { ...got, floor: at(0.5), top: Math.max(at(0.998), at(0.5) + 1) };
+    drawWave();
+  }
+  function drawWave() {
+    const ratio = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(wave.clientWidth * ratio));
+    const hgt = Math.max(1, Math.round(wave.clientHeight * ratio));
+    if (wave.width !== w || wave.height !== hgt) Object.assign(wave, { width: w, height: hgt });
+    const g = wave.getContext('2d');
+    g.clearRect(0, 0, w, hgt);
+    if (!levels) return;
+    g.fillStyle = getComputedStyle(wave).color;
+    for (let x = 0; x < w; x++) {
+      const i0 = Math.floor((view.from + (x / w) * span()) / levels.step);
+      const i1 = Math.max(i0 + 1, Math.ceil((view.from + ((x + 1) / w) * span()) / levels.step));
+      let v = -Infinity;
+      for (let i = i0; i < i1 && i < levels.levels.length; i++) v = Math.max(v, levels.levels[i]);
+      const k = Math.min(1, Math.max(0, (v - levels.floor) / (levels.top - levels.floor)));
+      if (k > 0) g.fillRect(x, hgt - k * hgt, 1, k * hgt);
+    }
+  }
+
+  // ---- a strip of frames over the timeline, for the part shown ----
+  let framesTimer = null;
+  function drawFrames() {
+    clearTimeout(framesTimer);
+    framesTimer = setTimeout(() => {
+      const n = Math.max(1, Math.floor(frames.clientWidth / 120));
+      const step = Math.max(1, Math.round(span() / n));
+      fill(frames, Array.from({ length: n }, (_, k) => {
+        const t = Math.min(duration() - 1, Math.round((view.from + ((k + 0.5) * span()) / n) / step) * step);
+        return h('img', { src: `/media/frame/${id}?t=${Math.max(0, t)}`, alt: '', loading: 'lazy', title: clock(t), onclick: () => { video.currentTime = t; }, onerror: (e) => { e.target.style.visibility = 'hidden'; } });
+      }));
+    }, 250);
+  }
 
   video.addEventListener('error', () => fill(videoError, h('div', { class: 'notice bad' },
     'This video can’t be played here (Chrome may not support its format). Finding rallies and rendering still work.')));
@@ -190,7 +284,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   // Click or drag along the timeline to move through the video, playing or paused.
   const seekTo = (e) => {
     const box = timeline.getBoundingClientRect();
-    video.currentTime = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * duration();
+    video.currentTime = view.from + Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * span();
     showTime();
   };
   timeline.addEventListener('pointerdown', (e) => {
@@ -241,7 +335,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   video.addEventListener('play', () => { fill(playBtn, icon('pause', 18)); tick(); });
   video.addEventListener('pause', () => { fill(playBtn, icon('play', 18)); showTime(); });
   video.addEventListener('loadedmetadata', () => { drawTimeline(); showTime(); });
-  const resized = new ResizeObserver(() => drawScores());
+  const resized = new ResizeObserver(() => {
+    drawScores();
+    drawWave();
+    drawFrames();
+  });
   resized.observe(timeline);
   // While paused nothing else redraws the time and playhead after a seek (keys, timeline, rally list).
   video.addEventListener('seeked', () => showTime());
@@ -370,7 +468,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     drawOverlay();
     const t = video.currentTime;
     timeText.textContent = `${clockTenths(t)} / ${clock(duration())}`;
-    playhead.style.left = `${(t / duration()) * 100}%`;
+    // While playing, the zoomed timeline turns the page when the playhead runs off its end.
+    if (view.to !== null && !video.paused && (t > viewTo() || t < view.from)) setView(t - span() * 0.05, t + span() * 0.95);
+    playhead.style.left = `${pct(t)}%`;
+    playhead.hidden = t < view.from || t > viewTo();
     const s = scoreAt(rallies, steps, t, initial);
     const key = JSON.stringify(s);
     if (key !== lastBoard) {
@@ -425,13 +526,13 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   function drawTimeline() {
     const d = duration();
-    const shade = (from, to) => h('div', { class: 'out', style: { left: `${(from / d) * 100}%`, width: `${((to - from) / d) * 100}%` } });
+    const shade = (from, to) => h('div', { class: 'out', style: { left: `${pct(from)}%`, width: `${((to - from) / span()) * 100}%` } });
     fill(timeline,
       matchStart ? shade(0, matchStart) : null,
       matchEnd ? shade(matchEnd, d) : null,
       rallies.map((r, i) => h('div', {
       class: `r ${r.winner ?? 'none'}${i === sel ? ' sel' : ''}${r.fav ? ' fav' : ''}`,
-      style: { left: `${(r.start / d) * 100}%`, width: `${((r.end - r.start) / d) * 100}%` },
+      style: { left: `${pct(r.start)}%`, width: `${((r.end - r.start) / span()) * 100}%` },
       title: `Rally ${i + 1}${r.fav ? ' ★' : ''}`,
     })), playhead);
     drawBounds();
@@ -443,16 +544,15 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   // left out, except game scores, which are placed first.
   const LABEL_PX = 6.4; // per character at the strip's font size
   function drawScores() {
-    const d = duration();
     const width = timeline.clientWidth || 1;
     const items = [];
     rallies.forEach((r, i) => {
       const st = steps[i];
-      if (!st?.counted) return;
+      if (!st?.counted || r.end < view.from || r.end > viewTo()) return;
       const gameEnd = st.event === 'game' || st.event === 'match';
       const text = `${r.fav ? '★' : ''}${gameEnd ? st.after.games.at(-1).join('-') : st.after.points.join('-')}`;
       const w = text.length * LABEL_PX + 6;
-      const x = Math.min(width - w / 2, Math.max(w / 2, (r.end / d) * width));
+      const x = Math.min(width - w / 2, Math.max(w / 2, (pct(r.end) / 100) * width));
       items.push({ i, text, gameEnd, from: x - w / 2, to: x + w / 2, x });
     });
     const rows = [[], []];
@@ -926,7 +1026,18 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     return found;
   }
 
+  // Every key in a box over the editor (? opens it, Esc or ? closes it).
+  const keysDialog = h('dialog', { class: 'keys-dialog', 'aria-label': 'Keyboard shortcuts' },
+    h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('keyboard'), 'Keyboard shortcuts'), h('button', { class: 'small', onclick: () => keysDialog.close() }, 'Close')),
+    h('div', { class: 'keys' }, KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t))));
+  keysDialog.addEventListener('click', (e) => { if (e.target === keysDialog) keysDialog.close(); });
+  document.body.append(keysDialog);
+
   function onKey(e) {
+    if (keysDialog.open) {
+      if (e.key === '?') { keysDialog.close(); e.preventDefault(); }
+      return;
+    }
     if (e.target.closest?.('input, textarea, select') && e.key !== 'Escape') return;
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
       const last = undo.pop();
@@ -1006,6 +1117,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       case 'm': setBound('start', now()); break;
       case 'f': setBound('end', now()); break;
       case 'n': goNextUntagged(); break;
+      case '+': case '=': zoomBy(0.5); break;
+      case '-': zoomBy(2); break;
+      case '0': setView(0, duration()); break;
+      case '?': keysDialog.showModal(); break;
       case 'ArrowUp': if (rallies.length) select(Math.max(0, sel < 0 ? rallyAtOrBefore(video.currentTime) : sel - 1)); break;
       case 'ArrowDown': if (rallies.length) select(Math.min(rallies.length - 1, sel + 1)); break;
       case 'q': case 'e':
@@ -1112,8 +1227,13 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('div', { class: 'video-col' },
         player,
         videoError,
-        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn),
+        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn,
+          h('span', { class: 'zoom' }, h('button', { class: 'ghost icon-only', title: 'Zoom out (−)', onclick: () => zoomBy(2) }, '−'), zoomText,
+            h('button', { class: 'ghost icon-only', title: 'Zoom in (+)', onclick: () => zoomBy(0.5) }, '+'),
+            h('button', { class: 'small', title: 'Whole video (0)', onclick: () => setView(0, duration()) }, 'Fit'))),
+        frames,
         timeline,
+        wave,
         scoreStrip,
         h('div', { class: 'legend' },
           h('span', {}, h('i', { class: 'a' }), 'A won'), h('span', {}, h('i', { class: 'b' }), 'B won'), h('span', {}, h('i', { class: 'let' }), 'let'),
@@ -1130,11 +1250,16 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   drawCheck();
   showTime();
   if (tab === 'export') drawBoardPreview();
+  drawZoom();
+  drawFrames();
+  loadLevels();
   // The scoreboard preview follows the video while it is paused.
   video.addEventListener('seeked', () => { if (tab === 'export' && video.paused) drawBoardPreview(); });
 
   return () => {
     window.removeEventListener('keydown', onKey);
+    keysDialog.remove();
+    clearTimeout(framesTimer);
     resized.disconnect();
     resizedPlayer.disconnect();
     clearTimeout(saveTimer);

@@ -55,3 +55,10 @@ test('groupRallies groups close hits into rallies and drops stray clicks', () =>
   assert.equal(tight[0].start, 0);
   assert.equal(tight[1].end, 8.5);
 });
+
+test('sound levels for the timeline keep the loudest of each tenth of a second', async () => {
+  const { downsample, LEVEL_STEP } = await import('../lib/levels.js');
+  assert.equal(LEVEL_STEP, 0.1);
+  const levels = Float32Array.from({ length: 25 }, (_, i) => (i === 13 ? 60.04 : 20));
+  assert.deepEqual(downsample(levels), [20, 60, 20]);
+});

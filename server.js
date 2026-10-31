@@ -12,7 +12,7 @@ import { Readable } from 'node:stream';
 import { openDb } from './lib/db.js';
 import { fail, idParam, serverError } from './lib/http.js';
 import { loadMatch, sourceFor } from './lib/pipeline.js';
-import { thumbnail } from './lib/thumbs.js';
+import { frameAt, thumbnail } from './lib/thumbs.js';
 import { findTools } from './lib/ffmpeg.js';
 import { readSettings } from './lib/settings.js';
 import { startLog } from './lib/log.js';
@@ -23,6 +23,7 @@ import * as matches from './api/matches.js';
 import * as videos from './api/videos.js';
 import * as jobs from './api/jobs.js';
 import * as players from './api/players.js';
+import * as overview from './api/overview.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
@@ -37,6 +38,9 @@ const ROUTES = [
   ['GET', '/api/tournaments/:id', tournaments.getOne],
   ['POST', '/api/tournaments/:id/refresh', tournaments.refresh],
   ['DELETE', '/api/tournaments/:id', tournaments.onRequestDelete],
+  ['POST', '/api/tournaments/:id/render-all', tournaments.renderAll],
+  ['GET', '/api/overview', overview.onRequestGet],
+  ['GET', '/api/search', overview.searchRoute],
   ['GET', '/api/matches/:id', matches.onRequestGet],
   ['PUT', '/api/matches/:id', matches.onRequestPut],
   ['PUT', '/api/matches/:id/videos', matches.linkVideos],
@@ -48,6 +52,8 @@ const ROUTES = [
   ['POST', '/api/matches/:id/take-tagging', matches.takeTagging],
   ['POST', '/api/matches/:id/track', matches.track],
   ['GET', '/api/matches/:id/track', matches.trackData],
+  ['GET', '/api/matches/:id/levels', matches.levels],
+  ['POST', '/api/matches/:id/levels', matches.startLevels],
   ['GET', '/api/matches/:id/suggestions', matches.suggestions],
   ['GET', '/api/matches/:id/people', players.matchPeopleRoute],
   ['GET', '/api/players', players.onRequestGet],
@@ -57,6 +63,7 @@ const ROUTES = [
   ['GET', '/api/videos', videos.onRequestGet],
   ['POST', '/api/videos/scan', videos.scan],
   ['PUT', '/api/videos/:id', videos.onRequestPut],
+  ['GET', '/api/jobs', jobs.list],
   ['GET', '/api/jobs/:id', jobs.onRequestGet],
   ['POST', '/api/jobs/:id/stop', jobs.stop],
   ['GET', '/api/jobs/:id/log', jobs.log],
@@ -157,6 +164,22 @@ export function createApp(app) {
           return;
         }
         res.writeHead(200, { 'Content-Type': file.endsWith('.png') ? 'image/png' : 'image/jpeg', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+        createReadStream(file).pipe(res);
+        return;
+      }
+      const frame = /^\/media\/frame\/(\d+)$/.exec(url.pathname);
+      if (frame && req.method === 'GET') {
+        const at = Number(url.searchParams.get('t'));
+        const tools = Number.isFinite(at) && findTools(readSettings(app.db).ffmpegFolder);
+        const file = tools && await frameAt(app.db, tools, app.thumbDir ?? join(tmpdir(), 'badminton-video-thumbs'), idParam(frame[1]), at).catch((err) => {
+          console.error('frame', frame[1], at, err.message);
+          return null;
+        });
+        if (!file) {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff' });
         createReadStream(file).pipe(res);
         return;
       }

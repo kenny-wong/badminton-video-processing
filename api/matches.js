@@ -13,6 +13,7 @@
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
 // POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
+// GET /api/matches/:id/levels: the sound level along the video (404 until worked out); POST starts working it out (a job).
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -26,10 +27,11 @@ import { analyseMatch, describeOutput, joinParts, loadMatch, matchFormat, render
 import { cleanFormat, cleanRallies, cleanStart, defaultServer, startFor } from '../public/shared/score.js';
 import { cleanCorners, courtMapping } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
+import { cachedLevels, matchLevels } from '../lib/levels.js';
 import { suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
-import { isMine } from '../public/shared/names.js';
+import { isMine, teamName } from '../public/shared/names.js';
 import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
 
@@ -191,7 +193,7 @@ export function track({ params, app }) {
   if (!t) return noFfmpeg();
   if (!tracker().ready) return fail(503, 'noTracker', 'Shuttle tracking isn’t set up yet: run analysis\\setup.ps1 once (see the README).');
   const id = loaded.match.id;
-  const job = startJob('track', `track:${id}`, (j, signal) => trackMatch(app.db, t, settings, id, { signal, job: j }));
+  const job = startJob('track', `track:${id}`, (j, signal) => trackMatch(app.db, t, settings, id, { signal, job: j }), { queue: 'gpu', label: `Track the shuttle: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);
 }
 
@@ -244,6 +246,23 @@ function tools(app) {
 
 const noFfmpeg = () => fail(503, 'noFfmpeg', 'FFmpeg wasn’t found. Install it (winget install Gyan.FFmpeg) or set its folder in Settings.');
 
+export async function levels({ params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const found = await cachedLevels(app.db, readSettings(app.db), loaded.match.id);
+  return found ? json(found) : fail(404, 'notReady', 'The sound levels haven’t been worked out yet');
+}
+
+export function startLevels({ params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const { settings, tools: t } = tools(app);
+  if (!t) return noFfmpeg();
+  const id = loaded.match.id;
+  const job = startJob('levels', `levels:${id}`, (j, signal) => matchLevels(app.db, t, settings, id, { signal, job: j }), { label: `Sound levels: ${matchLabel(loaded.match)}` });
+  return json(jobView(job), 202);
+}
+
 export function prepare({ params, app }) {
   const loaded = load(app, params);
   if (!loaded) return fail(404, 'notFound', 'No such match');
@@ -272,12 +291,21 @@ export async function render({ request, params, app }) {
   const { settings, tools: t } = tools(app);
   if (!t) return noFfmpeg();
   const body = (await readJson(request)) ?? {};
-  const id = loaded.match.id;
-  const job = startJob('render', `render:${id}`, (j, signal) => renderMatch(app.db, t, settings, id, {
+  const job = startRender(app, t, settings, loaded.match, body);
+  return json(jobView(job), 202);
+}
+
+/** "Lee v Ho, game 2" for the jobs page. */
+export const matchLabel = (m) => `${teamName(m.teamA)} v ${teamName(m.teamB)}${m.game ? `, game ${m.game}` : ''}`;
+
+/** Queues a render of a match (or game) with the options from the page, or Settings' where not given. */
+export function startRender(app, t, settings, match, body = {}) {
+  const id = match.id;
+  const what = body.highlights === true ? 'Highlights' : 'Render';
+  return startJob('render', `render:${id}`, (j, signal) => renderMatch(app.db, t, settings, id, {
     cut: body.cut !== false, overlay: body.overlay !== false, highlights: body.highlights === true,
     titleCard: typeof body.titleCard === 'boolean' ? body.titleCard : settings.cards.title, endCard: typeof body.endCard === 'boolean' ? body.endCard : settings.cards.end, signal, job: j,
-  }));
-  return json(jobView(job), 202);
+  }), { queue: 'gpu', label: `${what}: ${matchLabel(match)}` });
 }
 
 /**

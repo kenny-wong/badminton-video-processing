@@ -42,6 +42,14 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
    - The score after each tagged rally shows in small type under the timeline. Press **H** (or ☆ in the list) to mark a favourite rally; *Highlights only* renders just those to a separate file.
 6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. Upload it in YouTube Studio as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
 
+## Getting around
+
+- The home page has a **search** across every imported match (player, tournament or event; narrow it to matches with a video, tagged or on YouTube) and a **To do** list of filmed matches still to tag, to render or to upload, plus videos not linked to anything.
+- **Jobs** (in the header while anything runs) lists the background work. Renders and shuttle tracking take turns on the graphics card: start several and they queue. **Render all tagged** on a tournament page queues every filmed match whose rallies all have a winner and that has no video yet.
+- On a tournament page, drag an unlinked video's chip, or the video file itself from Explorer, onto its match (or game) to link it.
+- The editor's timeline zooms with the mouse wheel or + / − (0 shows the whole video; Shift+wheel moves along), with a strip of frames above it and the sound level below it, where shuttle hits show as spikes and missed rallies stand out.
+- In the editor, **?** shows every keyboard shortcut. The header's theme button switches between light, dark and Windows' own setting.
+
 ## Players (from badminfo)
 
 Tournaments imported from a badminfo link also bring everyone entered, with their badminfo grades and ratings. The **Players** page lists your players (from Settings; paste a badminfo link for any that aren't found by name) and each player has a page with their rating over time and every match of theirs in imported tournaments. Tournament pages show each player's rating for the event, badminfo's win chance for matches it has rated, and upsets (the side with under a 35% chance won). The editor's Players tab adds earlier meetings between the same players and the opponents' other filmed matches. Settings choose whether the YouTube description adds the players' badminfo pages and the win chance, and whether an upset goes in the title.

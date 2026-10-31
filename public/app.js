@@ -5,6 +5,7 @@
 //   #/players     my players' badminfo ratings (players-page.js)
 //   #/p/<id>      one player, by badminfo id
 //   #/videos      every video found
+//   #/jobs        background jobs (jobs-page.js)
 //   #/settings    folders, players, cutting
 
 import { h, fill, when, day, megabytes, ukDate, gamesView } from './dom.js';
@@ -19,9 +20,38 @@ import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, PRESETS } from './s
 import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
 import { percents } from './shared/players.js';
+import { renderJobs, watchJobs } from './jobs-page.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
+
+// Light, dark, or as Windows is set (the default), per device.
+const THEME_KEY = 'badminton-video:theme:v1';
+const THEMES = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+function setTheme(theme) {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  const btn = document.getElementById('theme');
+  if (btn) {
+    btn.textContent = THEMES[theme];
+    btn.title = `Theme: ${THEMES[theme]} (click to change)`;
+  }
+}
+let theme = 'auto';
+try {
+  theme = Object.hasOwn(THEMES, localStorage.getItem(THEME_KEY)) ? localStorage.getItem(THEME_KEY) : 'auto';
+} catch { /* storage blocked */ }
+setTheme(theme);
+document.getElementById('theme')?.addEventListener('click', () => {
+  const order = Object.keys(THEMES);
+  theme = order[(order.indexOf(theme) + 1) % order.length];
+  setTheme(theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch { /* storage blocked: lasts until the window closes */ }
+});
+const jobsLink = document.querySelector('.jobs-link');
+if (jobsLink) watchJobs(jobsLink);
 
 function setTab(name) {
   for (const a of document.querySelectorAll('.tabs a')) {
@@ -43,9 +73,12 @@ const pageHead = (title, sub, ...actions) => h('div', { class: 'page-head' },
 const emptyState = (name, ...text) => h('div', { class: 'empty' }, icon(name, 34), h('div', {}, text));
 
 function progressBar(job) {
+  const waiting = job?.status === 'queued';
   return h('div', { class: 'stack' },
-    h('div', { class: 'progress' }, h('span', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } })),
-    h('div', { class: 'small muted' }, job?.message || 'Working…'));
+    h('div', { class: `progress${waiting ? ' waiting' : ''}` }, h('span', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } })),
+    h('div', { class: 'small muted' }, waiting
+      ? [`Waiting: ${job.ahead || 'a'} job${job.ahead === 1 || !job.ahead ? '' : 's'} on the graphics card first. `, h('a', { href: '#/jobs' }, 'See jobs')]
+      : job?.message || 'Working…'));
 }
 
 /** Runs a job with a progress bar in `box`; resolves with its result. */
@@ -60,7 +93,7 @@ async function runJob(box, start) {
 async function renderHome() {
   setTab('home');
   document.title = 'Badminton Video';
-  const [{ settings }, { tournaments }] = await Promise.all([api('/api/settings'), api('/api/tournaments')]);
+  const [{ settings }, { tournaments }, todo] = await Promise.all([api('/api/settings'), api('/api/tournaments'), api('/api/overview')]);
   const importMsg = h('div');
   const scanBox = h('div');
   const link = h('input', { type: 'url', placeholder: 'https://badminfo.com/Tournament/… or https://be.tournamentsoftware.com/tournament/…', 'aria-label': 'Tournament link' });
@@ -94,6 +127,49 @@ async function renderHome() {
     },
   }, icon('scan', 16), 'Scan folders');
 
+  // ---- search ----
+  const query = h('input', { type: 'search', placeholder: 'Find a match: player, tournament or event', 'aria-label': 'Search matches', class: 'grow' });
+  const only = h('select', { 'aria-label': 'Only matches that' },
+    h('option', { value: '' }, 'All matches'), h('option', { value: 'video' }, 'With a video'), h('option', { value: 'tagged' }, 'Tagged'), h('option', { value: 'uploaded' }, 'On YouTube'));
+  const results = h('div');
+  let searchTimer = null;
+  const runSearch = async () => {
+    if (!query.value.trim()) return fill(results);
+    try {
+      const r = await api(`/api/search?q=${encodeURIComponent(query.value)}&only=${only.value}`);
+      fill(results, r.matches.length
+        ? h('div', { class: 'table-scroll' }, h('table', {}, h('tbody', {}, r.matches.map((m) => h('tr', {},
+          h('td', { class: 'nowrap small' }, day(m.date), h('div', { class: 'muted' }, m.time)),
+          h('td', { class: 'small' }, h('a', { href: `#/t/${m.tournamentId}` }, m.tournament), h('div', { class: 'muted' }, [m.draw, m.round].filter(Boolean).join(' · '))),
+          h('td', {}, teamName(m.teamA), h('span', { class: 'muted' }, ' v '), teamName(m.teamB)),
+          h('td', { class: 'nowrap' }, gamesView(m.games)),
+          h('td', { class: 'nowrap' }, m.videos ? h('a', { class: 'btn small primary', href: `#/m/${m.id}` }, 'Open') : h('span', { class: 'small muted' }, 'no video'),
+            m.youtubeUrl ? [' ', h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null))))))
+        : h('p', { class: 'hint' }, 'No matches found.'));
+    } catch (err) {
+      fill(results, errorNotice(err));
+    }
+  };
+  query.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 250); });
+  only.addEventListener('change', runSearch);
+
+  // ---- to do: filmed matches by stage ----
+  const STAGES = [['tag', 'To tag', 'Rallies to find, or winners to give'], ['render', 'To render', 'Every rally has a winner'], ['upload', 'To upload', 'Rendered, no YouTube link yet']];
+  const todoItem = (m) => h('li', {},
+    h('a', { href: `#/m/${m.id}` }, `${teamName(m.teamA)} v ${teamName(m.teamB)}`, m.game ? ` · game ${m.game}` : ''),
+    h('div', { class: 'small muted' }, [day(m.date), m.tournament, [m.draw, m.round].filter(Boolean).join(' ')].filter(Boolean).join(' · '),
+      m.rallies ? ` · ${m.tagged}/${m.rallies} rallies` : ''));
+  const todoBox = todo.counts.tag + todo.counts.render + todo.counts.upload + todo.unlinked
+    ? h('div', { class: 'card stack' },
+      h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('check'), 'To do'),
+        h('span', { class: 'small muted' }, `${todo.counts.done} filmed match${todo.counts.done === 1 ? '' : 'es'} on YouTube`)),
+      todo.unlinked ? h('div', { class: 'notice warn small' }, `${todo.unlinked} video${todo.unlinked === 1 ? ' isn’t' : 's aren’t'} linked to a match. `, h('a', { href: '#/videos' }, 'See videos')) : null,
+      h('div', { class: 'todo-grid' }, STAGES.map(([k, title, hint]) => h('div', { class: 'todo-col' },
+        h('div', { class: 'row spread' }, h('strong', {}, title), h('span', { class: `pill${todo.counts[k] ? ' warn' : ''}` }, todo.counts[k])),
+        h('div', { class: 'small muted' }, hint),
+        todo[k].length ? h('ul', { class: 'match-list' }, todo[k].map(todoItem)) : h('p', { class: 'hint' }, 'Nothing here.')))))
+    : null;
+
   const setup = !settings.videoFolders.length || !settings.players.length;
   const stat = (n, label) => h('div', { class: 'stat' }, h('b', {}, n), h('span', {}, label));
   fill(main,
@@ -115,6 +191,8 @@ async function renderHome() {
         h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('film'), 'Phone videos'), scanBtn),
         h('p', { class: 'hint' }, settings.videoFolders.length ? settings.videoFolders.join(' · ') : ['No video folders yet. ', h('a', { href: '#/settings' }, 'Add them in Settings.')]),
         scanBox)),
+    h('div', { class: 'card stack' }, h('div', { class: 'row' }, query, only), results),
+    todoBox,
     h('div', { class: 'section-title' }, icon('trophy', 15), `Imported tournaments (${tournaments.length})`),
     tournaments.length
       ? h('div', { class: 'tournament-list' }, tournaments.map((t) => h('a', { class: 'card', href: `#/t/${t.id}` },
@@ -183,6 +261,46 @@ async function renderTournament(id, notice = null) {
       fill(msg, errorNotice(err));
     }
   };
+
+  // ---- drag a video onto a match: a chip from this page, or the file itself from Explorer ----
+  const VIDEO_TYPE = 'application/x-badminton-video';
+  const dropped = async (e, u) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drop-on');
+    let ids = [];
+    const chip = Number(e.dataTransfer.getData(VIDEO_TYPE));
+    if (chip) ids = [chip];
+    else if (e.dataTransfer.files.length) {
+      // The browser gives a dropped file's name and size, not where it is: find it among the scanned videos.
+      const { videos: all } = await api('/api/videos');
+      for (const f of e.dataTransfer.files) {
+        const v = all.find((x) => x.name.toLowerCase() === f.name.toLowerCase() && x.size === f.size);
+        if (!v) {
+          fill(msg, h('div', { class: 'notice warn' }, `${f.name} isn’t among the scanned videos. Copy it into a video folder and scan (Tournaments page), then drop it again.`));
+          return;
+        }
+        ids.push(v.id);
+      }
+    }
+    if (!ids.length) return;
+    const current = u.videoIds ?? [];
+    if (current.some((v) => ids.includes(v))) return;
+    if (current.length && !confirm(`This ${unitName(u)} already has ${current.length} video${current.length === 1 ? '' : 's'}. Add the dropped one${ids.length === 1 ? '' : 's'} after ${current.length === 1 ? 'it' : 'them'}, as the next part?`)) return;
+    link(u, [...current, ...ids]);
+  };
+  const dropOn = (u) => ({
+    ondragover: (e) => {
+      if (![...e.dataTransfer.types].some((t) => t === VIDEO_TYPE || t === 'Files')) return;
+      e.preventDefault();
+      e.currentTarget.classList.add('drop-on');
+    },
+    ondragleave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drop-on'); },
+    ondrop: (e) => dropped(e, u),
+  });
+  const videoChip = (v) => h('span', {
+    class: 'video-chip', draggable: 'true', title: 'Drag onto a match to link it',
+    ondragstart: (e) => { e.dataTransfer.setData(VIDEO_TYPE, String(v.id)); e.dataTransfer.effectAllowed = 'link'; },
+  }, icon('film', 14), videoLabel(v));
 
   const chooser = (u, date) => {
     const sameDay = free.filter((v) => v.recordedAt && ukDate(v.recordedAt) === date);
@@ -259,7 +377,7 @@ async function renderTournament(id, notice = null) {
 
   const listView = (list) => h('div', { class: 'table-scroll' }, h('table', {},
     h('thead', {}, h('tr', {}, ['Time', 'Court', 'Event', 'Match', 'Result', 'Video', 'Status'].map((x) => h('th', {}, x)))),
-    list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}` },
+    list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, ...dropOn(m) },
       h('tr', { class: m.mine ? 'mine' : '' },
         h('td', { class: 'nowrap' }, m.time, m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
         h('td', { class: 'small' }, m.court),
@@ -269,7 +387,7 @@ async function renderTournament(id, notice = null) {
         h('td', {}, videoCell(m)),
         h('td', {}, statusCell(m))),
       // Game by game, unless one video covers the whole match.
-      perGame(m) && !m.videoIds.length ? unitsOf(m).map((u) => h('tr', { class: `game-row${m.mine ? ' mine' : ''}` },
+      perGame(m) && !m.videoIds.length ? unitsOf(m).map((u) => h('tr', { class: `game-row${m.mine ? ' mine' : ''}`, ...dropOn(u) },
         h('td', {}), h('td', {}), h('td', {}),
         h('td', { class: 'small game-name' }, '↳ ', gameLabel(u)),
         h('td', {}),
@@ -285,7 +403,7 @@ async function renderTournament(id, notice = null) {
   const gridView = (list) => h('div', { class: 'match-grid' }, list.map((m) => {
     const filmed = m.videoIds.length > 0;
     const games = perGame(m) && !filmed;
-    return h('div', { class: `match-card${m.mine ? ' mine' : ''}` },
+    return h('div', { class: `match-card${m.mine ? ' mine' : ''}`, ...dropOn(m) },
       filmed
         ? thumbOf(m, lengthOf(m))
         : games && gamesLinked(m) ? null
@@ -298,7 +416,7 @@ async function renderTournament(id, notice = null) {
         filmed ? h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `#/m/${m.id}` }, 'Open'), youtubeLink(m),
           h('button', { class: 'small', onclick: () => link(m, []) }, 'Unlink'))
           : gamesLinked(m) ? null : videoCell(m),
-        games ? h('div', { class: 'game-tiles' }, unitsOf(m).map((u) => h('div', { class: 'game-tile' },
+        games ? h('div', { class: 'game-tiles' }, unitsOf(m).map((u) => h('div', { class: 'game-tile', ...dropOn(u) },
           u.videoIds.length ? thumbOf(u, lengthOf(u), false) : null,
           h('div', { class: 'stack small' },
             h('div', {}, gameLabel(u)),
@@ -341,6 +459,21 @@ async function renderTournament(id, notice = null) {
     },
   }, `Link all ${suggestions.length} suggested`) : null;
 
+  const renderAllBtn = h('button', {
+    title: 'Queue a render of every filmed match whose rallies all have a winner and that isn’t rendered yet; they run one after another',
+    onclick: async () => {
+      renderAllBtn.disabled = true;
+      try {
+        const r = await api(`/api/tournaments/${id}/render-all`, { method: 'POST' });
+        fill(msg, h('div', { class: 'notice ok' }, r.queued ? [`Queued ${r.queued} render${r.queued === 1 ? '' : 's'}. `, h('a', { href: '#/jobs' }, 'Follow them on the Jobs page.')]
+          : 'Nothing to render: no filmed match here has every rally tagged and no video yet.'));
+      } catch (err) {
+        fill(msg, errorNotice(err));
+      }
+      renderAllBtn.disabled = false;
+    },
+  }, icon('scissors', 16), 'Render all tagged');
+
   const refreshBtn = h('button', {
     onclick: async () => {
       refreshBtn.disabled = true;
@@ -362,6 +495,7 @@ async function renderTournament(id, notice = null) {
       [tournament.start === tournament.end ? day(tournament.start) : `${day(tournament.start)} – ${day(tournament.end)}`, ' · ',
         h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
         tournament.badminfoId ? [' · ', h('a', { href: `https://badminfo.com/Tournament/${tournament.badminfoId}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗')] : null],
+      renderAllBtn,
       refreshBtn,
       h('button', {
         class: 'danger',
@@ -376,7 +510,9 @@ async function renderTournament(id, notice = null) {
     suggestions.length ? h('div', { class: 'notice info row spread' },
       h('span', {}, `${suggestions.length === 1 ? 'One match below has a suggested video' : `${suggestions.length} matches below have suggested videos`}, going by when the videos were recorded. Check, then link.`), linkAll) : null,
     !videos.length ? h('div', { class: 'notice warn' }, 'No videos from these dates yet. ', h('a', { href: '#/' }, 'Scan your video folders'), ' after copying them from your phone.') : null,
-    unmatched.length ? h('p', { class: 'small muted' }, `${unmatched.length} video${unmatched.length === 1 ? '' : 's'} from these dates aren’t linked or suggested; choose them in the Video column.`) : null,
+    unmatched.length ? h('div', { class: 'stack small' },
+      h('div', { class: 'muted' }, `${unmatched.length} video${unmatched.length === 1 ? '' : 's'} from these dates aren’t linked or suggested: drag one onto its match, or choose it in the Video column. A video file can also be dragged straight from Explorer.`),
+      h('div', { class: 'video-tray' }, unmatched.map(videoChip))) : null,
     anyMine ? null : h('p', { class: 'hint' }, 'Add your players’ names in Settings to pick out their matches.'),
     toolbar,
     table);
@@ -625,6 +761,9 @@ async function router() {
     } else if (section === 'p' && id) {
       setTab('players');
       await renderPlayer(main, id);
+    } else if (section === 'jobs') {
+      setTab('jobs');
+      leaving = await renderJobs(main);
     } else if (section === 'videos') await renderVideos();
     else if (section === 'settings') await renderSettings();
     else await renderHome();
