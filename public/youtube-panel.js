@@ -11,6 +11,18 @@ const YOUTUBE_UPLOAD = 'https://www.youtube.com/upload'; // opens YouTube Studio
 const PREFS_KEY = 'badminton-video:youtube-upload:v1';
 const PRIVACY = [['unlisted', 'Unlisted: anyone with the link'], ['private', 'Private: only you'], ['public', 'Public']];
 const SIGNIN_WAIT_MS = 5 * 60_000;
+const TIPS = {
+  signIn: 'Opens Google’s sign-in in Chrome. Once signed in, the app uploads rendered videos to your channel itself.',
+  signOut: 'Forgets the YouTube sign-in on this PC. Videos already uploaded stay on YouTube.',
+  channel: 'The YouTube channel uploads go to',
+  privacy: 'Who can watch the upload. Unlisted: only people you send the link to; it doesn’t show on your channel or in search. Private: only you. Public: everyone, in search too. You can change it later in YouTube Studio.',
+  playlist: 'Puts the video in a YouTube playlist named after the tournament, so one link shares all its matches. The playlist is made with the first upload (Unlisted, or Public for public videos); later uploads from the tournament join it.',
+  upload: 'Uploads the rendered video with its title and description (chapters too when there are at least 3), then saves the link on this match. You can keep working; it shows on the Jobs page.',
+  uploadHighlights: 'Uploads the ★ highlights video. Its link isn’t saved on the match.',
+  byHand: 'Copies the title, opens YouTube’s upload page in Chrome and shows the file in Explorer, for you to drag across.',
+  copyTitle: 'Puts the title on the clipboard again',
+  copyDescription: 'Puts the description on the clipboard',
+};
 
 function readPrefs() {
   const prefs = { privacy: 'unlisted', playlist: true };
@@ -57,8 +69,8 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
     const o = uploads[byHand];
     return h('ol', { class: 'upload-steps small' },
       h('li', {}, 'Drag the selected file from Explorer onto YouTube’s upload page.'),
-      h('li', {}, 'Paste the title (Ctrl+V): it’s on the clipboard. ', h('button', { class: 'small', onclick: () => copyText('Title', o.title) }, 'Copy again')),
-      h('li', {}, h('button', { class: 'small', onclick: () => copyText('Description', o.description) }, 'Copy description'), ' and paste it under the title.'),
+      h('li', {}, 'Paste the title (Ctrl+V): it’s on the clipboard. ', h('button', { class: 'small', title: TIPS.copyTitle, onclick: () => copyText('Title', o.title) }, 'Copy again')),
+      h('li', {}, h('button', { class: 'small', title: TIPS.copyDescription, onclick: () => copyText('Description', o.description) }, 'Copy description'), ' and paste it under the title.'),
       h('li', {}, 'Choose Unlisted under Visibility, then Save.'),
       byHand === 'video' ? h('li', {}, 'Copy the video link YouTube shows and paste it below.') : null);
   };
@@ -120,16 +132,16 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
   };
 
   const handButtons = (primary) => h('div', { class: 'row small' },
-    uploads.video.exists ? h('button', { class: primary ? 'primary' : 'small', onclick: () => startByHand('video') }, primary ? icon('youtube', 16) : null, primary ? 'Upload to YouTube' : 'Upload by hand') : null,
-    uploads.highlights.exists ? h('button', { class: primary ? '' : 'small', onclick: () => startByHand('highlights') }, primary ? '★ Upload highlights' : '★ Highlights by hand') : null);
+    uploads.video.exists ? h('button', { class: primary ? 'primary' : 'small', title: TIPS.byHand, onclick: () => startByHand('video') }, primary ? icon('youtube', 16) : null, primary ? 'Upload to YouTube' : 'Upload by hand') : null,
+    uploads.highlights.exists ? h('button', { class: primary ? '' : 'small', title: TIPS.byHand, onclick: () => startByHand('highlights') }, primary ? '★ Upload highlights' : '★ Highlights by hand') : null);
 
   const draw = () => {
     const { video, highlights: hl } = uploads;
     const any = video.exists || hl.exists;
     const account = yt.signedIn
-      ? h('div', { class: 'row small' }, h('span', { class: 'pill ok' }, 'Signed in'), h('span', {}, yt.channel?.title ?? 'YouTube'), h('button', { class: 'small', onclick: signOut }, 'Sign out'))
+      ? h('div', { class: 'row small' }, h('span', { class: 'pill ok' }, 'Signed in'), h('span', { title: TIPS.channel }, yt.channel?.title ?? 'YouTube'), h('button', { class: 'small', title: TIPS.signOut, onclick: signOut }, 'Sign out'))
       : yt.ready
-        ? h('div', { class: 'row small' }, h('button', { class: 'small', onclick: signIn }, icon('youtube', 16), 'Sign in to YouTube'), h('span', { class: 'hint' }, 'to upload straight from the app'))
+        ? h('div', { class: 'row small' }, h('button', { class: 'small', title: TIPS.signIn, onclick: signIn }, icon('youtube', 16), 'Sign in to YouTube'), h('span', { class: 'hint' }, 'to upload straight from the app'))
         : null;
     if (!yt.signedIn) {
       return fill(el, account,
@@ -137,17 +149,17 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
         byHand ? handSteps() : any ? h('p', { class: 'hint' }, 'Copies the title, opens YouTube’s upload page and shows the file in Explorer.') : null,
         jobBox, resultBox);
     }
-    const privacySel = h('select', { 'aria-label': 'Visibility', disabled: busy, onchange: () => { prefs.privacy = privacySel.value; savePrefs(prefs); } },
+    const privacySel = h('select', { 'aria-label': 'Visibility', title: TIPS.privacy, disabled: busy, onchange: () => { prefs.privacy = privacySel.value; savePrefs(prefs); } },
       PRIVACY.map(([v, label]) => h('option', { value: v, selected: v === prefs.privacy }, label)));
     const playlistBox = h('input', { type: 'checkbox', checked: prefs.playlist, disabled: busy, onchange: () => { prefs.playlist = playlistBox.checked; savePrefs(prefs); } });
     fill(el, account,
-      any ? h('div', { class: 'row small' }, privacySel, h('label', { class: 'row' }, playlistBox, 'Add to the tournament’s playlist')) : null,
+      any ? h('div', { class: 'row small' }, privacySel, h('label', { class: 'row', title: TIPS.playlist }, playlistBox, 'Add to the tournament’s playlist')) : null,
       h('div', { class: 'row small' },
-        video.exists ? h('button', { class: 'primary', disabled: busy, onclick: () => upload('video') }, icon('youtube', 16), 'Upload to YouTube') : null,
-        hl.exists ? h('button', { disabled: busy, onclick: () => upload('highlights') }, '★ Upload highlights') : null,
+        video.exists ? h('button', { class: 'primary', title: TIPS.upload, disabled: busy, onclick: () => upload('video') }, icon('youtube', 16), 'Upload to YouTube') : null,
+        hl.exists ? h('button', { title: TIPS.uploadHighlights, disabled: busy, onclick: () => upload('highlights') }, '★ Upload highlights') : null,
         any ? null : h('span', { class: 'hint' }, 'Render the video first, then upload it from here.')),
       jobBox, resultBox,
-      any ? h('details', { class: 'by-hand', open: byHand !== null }, h('summary', { class: 'small' }, 'Upload by hand instead'), handButtons(false), byHand ? handSteps() : null) : null);
+      any ? h('details', { class: 'by-hand', open: byHand !== null }, h('summary', { class: 'small', title: TIPS.byHand }, 'Upload by hand instead'), handButtons(false), byHand ? handSteps() : null) : null);
   };
 
   const refresh = async () => {
