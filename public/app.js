@@ -80,9 +80,39 @@ async function checkServerVersion() {
     ? [h('span', {}, `Server version ${server.version} doesn’t match this window (${PAGE_VERSION}). Reload this window.`),
       h('button', { class: 'small primary', onclick: () => location.reload() }, 'Reload')]
     : advice === 'restart'
-      ? h('span', {}, `Server version ${server.version} doesn’t match this app (${PAGE_VERSION}). The server needs to be restarted.`)
+      ? [h('span', {}, `Server version ${server.version} doesn’t match this app (${PAGE_VERSION}). The server needs to be restarted.`),
+        h('button', { class: 'small primary', onclick: (e) => restartServer(e.currentTarget, server.boot) }, 'Restart server')]
       : null);
 }
+// Restarts the server, then reloads this window once the new one answers.
+async function restartServer(button, oldBoot) {
+  const banner = document.querySelector('.version-banner');
+  button.disabled = true;
+  try {
+    await api('/api/restart', { method: 'POST', body: {} }).catch((err) => {
+      if (err.code !== 'jobsRunning') throw err;
+      if (!confirm(`${err.message}.\n\nRestart anyway?`)) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
+      return api('/api/restart', { method: 'POST', body: { force: true } });
+    });
+  } catch (err) {
+    button.disabled = false;
+    if (err.code === 'cancelled') return;
+    // A server from before 1.16.4 can't restart itself.
+    fill(banner, h('span', {}, err.status === 404 ? 'This server can’t restart itself. Close the app and start it again.' : `The server couldn’t be restarted: ${err.message}`));
+    return;
+  }
+  fill(banner, h('span', {}, 'Restarting the server…'));
+  for (let waited = 0; waited < 30000; waited += 500) {
+    await new Promise((r) => setTimeout(r, 500));
+    const now = await api('/api/version').catch(() => null);
+    if (now && now.boot !== oldBoot) {
+      location.reload();
+      return;
+    }
+  }
+  fill(banner, h('span', {}, 'The server didn’t come back. Close the app and start it again.'));
+}
+
 checkServerVersion();
 setInterval(checkServerVersion, 30000);
 window.addEventListener('focus', checkServerVersion);

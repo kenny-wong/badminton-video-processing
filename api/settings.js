@@ -1,4 +1,5 @@
 // GET /api/version: the version this server runs, its run id and when it started.
+// POST /api/restart { force? }: restarts the server (409 while jobs run, unless force).
 // GET /api/settings: the settings, the app version, whether FFmpeg was found, and a
 //   frame of the latest linked video for the scoreboard preview.
 // PUT /api/settings: saves them.
@@ -12,13 +13,26 @@ import { join } from 'node:path';
 import { fail, json, readJson } from '../lib/http.js';
 import { cleanSettings, readSettings, writeSettings } from '../lib/settings.js';
 import { findTools, pickEncoder } from '../lib/ffmpeg.js';
-import { BOOT } from '../lib/jobs.js';
+import { BOOT, listJobs } from '../lib/jobs.js';
+import { restartSoon } from '../lib/restart.js';
 
 // Read once at start: the version this server runs, even if the files are updated under it.
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const STARTED = new Date().toISOString();
 
 export const versionRoute = () => json({ version, boot: BOOT, startedAt: STARTED });
+
+export async function restart({ request, app }) {
+  const body = (await readJson(request)) ?? {};
+  const running = listJobs().filter((j) => j.status === 'running' || j.status === 'queued');
+  if (running.length && body.force !== true) {
+    return fail(409, 'jobsRunning', `${running.length} job${running.length === 1 ? ' is' : 's are'} still running and would stop: ${running.map((j) => j.label || j.key).join('; ')}`);
+  }
+  if (app.noRestart) return json({ ok: true, restarting: false }); // tests
+  console.log(`Restart asked for from the page${running.length ? ` (stopping ${running.length} job${running.length === 1 ? '' : 's'})` : ''}`);
+  if (!restartSoon()) return fail(400, 'devMode', 'The server restarts by itself when its files change (development mode)');
+  return json({ ok: true, restarting: true, boot: BOOT }, 202);
+}
 
 function status(settings) {
   const tools = findTools(settings.ffmpegFolder);

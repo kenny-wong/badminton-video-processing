@@ -17,6 +17,7 @@ import { findTools } from './lib/ffmpeg.js';
 import { readSettings } from './lib/settings.js';
 import { startLog } from './lib/log.js';
 import { BOOT } from './lib/jobs.js';
+import { listenWhenFree } from './lib/restart.js';
 import * as settings from './api/settings.js';
 import * as tournaments from './api/tournaments.js';
 import * as matches from './api/matches.js';
@@ -31,6 +32,7 @@ const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
 
 const ROUTES = [
   ['GET', '/api/version', settings.versionRoute],
+  ['POST', '/api/restart', settings.restart],
   ['GET', '/api/settings', settings.onRequestGet],
   ['PUT', '/api/settings', settings.onRequestPut],
   ['PUT', '/api/settings/logo', settings.putLogo],
@@ -250,7 +252,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv
   });
   const db =openDb(process.env.DB_PATH || join(dataDir, `badminton-video.db`));
   const server = createApp({ db, port: PORT, thumbDir: join(dataDir, 'thumbs'), dataDir });
-  server.listen(PORT, '127.0.0.1', () => {
+  listenWhenFree(server, PORT, '127.0.0.1', () => {
     const address = `http://127.0.0.1:${PORT}/`;
     console.log(`Badminton Video running at ${address}`);
     if (process.argv.includes('--open') && existsSync(CHROME)) {
