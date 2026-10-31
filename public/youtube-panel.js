@@ -11,6 +11,9 @@ const YOUTUBE_UPLOAD = 'https://www.youtube.com/upload'; // opens YouTube Studio
 const PREFS_KEY = 'badminton-video:youtube-upload:v1';
 const PRIVACY = [['unlisted', 'Unlisted: anyone with the link'], ['private', 'Private: only you'], ['public', 'Public']];
 const SIGNIN_WAIT_MS = 5 * 60_000;
+
+/** Add to playlist “Sankey U15”, or to a new playlist before the tournament's first upload. */
+const playlistLabel = (p) => (p ? `Add to ${p.exists ? 'playlist' : 'a new playlist'} “${p.title}”` : 'Add to the tournament’s playlist');
 const TIPS = {
   signIn: 'Opens Google’s sign-in in Chrome. Once signed in, the app uploads rendered videos to your channel itself.',
   signOut: 'Forgets the YouTube sign-in on this PC. Videos already uploaded stay on YouTube.',
@@ -103,10 +106,9 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
       if (!r.highlights) onUploaded(r.url);
     } catch (err) {
       fill(jobBox, errorNotice(err));
-      refresh();
     }
     busy = false;
-    draw();
+    refresh(); // the playlist may be new now
   };
 
   const signIn = async () => {
@@ -153,7 +155,8 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
       PRIVACY.map(([v, label]) => h('option', { value: v, selected: v === prefs.privacy }, label)));
     const playlistBox = h('input', { type: 'checkbox', checked: prefs.playlist, disabled: busy, onchange: () => { prefs.playlist = playlistBox.checked; savePrefs(prefs); } });
     fill(el, account,
-      any ? h('div', { class: 'row small' }, privacySel, h('label', { class: 'row', title: TIPS.playlist }, playlistBox, 'Add to the tournament’s playlist')) : null,
+      any ? h('div', { class: 'row small' }, privacySel, h('label', { class: 'row', title: TIPS.playlist }, playlistBox, playlistLabel(yt.playlist)),
+        yt.playlist?.url ? h('a', { href: yt.playlist.url, target: '_blank', rel: 'noopener', title: 'Open the playlist on YouTube' }, 'open ↗') : null) : null,
       h('div', { class: 'row small' },
         video.exists ? h('button', { class: 'primary', title: TIPS.upload, disabled: busy, onclick: () => upload('video') }, icon('youtube', 16), 'Upload to YouTube') : null,
         hl.exists ? h('button', { title: TIPS.uploadHighlights, disabled: busy, onclick: () => upload('highlights') }, '★ Upload highlights') : null,

@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, nextOffset, parseDescribed, pkce, readClient, uploadVideo, videoResource,
+  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistTitle, readClient,
+  uploadVideo, videoResource,
 } from '../lib/youtube.js';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'yt-test-'));
@@ -174,4 +175,19 @@ test('playlist: made once per tournament, remembered, and made again when delete
   assert.equal(await addToTournamentPlaylist(dir, where, 'v3', 'tok', fake), 'PL2');
   assert.equal(calls.filter((c) => c.endsWith('/playlists')).length, 2);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'playlists.json'), 'utf8')), { 7: 'PL2' });
+});
+
+test('playlist name shown before upload: the tournament name, as the playlist will be made', async () => {
+  assert.equal(playlistTitle('  Sankey Academy <U15> Silver  '), 'Sankey Academy U15 Silver');
+  assert.equal(playlistTitle(''), 'Badminton');
+  const dir = scratch();
+  assert.equal(await knownPlaylist(dir, 7), null);
+  writeFileSync(join(dir, 'playlists.json'), JSON.stringify({ 7: 'PL9' }));
+  assert.equal(await knownPlaylist(dir, 7), 'PL9');
+  const renamed = async (url) => {
+    assert.match(url, /\/playlists\?part=snippet&id=PL9$/);
+    return jsonRes({ items: [{ id: 'PL9', snippet: { title: 'Sankey (renamed)' } }] });
+  };
+  assert.deepEqual(await playlistInfo('PL9', 'tok', renamed), { id: 'PL9', title: 'Sankey (renamed)' });
+  assert.equal(await playlistInfo('PL9', 'tok', async () => jsonRes({ items: [] })), null); // deleted on YouTube
 });

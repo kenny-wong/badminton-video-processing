@@ -1,6 +1,7 @@
 // YouTube sign-in and upload.
 //
-// GET  /api/youtube?match=<id>: { ready, signedIn, channel, jobs: { video, highlights } } (ready = the OAuth client file is there).
+// GET  /api/youtube?match=<id>: { ready, signedIn, channel, jobs: { video, highlights }, playlist: { title, exists, url } }
+//      (ready = the OAuth client file is there; playlist = where an upload of this match would go).
 // POST /api/youtube/signin: { url } of Google's sign-in page; Google then sends the browser to
 // GET  /api/youtube/callback, which saves the sign-in and shows a page saying so.
 // POST /api/youtube/signout: forgets the sign-in.
@@ -18,7 +19,7 @@ import { nowIso } from '../lib/db.js';
 import { youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import {
-  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, parseDescribed, pkce, PRIVACY, readClient, readToken,
+  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, parseDescribed, pkce, playlistInfo, playlistTitle, PRIVACY, readClient, readToken,
   signOut as forget, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
@@ -38,7 +39,34 @@ export async function onRequestGet({ request, app }) {
     signedIn: Boolean(token?.refreshToken),
     channel: token?.channel ?? null,
     jobs: id ? { video: jobView(findJob(jobKey(id, false))), highlights: jobView(findJob(jobKey(id, true))) } : null,
+    playlist: id && token?.refreshToken ? await playlistFor(dir, loadMatch(app.db, id)?.tournament) : null,
   });
+}
+
+const PLAYLIST_CACHE_MS = 2 * 60_000;
+const playlistCache = new Map(); // playlist id -> { info, at }
+const playlistUrl = (id) => `https://www.youtube.com/playlist?list=${id}`;
+
+/**
+ * The playlist an upload from this tournament goes into: { title, exists, url }.
+ * An existing one's title is read from YouTube (it may have been renamed there);
+ * one deleted on YouTube counts as new, as the next upload makes it again.
+ */
+async function playlistFor(dir, tournament) {
+  if (!tournament) return null;
+  const fresh = { title: playlistTitle(tournament.name), exists: false, url: null };
+  const known = await knownPlaylist(dir, tournament.id);
+  if (!known) return fresh;
+  let cached = playlistCache.get(known);
+  if (!cached || Date.now() - cached.at > PLAYLIST_CACHE_MS) {
+    try {
+      cached = { info: await playlistInfo(known, await accessToken(dir)), at: Date.now() };
+      playlistCache.set(known, cached);
+    } catch {
+      return { ...fresh, exists: true, url: playlistUrl(known) }; // couldn't ask YouTube: assume it's still there
+    }
+  }
+  return cached.info ? { title: cached.info.title, exists: true, url: playlistUrl(known) } : fresh;
 }
 
 export async function signIn({ app }) {
@@ -127,7 +155,8 @@ export async function upload({ request, params, app }) {
     if (body.playlist !== false && tournament) {
       try {
         const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournament.name, privacy }, video.id, await token());
-        result.playlist = { id, url: `https://www.youtube.com/playlist?list=${id}` };
+        result.playlist = { id, url: playlistUrl(id) };
+        playlistCache.delete(id);
       } catch (err) {
         result.playlistError = err.message;
         j.log(`Playlist: ${err.message}`);
