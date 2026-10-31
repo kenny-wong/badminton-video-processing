@@ -545,3 +545,12 @@ input[type="search"] { font: inherit; font-size: var(--fs-md); color: var(--text
 .frame-strip img:hover { opacity: 1; outline: 2px solid var(--accent); outline-offset: -2px; }
 .timeline { margin-top: 4px; }
 canvas.wave { display: block; width: 100%; height: 26px; color: color-mix(in srgb, var(--accent) 70%, var(--muted)); margin-bottom: 2px; }
+
+/* Stats tab */
+.stats-table { font-size: var(--fs-sm); margin: 4px 0 10px; }
+.stats-table th, .stats-table td { padding: 5px 8px; }
+.stats-table tbody th { text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); color: var(--muted); font-weight: 600; background: none; }
+.stats.small-stats { grid-template-columns: repeat(2, 1fr); }
+svg.momentum { width: 100%; height: auto; display: block; background: var(--surface-2); border-radius: var(--radius-sm); }
+svg.landing-map { width: 100%; max-width: 260px; height: auto; display: block; margin: 0 auto; }
+.panel-tabs button { padding: 6px 4px; gap: 4px; }

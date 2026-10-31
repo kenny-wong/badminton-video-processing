@@ -12,6 +12,8 @@ import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { percent, percents } from './shared/players.js';
+import { landings, matchStats } from './shared/stats.js';
+import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -244,6 +246,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const at = (p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
     levels = { ...got, floor: at(0.5), top: Math.max(at(0.998), at(0.5) + 1) };
     drawWave();
+    if (tab === 'stats') drawStats();
   }
   function drawWave() {
     const ratio = window.devicePixelRatio || 1;
@@ -495,6 +498,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   function changed() {
     recompute();
+    if (tab === 'stats') drawStats();
     drawTimeline();
     drawList();
     drawCheck();
@@ -788,6 +792,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     try {
       shuttle = (await api(`/api/matches/${id}/track`)).points;
       drawOverlay();
+      if (tab === 'stats') drawStats();
     } catch { /* not tracked yet */ }
   }
 
@@ -1015,6 +1020,31 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     },
   }, 'Render video');
 
+  // ---- statistics: serve and receive, runs, rally lengths and shots, momentum, where rallies ended ----
+  const statsBox = h('div', { class: 'stack' });
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function drawStats() {
+    const s = matchStats(rallies, steps, { hits: levels?.hits });
+    if (!s.rallies) {
+      fill(statsBox, h('p', { class: 'hint' }, 'Statistics appear once rallies have winners.'));
+      return;
+    }
+    const colours = { a: css('--side-a'), b: css('--side-b'), text: css('--muted'), grid: css('--border-strong') };
+    const chart = momentumChart(s, [nameA, nameB], { colours });
+    const map = corners && shuttle.length ? landingMap(landings(rallies, shuttle, courtMapping(corners)?.toCourt), { colours: { ...colours, court: '#2f6d4f' } }) : null;
+    fill(statsBox,
+      statsTables(s, [nameA, nameB]),
+      levels?.hits ? null : h('p', { class: 'hint' }, 'Shot counts come from the hit sounds, worked out when the sound strip under the timeline is drawn.'),
+      chart ? [h('div', { class: 'row spread' }, h('div', { class: 'subhead' }, 'Momentum'),
+        h('button', {
+          class: 'small',
+          onclick: () => saveSvgAsPng(momentumChart(s, [nameA, nameB], { colours: { a: '#2a78d6', b: '#e8642c', text: '#333333', grid: '#bbbbbb' }, background: '#ffffff', width: 900, height: 360, fontSize: 15 }),
+            `${nameA} v ${nameB} momentum.png`.replace(/[\\/:*?"<>|]/g, ' ')),
+        }, 'Save as picture')), chart] : null,
+      h('div', { class: 'subhead' }, 'Where rallies ended'),
+      map ?? h('p', { class: 'hint' }, 'Mark the court and track the shuttle (Tracking tab) to see where each rally ended. Only as good as the tracking: from a low camera the last sighting is often in the air.'));
+  }
+
   // ---- players: badminfo ratings, win chance, earlier meetings ----
   const peopleBox = h('div', { class: 'stack' }, h('p', { class: 'hint' }, 'Reading the players from badminfo…'));
   const listMatches = (list, empty) => (list.length
@@ -1198,6 +1228,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         boundsBox,
         h('p', { class: 'hint' }, 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering and of finding rallies.'))),
     players: h('div', {}, card('Players', 'user', peopleBox)),
+    stats: h('div', {}, card('Statistics', 'wave', statsBox)),
     tracking: h('div', {},
       card('Who won each rally', 'target',
         h('p', { class: 'hint' }, 'TrackNetV3 follows the shuttle. The winner of a rally serves the next one, so the direction of each serve, checked against where the shuttle landed, suggests who won.'),
@@ -1228,7 +1259,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox)),
   };
-  const TABS = [['rallies', 'Rallies', 'list'], ['scoring', 'Scoring', 'sliders'], ['players', 'Players', 'user'], ['tracking', 'Tracking', 'target'], ['export', 'Export', 'scissors']];
+  const TABS = [['rallies', 'Rallies', 'list'], ['scoring', 'Scoring', 'sliders'], ['players', 'Players', 'user'], ['stats', 'Stats', 'wave'], ['tracking', 'Tracking', 'target'], ['export', 'Export', 'scissors']];
   let tab = TABS.some(([k]) => k === readTab()) ? readTab() : 'rallies';
   const tabBar = h('div', { class: 'panel-tabs', role: 'tablist' });
   const panel = h('div', { class: 'panel' });
@@ -1243,6 +1274,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       drawTrackingPanel();
     }
     padPlayer();
+    if (tab === 'stats' && steps.length) drawStats();
     if (tab === 'export' && steps.length) {
       drawBoardPreview();
       showClipTarget();

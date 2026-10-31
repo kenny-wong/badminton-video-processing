@@ -626,12 +626,13 @@ async function renderSettings() {
   const scale = h('input', { type: 'range', id: 'board-scale', min: 60, max: 160, step: 5, value: b.scale });
   const cornerSel = select('board-corner', CORNERS, b.corner);
   const headingSel = select('board-heading', HEADINGS, b.heading);
+  const longRally = h('input', { type: 'number', id: 'board-long', min: 0, max: 60, step: 1, value: b.longRally, style: { width: '5em' } });
   const ticks = Object.fromEntries([['showGames', 'Scores of finished games'], ['flags', 'GAME POINT / MATCH POINT'], ['banners', 'Interval and game banners']].map(([k, label]) =>
     [k, { label, input: h('input', { type: 'checkbox', id: `board-${k}`, checked: b[k] }) }]));
   const readBoard = () => ({
     preset: presetSel.value,
     ...Object.fromEntries(Object.entries(colours).map(([k, c]) => [k, c.input.value])),
-    font: fontSel.value, opacity: Number(opacity.value), scale: Number(scale.value), corner: cornerSel.value, heading: headingSel.value,
+    font: fontSel.value, opacity: Number(opacity.value), scale: Number(scale.value), corner: cornerSel.value, heading: headingSel.value, longRally: Number(longRally.value) || 0,
     ...Object.fromEntries(Object.entries(ticks).map(([k, c]) => [k, c.input.checked])),
   });
   const preview = h('div', { class: 'preview-frame' });
@@ -752,6 +753,7 @@ async function renderSettings() {
   const cardTitle = h('input', { type: 'checkbox', id: 'card-title', checked: s.cards.title });
   const cardEnd = h('input', { type: 'checkbox', id: 'card-end', checked: s.cards.end });
   const cardSeconds = h('input', { type: 'number', id: 'card-seconds', min: 2, max: 8, step: 1, value: s.cards.seconds });
+  const cardStats = h('input', { type: 'checkbox', id: 'card-stats', checked: s.cards.stats });
 
   for (const el of [scale, cornerSel, headingSel, sample, singlesSel, doublesSel, logoCorner, logoSize, logoOpacity, ...Object.values(ticks).map((c) => c.input)]) el.addEventListener('input', showBoard);
   showBoard();
@@ -776,7 +778,7 @@ async function renderSettings() {
             method: 'PUT',
             body: { videoFolders: lines(folders.value), players: lines(players.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
-              logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value) },
+              logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value), stats: cardStats.checked },
               description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
               output: { size: outSize.value, maxRate: Number(outRate.value) || 0, replays: outReplays.checked },
               music: { use: musicUse.value, volume: Number(musicVolume.value), court: Number(courtVolume.value) } },
@@ -808,7 +810,8 @@ async function renderSettings() {
             h('div', { class: 'row' }, h('label', { for: 'board-opacity' }, 'Opacity'), opacity, h('label', { for: 'board-scale' }, 'Size'), scale),
             h('div', { class: 'row' }, h('label', { for: 'board-corner' }, 'Corner'), cornerSel),
             h('div', { class: 'row' }, h('label', { for: 'board-heading' }, 'Heading'), headingSel),
-            h('div', { class: 'stack small' }, Object.entries(ticks).map(([k, c]) => h('label', { class: 'row', for: `board-${k}` }, c.input, c.label)))),
+            h('div', { class: 'stack small' }, Object.entries(ticks).map(([k, c]) => h('label', { class: 'row', for: `board-${k}` }, c.input, c.label)),
+              h('div', { class: 'row' }, h('label', { for: 'board-long' }, 'Banner after rallies of'), longRally, h('span', {}, 'shots or more (0: none; from the hit sounds)')))),
           h('div', { class: 'stack' }, preview, h('div', { class: 'row small' }, 'Preview:', sample)))),
       section('Logo', 'A club or channel logo in a corner of every rendered video. A PNG with a see-through background looks best.',
         h('div', { class: 'row' }, h('label', { class: 'btn small', for: 'logo-file' }, 'Choose picture…'), logoInput, logoState, removeLogo),
@@ -817,7 +820,8 @@ async function renderSettings() {
         logoMsg),
       section('Title and end cards', 'A few seconds before the first rally with the players and the event, and after the last with the result. Each render can switch them on or off.',
         h('div', { class: 'row' }, h('label', { class: 'row', for: 'card-title' }, cardTitle, 'Title card'), h('label', { class: 'row', for: 'card-end' }, cardEnd, 'End card'),
-          h('label', { for: 'card-seconds' }, 'for'), cardSeconds, h('span', {}, 'seconds each'))),
+          h('label', { for: 'card-seconds' }, 'for'), cardSeconds, h('span', {}, 'seconds each')),
+        h('label', { class: 'row', for: 'card-stats' }, cardStats, 'End card also gives the longest rally and the best run of points')),
       section('Video size', 'Smaller files are quicker to upload and share; the scoreboard, logo and cards are drawn at full size first.',
         h('div', { class: 'row' }, h('label', { for: 'out-size' }, 'Size'), outSize, h('label', { for: 'out-rate' }, 'at most'), outRate, h('span', {}, 'Mbit/s (0: no limit)')),
         h('label', { class: 'row', for: 'out-replays' }, outReplays, 'Slow-motion replay of the last 3 seconds of each ★ rally, straight after it (each render can switch it)')),

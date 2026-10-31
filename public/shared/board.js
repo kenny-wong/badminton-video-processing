@@ -31,6 +31,7 @@ export const DEFAULT_BOARD = {
   flags: true,       // GAME POINT / MATCH POINT beside the board
   banners: true,     // INTERVAL, GAME TO …, MATCH TO … for a few seconds after
   heading: 'off',
+  longRally: 0,      // a banner after rallies of at least this many shots (from the hit sounds); 0 for none
 };
 
 const colour = (v) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null);
@@ -50,6 +51,7 @@ export function cleanBoard(v) {
   if (Object.hasOwn(CORNERS, v.corner)) out.corner = v.corner;
   if (Object.hasOwn(HEADINGS, v.heading)) out.heading = v.heading;
   for (const k of ['showGames', 'flags', 'banners']) out[k] = bool(v[k]) ?? out[k];
+  if (v.longRally === 0 || Number.isFinite(v.longRally)) out.longRally = v.longRally ? int(v.longRally, 8, 60) : 0;
   return out;
 }
 
@@ -95,6 +97,7 @@ export function boardFlags(state, format) {
  */
 export function bannerText(event, names, format) {
   if (!event) return '';
+  if (event.kind === 'rally') return `${event.shots}-SHOT RALLY`;
   const need = format?.bestOf === 1 ? 1 : 2;
   const { kind, before, after } = event;
   if (kind === 'interval') return before.games.length === need * 2 - 2 ? 'INTERVAL · CHANGE ENDS' : 'INTERVAL';

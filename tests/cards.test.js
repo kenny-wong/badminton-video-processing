@@ -12,7 +12,7 @@ const match = { date: '2026-10-24', draw: 'WS U15', round: 'Final', game: 0, tea
 
 test('cleanCards keeps on/off and a sensible length', () => {
   assert.deepEqual(cleanCards(null), DEFAULT_CARDS);
-  assert.deepEqual(cleanCards({ title: true, end: 'yes', seconds: 30 }), { title: true, end: false, seconds: 8 });
+  assert.deepEqual(cleanCards({ title: true, end: 'yes', seconds: 30, stats: true }), { title: true, end: false, seconds: 8, stats: true });
 });
 
 test('the title card names the event and both sides', () => {

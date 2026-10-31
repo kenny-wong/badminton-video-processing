@@ -50,6 +50,10 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
 - The editor's timeline zooms with the mouse wheel or + / − (0 shows the whole video; Shift+wheel moves along), with a strip of frames above it and the sound level below it, where shuttle hits show as spikes and missed rallies stand out.
 - In the editor, **?** shows every keyboard shortcut. The header's theme button switches between light, dark and Windows' own setting.
 
+## Statistics
+
+The editor's **Stats** tab works out, from the tagged rallies: points won on each side's serve and on receive, the longest run of points, average and longest rallies (and shots per rally, counted from the hit sounds), and for each game its length, biggest leads, best runs and comebacks. A momentum chart shows who led after every rally, game by game, and can be saved as a picture. Once the court is marked and the shuttle tracked, a court map shows where each rally ended. Settings can add the longest rally and best run to the end card, and a banner after rallies of many shots.
+
 ## Players (from badminfo)
 
 Tournaments imported from a badminfo link also bring everyone entered, with their badminfo grades and ratings. The **Players** page lists your players (from Settings; paste a badminfo link for any that aren't found by name) and each player has a page with their rating over time and every match of theirs in imported tournaments. Tournament pages show each player's rating for the event, badminfo's win chance for matches it has rated, and upsets (the side with under a 35% chance won). The editor's Players tab adds earlier meetings between the same players and the opponents' other filmed matches. Settings choose whether the YouTube description adds the players' badminfo pages and the win chance, and whether an upset goes in the title.
