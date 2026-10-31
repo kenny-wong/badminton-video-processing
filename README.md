@@ -40,7 +40,7 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
    - If the video starts mid-match, set the game and score it starts at under *Video starts at*.
    - Playback runs from 0.25× to 16× (`[` and `]`); Chrome mutes the sound above 4×.
    - The score after each tagged rally shows in small type under the timeline. Press **H** (or ☆ in the list) to mark a favourite rally; *Highlights only* renders just those to a separate file.
-6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. Upload it in YouTube Studio as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
+6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. **Upload to YouTube** in the editor's YouTube box copies the title, opens YouTube's upload page and shows the file in Explorer to drag across; upload it as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
 
 ## Getting around
 

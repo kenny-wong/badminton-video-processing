@@ -450,6 +450,8 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .rallies button.star.on { color: var(--focus); }
 
 .copy-box textarea { font-size: var(--fs-sm); min-height: 64px; }
+.upload-steps { margin: 10px 0; padding-left: 22px; display: grid; gap: 6px; }
+.upload-steps button { margin: 0 4px; }
 
 /* ---------- Settings ---------- */
 .settings-grid { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 0 28px; }
