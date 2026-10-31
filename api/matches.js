@@ -11,7 +11,7 @@
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
 // GET /api/matches/:id/suggestions: a suggested winner for each rally, from the tracking.
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
-// POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard? }: starts a job.
+// POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
 // GET /api/matches/:id/levels: the sound level along the video (404 until worked out); POST starts working it out (a job).
 
@@ -61,6 +61,7 @@ export function onRequestGet({ params, app }) {
     nameStyle: settings.nameStyle,
     board: resolveBoard(settings.board, match.boardStyle),
     cards: settings.cards,
+    replays: settings.output.replays,
     output: { ...describeOutput(loaded, null, described), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
     highlights: { ...describeOutput(loaded, null, { ...described, highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
@@ -304,7 +305,8 @@ export function startRender(app, t, settings, match, body = {}) {
   const what = body.highlights === true ? 'Highlights' : 'Render';
   return startJob('render', `render:${id}`, (j, signal) => renderMatch(app.db, t, settings, id, {
     cut: body.cut !== false, overlay: body.overlay !== false, highlights: body.highlights === true,
-    titleCard: typeof body.titleCard === 'boolean' ? body.titleCard : settings.cards.title, endCard: typeof body.endCard === 'boolean' ? body.endCard : settings.cards.end, signal, job: j,
+    titleCard: typeof body.titleCard === 'boolean' ? body.titleCard : settings.cards.title, endCard: typeof body.endCard === 'boolean' ? body.endCard : settings.cards.end,
+    replays: typeof body.replays === 'boolean' ? body.replays : settings.output.replays, signal, job: j,
   }), { queue: 'gpu', label: `${what}: ${matchLabel(match)}` });
 }
 

@@ -2,6 +2,7 @@
 //   frame of the latest linked video for the scoreboard preview.
 // PUT /api/settings: saves them.
 // PUT /api/settings/logo (the PNG or JPEG itself as the body): sets the logo. DELETE removes it.
+// PUT /api/settings/music (an MP3, M4A or WAV file as the body): sets the music for highlights. DELETE removes it.
 
 import { readFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -42,6 +43,41 @@ export function imageKind(bytes) {
 }
 
 const logoDir = (app) => app.dataDir ?? join(tmpdir(), 'badminton-video');
+
+const MAX_MUSIC = 40_000_000;
+
+/** 'mp3', 'm4a' or 'wav' from a file's first bytes, else null. */
+export function audioKind(bytes) {
+  const ascii = (from, to) => String.fromCharCode(...bytes.slice(from, to));
+  if (bytes.length > 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return 'wav';
+  if (bytes.length > 12 && ascii(4, 8) === 'ftyp') return 'm4a';
+  if (bytes.length > 3 && (ascii(0, 3) === 'ID3' || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0))) return 'mp3';
+  return null;
+}
+
+export async function putMusic({ request, app }) {
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.length > MAX_MUSIC) return fail(400, 'tooBig', 'The music file must be under 40 MB');
+  const kind = audioKind(bytes);
+  if (!kind) return fail(400, 'badAudio', 'The music must be an MP3, M4A or WAV file');
+  const dir = logoDir(app);
+  await mkdir(dir, { recursive: true });
+  for (const other of ['mp3', 'm4a', 'wav']) if (other !== kind) await rm(join(dir, `music.${other}`), { force: true });
+  const file = join(dir, `music.${kind}`);
+  await writeFile(file, bytes);
+  const settings = readSettings(app.db);
+  settings.music = { ...settings.music, file };
+  writeSettings(app.db, settings);
+  return json({ settings, ...status(settings) });
+}
+
+export async function deleteMusic({ app }) {
+  const settings = readSettings(app.db);
+  if (settings.music.file) await rm(settings.music.file, { force: true });
+  settings.music = { ...settings.music, file: '' };
+  writeSettings(app.db, settings);
+  return json({ settings, ...status(settings) });
+}
 
 export async function putLogo({ request, app }) {
   const bytes = new Uint8Array(await request.arrayBuffer());

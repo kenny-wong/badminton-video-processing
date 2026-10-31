@@ -33,6 +33,8 @@ const ROUTES = [
   ['PUT', '/api/settings', settings.onRequestPut],
   ['PUT', '/api/settings/logo', settings.putLogo],
   ['DELETE', '/api/settings/logo', settings.deleteLogo],
+  ['PUT', '/api/settings/music', settings.putMusic],
+  ['DELETE', '/api/settings/music', settings.deleteMusic],
   ['GET', '/api/tournaments', tournaments.onRequestGet],
   ['POST', '/api/tournaments', tournaments.onRequestPost],
   ['GET', '/api/tournaments/:id', tournaments.getOne],

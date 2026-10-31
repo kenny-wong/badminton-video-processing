@@ -897,6 +897,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const highlightsBox = h('input', { type: 'checkbox', onchange: () => { cutBox.disabled = highlightsBox.checked; } });
   const titleCardBox = h('input', { type: 'checkbox', checked: Boolean(data.cards?.title) });
   const endCardBox = h('input', { type: 'checkbox', checked: Boolean(data.cards?.end) });
+  const replaysBox = h('input', { type: 'checkbox', checked: Boolean(data.replays) });
   const favCount = h('span', { class: 'muted' });
   const renderResult = h('div');
   const copyArea = (label, text) => {
@@ -980,7 +981,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       const jobBox = h('div');
       renderBox.replaceChildren(jobBox);
       try {
-        const r = await runJob(jobBox, () => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked } }));
+        const r = await runJob(jobBox, () => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked, replays: replaysBox.checked } }));
         fill(jobBox, h('div', { class: 'notice ok' }, `Done: ${clock(r.seconds)} of ${r.highlights ? 'highlights' : 'video'} in ${r.parts} part${r.parts === 1 ? '' : 's'}.`), h('div', { class: 'small muted' }, r.path));
         if (r.highlights) showHighlights(true);
         else showOutput(r, true);
@@ -1185,6 +1186,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('label', { class: 'row small' }, overlayBox, 'Show the scoreboard'),
         h('label', { class: 'row small' }, highlightsBox, 'Highlights only: the ★ rallies, to a separate file', favCount),
         h('div', { class: 'row small' }, h('label', { class: 'row' }, titleCardBox, 'Title card'), h('label', { class: 'row' }, endCardBox, 'End card with the result')),
+        h('label', { class: 'row small' }, replaysBox, 'Slow-motion replay after each ★ rally'),
         h('div', { class: 'row' }, renderBtn),
         renderBox,
         highlightsResult,

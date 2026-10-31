@@ -667,6 +667,47 @@ async function renderSettings() {
   drawLogoState();
   const describe = Object.fromEntries([['playerLinks', 'Players’ badminfo pages'], ['winChance', 'badminfo’s win chance before the match'], ['upsetInTitle', '“(upset)” in the title when the underdog won']]
     .map(([k, label]) => [k, { label, input: h('input', { type: 'checkbox', id: `desc-${k}`, checked: s.description[k] }) }]));
+  // ---- output size, bitrate, replays; music ----
+  const outSize = select('out-size', { source: 'As filmed', 1080: '1080p (shorter side)', 720: '720p (shorter side)' }, String(s.output.size));
+  const outRate = h('input', { type: 'number', id: 'out-rate', min: 0, max: 100, step: 1, value: s.output.maxRate });
+  const outReplays = h('input', { type: 'checkbox', id: 'out-replays', checked: s.output.replays });
+  let musicFile = s.music.file;
+  const musicInput = h('input', { type: 'file', accept: 'audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,.mp3,.m4a,.wav', id: 'music-file', class: 'visually-hidden' });
+  const musicState = h('span', { class: 'small muted' });
+  const musicMsg = h('div');
+  const removeMusic = h('button', {
+    type: 'button', class: 'small',
+    onclick: async () => {
+      const r = await api('/api/settings/music', { method: 'DELETE' });
+      musicFile = r.settings.music.file;
+      drawMusicState();
+    },
+  }, 'Remove');
+  const drawMusicState = () => {
+    fill(musicState, musicFile ? musicFile.split(/[\\/]/).pop() : 'No music');
+    removeMusic.hidden = !musicFile;
+  };
+  musicInput.addEventListener('change', async () => {
+    const file = musicInput.files[0];
+    if (!file) return;
+    fill(musicMsg, h('p', { class: 'hint' }, 'Copying the music…'));
+    try {
+      const res = await fetch('/api/settings/music', { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.message || `HTTP ${res.status}`);
+      musicFile = r.settings.music.file;
+      fill(musicMsg);
+      drawMusicState();
+    } catch (err) {
+      fill(musicMsg, errorNotice(err));
+    }
+    musicInput.value = '';
+  });
+  drawMusicState();
+  const musicUse = select('music-use', { off: 'Never', highlights: 'Highlights and reels', all: 'Every video' }, s.music.use);
+  const musicVolume = h('input', { type: 'range', id: 'music-volume', min: 0, max: 100, step: 5, value: s.music.volume });
+  const courtVolume = h('input', { type: 'range', id: 'court-volume', min: 0, max: 100, step: 5, value: s.music.court });
+
   const cardTitle = h('input', { type: 'checkbox', id: 'card-title', checked: s.cards.title });
   const cardEnd = h('input', { type: 'checkbox', id: 'card-end', checked: s.cards.end });
   const cardSeconds = h('input', { type: 'number', id: 'card-seconds', min: 2, max: 8, step: 1, value: s.cards.seconds });
@@ -695,7 +736,9 @@ async function renderSettings() {
             body: { videoFolders: lines(folders.value), players: lines(players.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
               logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value) },
-              description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])) },
+              description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
+              output: { size: outSize.value, maxRate: Number(outRate.value) || 0, replays: outReplays.checked },
+              music: { use: musicUse.value, volume: Number(musicVolume.value), court: Number(courtVolume.value) } },
           });
           fill(toolsBox, tools(saved));
           fill(msg, h('div', { class: 'notice ok' }, icon('check', 16), 'Saved.'));
@@ -734,6 +777,15 @@ async function renderSettings() {
       section('Title and end cards', 'A few seconds before the first rally with the players and the event, and after the last with the result. Each render can switch them on or off.',
         h('div', { class: 'row' }, h('label', { class: 'row', for: 'card-title' }, cardTitle, 'Title card'), h('label', { class: 'row', for: 'card-end' }, cardEnd, 'End card'),
           h('label', { for: 'card-seconds' }, 'for'), cardSeconds, h('span', {}, 'seconds each'))),
+      section('Video size', 'Smaller files are quicker to upload and share; the scoreboard, logo and cards are drawn at full size first.',
+        h('div', { class: 'row' }, h('label', { for: 'out-size' }, 'Size'), outSize, h('label', { for: 'out-rate' }, 'at most'), outRate, h('span', {}, 'Mbit/s (0: no limit)')),
+        h('label', { class: 'row', for: 'out-replays' }, outReplays, 'Slow-motion replay of the last 3 seconds of each ★ rally, straight after it (each render can switch it)')),
+      section('Music', 'A track under highlights (and reels, or every video), with the court’s own sound turned down.',
+        h('div', { class: 'row' }, h('label', { class: 'btn small', for: 'music-file' }, 'Choose music…'), musicInput, musicState, removeMusic),
+        h('div', { class: 'row' }, h('label', { for: 'music-use' }, 'Use it for'), musicUse),
+        h('div', { class: 'row' }, h('label', { for: 'music-volume' }, 'Music'), musicVolume, h('label', { for: 'court-volume' }, 'Court sound'), courtVolume),
+        h('p', { class: 'hint' }, 'Only use music you’re allowed to: YouTube may block or mute videos with copyrighted tracks.'),
+        musicMsg),
       section('Cutting', 'How much of the play around each rally to keep when the gaps are cut.',
         h('div', { class: 'row' }, h('label', { for: 'pre' }, 'Keep'), pre, h('label', { for: 'post' }, 'seconds before each rally, and'), post, h('span', {}, 'after.'))),
       h('div', { class: 'label last' }, h('h3', {}, 'FFmpeg'), h('p', {}, 'Optional: its bin folder, if it isn’t found by itself.')),
