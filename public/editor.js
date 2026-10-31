@@ -2,7 +2,7 @@
 // end and winner from the keyboard (or accept rallies found by sound and just
 // say who won), watch the score build up, and render the edited video.
 
-import { h, fill, day } from './dom.js';
+import { h, fill, day, gamesView } from './dom.js';
 import { api } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, mergeWinners, parseGames, replay, scoreAt, startFor } from './shared/score.js';
@@ -77,7 +77,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('h1', {}, h('span', { class: 'side-a' }, teamName(match.teamA)), h('span', { class: 'vs' }, 'v'), h('span', { class: 'side-b' }, teamName(match.teamB))),
       h('div', { class: 'meta' },
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
-        match.games.length ? h('span', { class: 'result' }, `Result ${gamesText(match.games)}`) : null),
+        match.games.length ? h('span', { class: 'result' }, ['Result ', gamesView(match.games)]) : null),
       unitGame ? h('div', { class: 'game-banner' }, `Game ${unitGame}`, match.games[unitGame - 1] ? ` (${match.games[unitGame - 1].join('-')})` : '', h('span', { style: { fontWeight: 400 } }, ' · this video is this game only')) : null),
     headRight);
 
@@ -421,9 +421,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const favs = rallies.filter((r) => r.fav).length;
     const res = checkResult(games, official);
     fill(checkBox,
-      h('div', {}, 'Tagged score: ', h('strong', {}, (unitGame ? gamesText(games.slice(unitGame - 1, unitGame)) : gamesText(games)) || '0-0'),
+      h('div', {}, 'Tagged score: ', games.length ? h('span', {}, gamesView(unitGame ? games.slice(unitGame - 1, unitGame) : games)) : '0-0',
         winner ? ` (${winner.toUpperCase()} wins${unitGame ? ' the game' : ''})` : ''),
-      official.length ? h('div', {}, unitGame ? `Official game ${unitGame}: ` : 'Official result: ', h('strong', {}, unitGame ? gamesText(official.slice(-1)) : gamesText(official)), ' ',
+      official.length ? h('div', {}, unitGame ? `Official game ${unitGame}: ` : 'Official result: ', h('span', {}, gamesView(unitGame ? official.slice(-1) : official)), ' ',
         res.ok ? h('span', { class: 'pill ok' }, 'matches ✓') : untagged ? h('span', { class: 'pill warn' }, `${untagged} untagged`) : h('span', { class: 'pill bad' }, `differs in game ${res.game + 1}`)) : null,
       h('div', { class: 'muted' }, `${rallies.length} rallies`, untagged ? ` · ${untagged} without a winner` : '', favs ? ` · ★ ${favs}` : ''));
     favCount.textContent = favs ? `(${favs})` : '(none marked yet)';

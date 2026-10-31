@@ -295,7 +295,7 @@ tr.mine.game-row td { background: color-mix(in srgb, var(--focus) 5%, transparen
 .vs { color: var(--faint); font-weight: 500; margin: 0 6px; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .meta span { font-size: var(--fs-xs); padding: 2px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
-.meta span.result { color: var(--text); font-weight: 650; }
+.meta span.result { color: var(--text); font-weight: 400; }
 .game-banner { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; padding: 3px 12px; border-radius: 999px; background: var(--info-bg); color: var(--info); font-weight: 650; font-size: var(--fs-sm); }
 .save-state { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); }
 .save-state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
@@ -418,3 +418,5 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 @media (max-width: 800px) { .settings-grid { grid-template-columns: 1fr; } .settings-grid > .label { border-bottom: 0; padding-bottom: 0; } }
 .name-example { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 10px; padding: 8px 12px; border-radius: var(--radius-sm); background: linear-gradient(160deg, var(--head-bg), var(--head-bg-2)); color: #fff; font-weight: 650; letter-spacing: 0.02em; font-size: var(--fs-sm); }
 .name-example b { font-weight: 500; color: rgb(255 255 255 / 60%); margin-right: 4px; letter-spacing: 0; }
+.game-score b { font-weight: 800; }
+.meta span.result .game-score b { color: var(--text); }

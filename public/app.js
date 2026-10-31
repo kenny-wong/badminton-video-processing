@@ -5,7 +5,7 @@
 //   #/videos      every video found
 //   #/settings    folders, players, cutting
 
-import { h, fill, when, day, megabytes, ukDate } from './dom.js';
+import { h, fill, when, day, megabytes, ukDate, gamesView } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, isMine, NAME_STYLES, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
@@ -247,7 +247,7 @@ async function renderTournament(id, notice = null) {
         h('td', { class: 'small' }, m.court),
         h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round)),
         h('td', {}, teams(m)),
-        h('td', { class: 'nowrap' }, gamesText(m.games) || h('span', { class: 'muted' }, '—')),
+        h('td', { class: 'nowrap' }, m.games?.length ? gamesView(m.games) : h('span', { class: 'muted' }, '—')),
         h('td', {}, videoCell(m)),
         h('td', {}, statusCell(m))),
       // Game by game, unless one video covers the whole match.
@@ -275,7 +275,7 @@ async function renderTournament(id, notice = null) {
       h('div', { class: 'match-body stack' },
         h('div', { class: 'small muted' }, [m.time, m.court, `${m.draw}${m.round ? ` · ${m.round}` : ''}`].filter(Boolean).join(' · ')),
         h('div', { class: 'teams' }, teams(m)),
-        h('div', { class: 'small' }, 'Result ', h('strong', {}, gamesText(m.games) || '—'), m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null),
+        h('div', { class: 'small' }, 'Result ', m.games?.length ? h('span', {}, gamesView(m.games)) : '—', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null),
         statusCell(m),
         filmed ? h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `#/m/${m.id}` }, 'Open'), youtubeLink(m),
           h('button', { class: 'small', onclick: () => link(m, []) }, 'Unlink'))
