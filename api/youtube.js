@@ -19,8 +19,8 @@ import { nowIso } from '../lib/db.js';
 import { youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import {
-  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, parseDescribed, pkce, playlistInfo, playlistTitle, PRIVACY, readClient, readToken,
-  signOut as forget, uploadVideo, videoResource, videoStatus, youtubeDir,
+  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, parseDescribed, pkce, playlistInfo, PRIVACY, readClient, readToken,
+  signOut as forget, tournamentPlaylistTitle, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
 const SIGNIN_MAX_AGE = 10 * 60_000;
@@ -54,7 +54,7 @@ const playlistUrl = (id) => `https://www.youtube.com/playlist?list=${id}`;
  */
 async function playlistFor(dir, tournament) {
   if (!tournament) return null;
-  const fresh = { title: playlistTitle(tournament.name), exists: false, url: null };
+  const fresh = { title: tournamentPlaylistTitle(tournament), exists: false, url: null };
   const known = await knownPlaylist(dir, tournament.id);
   if (!known) return fresh;
   let cached = playlistCache.get(known);
@@ -154,7 +154,7 @@ export async function upload({ request, params, app }) {
     j.log(`Status: ${result.privacyNow}, ${result.uploadStatus}${result.locked ? ' (locked to private)' : ''}`);
     if (body.playlist !== false && tournament) {
       try {
-        const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournament.name, privacy }, video.id, await token());
+        const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournamentPlaylistTitle(tournament), privacy }, video.id, await token());
         result.playlist = { id, url: playlistUrl(id) };
         playlistCache.delete(id);
       } catch (err) {

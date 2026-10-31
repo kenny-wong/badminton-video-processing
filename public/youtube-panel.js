@@ -155,7 +155,8 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
       PRIVACY.map(([v, label]) => h('option', { value: v, selected: v === prefs.privacy }, label)));
     const playlistBox = h('input', { type: 'checkbox', checked: prefs.playlist, disabled: busy, onchange: () => { prefs.playlist = playlistBox.checked; savePrefs(prefs); } });
     fill(el, account,
-      any ? h('div', { class: 'row small' }, privacySel, h('label', { class: 'row', title: TIPS.playlist }, playlistBox, playlistLabel(yt.playlist)),
+      any ? h('div', { class: 'row small' }, privacySel) : null,
+      any ? h('div', { class: 'small playlist-choice' }, h('label', { class: 'check', title: TIPS.playlist }, playlistBox, h('span', {}, playlistLabel(yt.playlist))),
         yt.playlist?.url ? h('a', { href: yt.playlist.url, target: '_blank', rel: 'noopener', title: 'Open the playlist on YouTube' }, 'open ↗') : null) : null,
       h('div', { class: 'row small' },
         video.exists ? h('button', { class: 'primary', title: TIPS.upload, disabled: busy, onclick: () => upload('video') }, icon('youtube', 16), 'Upload to YouTube') : null,

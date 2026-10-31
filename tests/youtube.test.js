@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistTitle, readClient,
+  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistTitle, readClient, tournamentPlaylistTitle,
   uploadVideo, videoResource,
 } from '../lib/youtube.js';
 
@@ -190,4 +190,11 @@ test('playlist name shown before upload: the tournament name, as the playlist wi
   };
   assert.deepEqual(await playlistInfo('PL9', 'tok', renamed), { id: 'PL9', title: 'Sankey (renamed)' });
   assert.equal(await playlistInfo('PL9', 'tok', async () => jsonRes({ items: [] })), null); // deleted on YouTube
+});
+
+test('a tournament’s playlist starts with the year, unless its name has it already', () => {
+  assert.equal(tournamentPlaylistTitle({ name: 'Sankey Academy U15 Silver Sept', start: '2026-09-27' }), '2026 Sankey Academy U15 Silver Sept');
+  assert.equal(tournamentPlaylistTitle({ name: '2026 Junior Gold', start: '2026-10-04' }), '2026 Junior Gold');
+  assert.equal(tournamentPlaylistTitle({ name: 'Autumn Open 2026', start: '2026-10-04' }), 'Autumn Open 2026');
+  assert.equal(tournamentPlaylistTitle({ name: 'No Date Open' }), 'No Date Open');
 });

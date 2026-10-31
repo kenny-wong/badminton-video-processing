@@ -1256,6 +1256,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         renderBox,
         highlightsResult,
         renderResult),
+      card('YouTube', 'youtube',
+        youtube.el,
+        h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
+        ytBox),
       card('Clip of one rally', 'film',
         clipTarget,
         h('div', { class: 'row' }, h('button', { class: 'small primary', onclick: () => makeClip(true) }, 'Upright 9:16 clip'), h('button', { class: 'small', onclick: () => makeClip(false) }, 'Clip as filmed')),
@@ -1265,11 +1269,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'row small' }, lookSel, cornerSel),
         boardBox,
         h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
-        h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.')),
-      card('YouTube', 'youtube',
-        youtube.el,
-        h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
-        ytBox)),
+        h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.'))),
   };
   const TABS = [['rallies', 'Rallies', 'list'], ['scoring', 'Scoring', 'sliders'], ['players', 'Players', 'user'], ['stats', 'Stats', 'wave'], ['tracking', 'Tracking', 'target'], ['export', 'Export', 'scissors']];
   let tab = TABS.some(([k]) => k === readTab()) ? readTab() : 'rallies';
