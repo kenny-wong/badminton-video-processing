@@ -1,0 +1,68 @@
+# Badminton Video
+
+A Windows desktop app for phone videos of badminton matches. It:
+
+- imports a tournament from **badminfo** or **Badminton England** (tournamentsoftware): every match with its time, court, players and result;
+- finds your videos and **links each one to its match** by when it was recorded (several videos of one match are joined);
+- lets you **tag rallies** from the keyboard, or **finds them by the sound of shuttle hits** so you only say who won each one;
+- keeps the score by the rules (21 / 15 / 11 points, setting, best of 3 or one game) and checks it against the official result;
+- **renders** the match with a **scoreboard** burned in and the **gaps between rallies cut out**, using the NVIDIA encoder when there is one;
+- names the result for **YouTube**: title, description with chapters, and a folder per year and tournament.
+
+Everything runs on your PC. Video files are never moved or changed.
+
+## Requirements
+
+- Windows 10/11, [Node.js](https://nodejs.org/) 24 or later, Google Chrome
+- FFmpeg: `winget install Gyan.FFmpeg` (found automatically, or set its folder in Settings)
+- An NVIDIA GPU is optional; without one, rendering uses the CPU (slower)
+
+No npm packages are needed.
+
+## Running
+
+```
+npm start      # starts the app on http://127.0.0.1:8791 and opens it in a Chrome app window
+npm run dev    # the same without opening Chrome, restarting when files change
+npm test       # unit tests (Node's built-in test runner)
+```
+
+Data (the SQLite database) lives in `data/`; rendered videos go to the folder chosen in Settings (default `Videos\Badminton`).
+
+## Using it
+
+1. **Settings**: add the folders you copy phone videos into, and your players' names (to pick out their matches). You can also choose how names appear on the scoreboard, separately for singles and doubles (WONG, HAYLEY, H. WONG or HAYLEY WONG).
+2. **Import** a tournament with its badminfo or Badminton England link.
+3. **Scan video folders**. Each video's recording time comes from the iPhone's clock, the phone's file name (`20261024_091233.mp4`, `VID_…`, `PXL_…`), the video's own timestamp, or as a last resort the file date.
+4. On the tournament page, **link** the suggested videos (or choose one per match). A match with several games can also be linked **game by game**: each game then has its own video, tagging, render and YouTube link, grouped under the match. Linked the wrong match? Unlink it: that match is cleared, and the video's tagging goes with it to the next match you link it to. Switch between a list and a grid of video thumbnails; your players' matches show by default, and *Hide matches without a video* narrows it further.
+5. **Open** a match. Press **S** when a rally starts and **A** or **B** when it ends (pressing A or B without S assumes the rally began 3 seconds after the last one), or use **Find rallies by sound** and then **N** to go through each rally and press A or B. The score and the check against the official result update as you go.
+   - Press **M** where the match starts and **F** where it finishes; anything outside is left out.
+   - If the video starts mid-match, set the game and score it starts at under *Video starts at*.
+   - Playback runs from 0.25× to 16× (`[` and `]`); Chrome mutes the sound above 4×.
+   - The score after each tagged rally shows in small type under the timeline. Press **H** (or ☆ in the list) to mark a favourite rally; *Highlights only* renders just those to a separate file.
+6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. Upload it in YouTube Studio as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
+
+## Shuttle tracking (who won each rally)
+
+Optional. [TrackNetV3](https://github.com/qaz812345/TrackNetV3) (MIT licence) follows the shuttle on an NVIDIA GPU. Set it up once with
+`powershell -ExecutionPolicy Bypass -File analysis\setup.ps1` (Python 3.10+ and Git needed; about 3 GB of downloads, kept out of the repo in `analysis\`).
+
+In a match: **Mark the court** (click its four outer corners), choose who is at the near end when the video starts, then **Track the shuttle** and **Suggest winners**. The winner of a rally serves the next one, so the direction of each serve (away from or towards the camera) says which end won the rally before; where the shuttle came down is a second check. Suggestions show as *A?* / *B?* in the rally list; fill in the sure ones and check the rest with **N**. They only ever fill rallies that have no winner yet: winners you tagged are never changed. Works best with the phone behind a baseline, high up, with the whole court in view; from a low corner the serve direction and landing can't be read reliably.
+
+Tracking takes about 1½ minutes per minute of video on an RTX 3090 (a 6-minute game: 9 minutes). `analysis\run_tracknet.py` runs TrackNetV3 with a faster frame reader that gives it exactly the same input; `analysis\check_tracknet_reader.py <TrackNetV3 folder> <video>` checks that. Each run's full output is in `tracking.log` in the match's work folder (`<output>\.work\match-<id>\track\`).
+
+## Logs
+
+The server writes `data\logs\app.log`: starts and stops, and when each background job started, finished or failed, with the full error. When something fails, the red box's **Details** shows the longer story, the job's log (**Show log**), and buttons to open the log file and copy the details. Closing or restarting the server stops any job that is running.
+
+## How it works
+
+- `server.js`: a small Node HTTP server bound to 127.0.0.1 only. It serves `public/`, the JSON API in `api/` and match videos with byte ranges. Writes are accepted only from the app's own origin.
+- `lib/`: server logic. `badminfo.js` and `schedule.js` read the tournament sources. `media.js` reads recording times, `matching.js` suggests links, `hits.js` and `analyse.js` find rallies by sound, `overlay.js` writes the ASS scoreboard, `render.js` plans cuts, chapters and FFmpeg commands, `pipeline.js` runs them, and `db.js` holds the SQLite database (`node:sqlite`) with `migrations/`.
+- `public/`: the page (plain HTML, CSS and ES modules). `public/shared/` holds the scoring rules and name helpers, used by both the page and the server.
+- Rendering cuts each kept part with the scoreboard drawn by FFmpeg's `ass` filter, several parts at once, then joins them without re-encoding. iPhone HDR footage is tone-mapped to standard video.
+
+## Not yet
+
+- Direct upload to YouTube (needs a Google Cloud project that has passed Google's API audit; until then uploads through the API are locked to private).
+- Working out who won each rally from the video itself (shuttle tracking).

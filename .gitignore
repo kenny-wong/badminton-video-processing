@@ -1,0 +1,10 @@
+.wrangler/
+node_modules/
+.env*
+.dev.vars*
+data/
+analysis/.venv/
+analysis/vendor/
+analysis/ckpts/
+__pycache__/
+*.pyc

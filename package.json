@@ -1,0 +1,15 @@
+{
+  "name": "badminton-video",
+  "version": "1.8.1",
+  "private": true,
+  "description": "Desktop app that links phone videos of badminton matches to Badminton England's tournament records, tags rallies, burns in the score, cuts the gaps between rallies and names the result for YouTube.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js --open",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.js\""
+  }
+}
