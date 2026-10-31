@@ -40,7 +40,7 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
    - If the video starts mid-match, set the game and score it starts at under *Video starts at*.
    - Playback runs from 0.25× to 16× (`[` and `]`); Chrome mutes the sound above 4×.
    - The score after each tagged rally shows in small type under the timeline. Press **H** (or ☆ in the list) to mark a favourite rally; *Highlights only* renders just those to a separate file.
-6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. **Upload to YouTube** in the editor's YouTube box copies the title, opens YouTube's upload page and shows the file in Explorer to drag across; upload it as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
+6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. Signed in to YouTube (see [YouTube upload](#youtube-upload)), **Upload to YouTube** in the editor's YouTube box uploads it, adds it to the tournament's playlist and marks the match as uploaded. Otherwise the same button copies the title, opens YouTube's upload page and shows the file in Explorer to drag across; upload it as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list.
 
 ## Getting around
 
@@ -74,6 +74,18 @@ Optional. [Demucs](https://github.com/facebookresearch/demucs) (MIT licence) tak
 
 Only the vocals model of Demucs' fine-tuned set runs, and the result is the original sound minus the voices, so nothing else is changed. The first render of a match works out its voice-free sound (about 15 seconds for a 6-minute video on an RTX 3090) and keeps it as `court.flac` in the match's work folder (`<output>\.work\match-<id>\voices\`); later renders reuse it until the video file changes. Loud shouts go; very quiet distant talk may partly stay.
 
+## YouTube upload
+
+Optional, for uploading straight from the app with the YouTube Data API:
+
+1. In [Google Cloud](https://console.cloud.google.com), make a project, turn on **YouTube Data API v3**, set up the OAuth consent screen (External, Testing, with your Google account as a test user) and create an OAuth client of type **Desktop app**.
+2. Download the client's JSON and save it as `data\youtube\client.json` (the `data` folder is never committed).
+3. In the editor's YouTube box, **Sign in to YouTube**. Google says the app isn't verified: that's expected for your own project; continue. The sign-in is kept in `data\youtube\token.json`; **Sign out** forgets it.
+
+Uploads are resumable (16 MB pieces; a dropped connection carries on from what YouTube has), one at a time, and show on the Jobs page. Choose Unlisted, Private or Public, and whether to add the video to the tournament's playlist (made the first time, remembered in `data\youtube\playlists.json`). The title and description are the ones in the render's `.txt`; the category is Sports and the recording date is the match's.
+
+While the consent screen is in Testing, Google ends the sign-in after 7 days, so sign in again then. Google's documentation disagrees about whether a project that hasn't passed its [API audit](https://support.google.com/youtube/contact/yt_api_form) has its uploads locked as Private: after each upload the app asks YouTube and says so if it was locked (such videos stay private even after an audit, so upload those by hand).
+
 ## Logs
 
 The server writes `data\logs\app.log`: starts and stops, and when each background job started, finished or failed, with the full error. When something fails, the red box's **Details** shows the longer story, the job's log (**Show log**), and buttons to open the log file and copy the details. Closing or restarting the server stops any job that is running.
@@ -87,5 +99,4 @@ The server writes `data\logs\app.log`: starts and stops, and when each backgroun
 
 ## Not yet
 
-- Direct upload to YouTube (needs a Google Cloud project that has passed Google's API audit; until then uploads through the API are locked to private).
 - Working out who won each rally from the video itself (shuttle tracking).

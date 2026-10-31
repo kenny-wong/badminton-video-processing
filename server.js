@@ -26,6 +26,7 @@ import * as jobs from './api/jobs.js';
 import * as players from './api/players.js';
 import * as overview from './api/overview.js';
 import * as reels from './api/reels.js';
+import * as youtube from './api/youtube.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
@@ -62,6 +63,11 @@ const ROUTES = [
   ['POST', '/api/matches/:id/levels', matches.startLevels],
   ['POST', '/api/matches/:id/clip', matches.clip],
   ['POST', '/api/reveal', matches.revealPath],
+  ['POST', '/api/matches/:id/youtube', youtube.upload],
+  ['GET', '/api/youtube', youtube.onRequestGet],
+  ['POST', '/api/youtube/signin', youtube.signIn],
+  ['GET', '/api/youtube/callback', youtube.callback],
+  ['POST', '/api/youtube/signout', youtube.signOutRoute],
   ['GET', '/api/reels', reels.onRequestGet],
   ['POST', '/api/reels', reels.onRequestPost],
   ['GET', '/api/matches/:id/suggestions', matches.suggestions],

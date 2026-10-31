@@ -14,6 +14,7 @@ import { boardPreview } from './board-preview.js';
 import { percent, percents } from './shared/players.js';
 import { landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
+import { youtubePanel } from './youtube-panel.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -67,7 +68,6 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16];
 const SAVE_DELAY_MS = 800;
 const REVIEW_LEAD_S = 4; // reviewing a rally starts this long before its end
 const UNDO_DEPTH = 100;
-const YOUTUBE_UPLOAD = 'https://www.youtube.com/upload'; // opens YouTube Studio's upload dialog
 
 const KEYS = [
   ['Space', 'play / pause'],
@@ -1000,35 +1000,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
   ytInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveYt(); });
 
-  // ---- uploading by hand: the title on the clipboard, YouTube's upload page and the file in Explorer in one click ----
-  const uploads = { video: { ...data.output, exists: data.output.exists }, highlights: { ...data.highlights, exists: data.highlights.exists } };
-  const uploadBox = h('div');
-  const copyText = (label, text) => navigator.clipboard.writeText(text).then(() => say(`${label} copied`), () => say(`Couldn’t copy the ${label.toLowerCase()}`));
-  const startUpload = async (which) => {
-    const o = uploads[which];
-    // Clipboard first: once YouTube's tab has focus, the page can't write to the clipboard any more.
-    await copyText('Title', o.title);
-    window.open(YOUTUBE_UPLOAD, '_blank', 'noopener');
-    api(`/api/matches/${id}/reveal`, { method: 'POST', body: { highlights: which === 'highlights' } }).catch((e) => say(e.message));
-    drawUpload(which);
-  };
-  const drawUpload = (started = null) => {
-    const { video, highlights } = uploads;
-    if (!video.exists && !highlights.exists) return fill(uploadBox, h('p', { class: 'hint' }, 'Render the video first, then upload it from here.'));
-    const o = started ? uploads[started] : null;
-    fill(uploadBox,
-      h('div', { class: 'row small' },
-        video.exists ? h('button', { class: 'primary', onclick: () => startUpload('video') }, icon('youtube', 16), 'Upload to YouTube') : null,
-        highlights.exists ? h('button', { onclick: () => startUpload('highlights') }, '★ Upload highlights') : null),
-      o ? h('ol', { class: 'upload-steps small' },
-        h('li', {}, 'Drag the selected file from Explorer onto YouTube’s upload page.'),
-        h('li', {}, 'Paste the title (Ctrl+V): it’s on the clipboard. ', h('button', { class: 'small', onclick: () => copyText('Title', o.title) }, 'Copy again')),
-        h('li', {}, h('button', { class: 'small', onclick: () => copyText('Description', o.description) }, 'Copy description'), ' and paste it under the title.'),
-        h('li', {}, 'Choose Unlisted under Visibility, then Save.'),
-        started === 'video' ? h('li', {}, 'Copy the video link YouTube shows and paste it below.') : null)
-        : h('p', { class: 'hint' }, 'Copies the title, opens YouTube’s upload page and shows the file in Explorer.'));
-  };
-  drawUpload();
+  // ---- uploading: straight from the app once signed in to YouTube, or by hand ----
+  const youtube = youtubePanel({
+    id, output: data.output, highlights: data.highlights, runJob, errorNotice, say,
+    onUploaded: (url) => { ytInput.value = url; drawYt(url, new Date().toISOString()); },
+  });
   const renderBtn = h('button', {
     class: 'primary',
     onclick: async () => {
@@ -1045,8 +1021,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         fill(jobBox, h('div', { class: 'notice ok' }, `Done: ${clock(r.seconds)} of ${r.highlights ? 'highlights' : 'video'} in ${r.parts} part${r.parts === 1 ? '' : 's'}.`), h('div', { class: 'small muted' }, r.path));
         if (r.highlights) showHighlights(true);
         else showOutput(r, true);
-        uploads[r.highlights ? 'highlights' : 'video'] = { title: r.title, description: r.description, exists: true };
-        drawUpload();
+        youtube.rendered(r.highlights ? 'highlights' : 'video', r);
       } catch (err) {
         fill(jobBox, errorNotice(err));
       }
@@ -1292,7 +1267,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
         h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.')),
       card('YouTube', 'youtube',
-        uploadBox,
+        youtube.el,
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox)),
   };
