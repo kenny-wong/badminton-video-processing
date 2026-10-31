@@ -39,6 +39,24 @@ const writeKeysOpen = (open) => {
   } catch { /* storage blocked */ }
 };
 
+// Black space around the video on the Tracking tab, in px, so corners outside the picture can be clicked.
+const PAD_KEY = 'badminton-video:court-pad:v1';
+const PAD_SIDES = [['top', 'Top', 300], ['right', 'Right', 400], ['bottom', 'Bottom', 300], ['left', 'Left', 400]];
+const PAD_DEFAULT = { top: 50, right: 300, bottom: 50, left: 300 };
+const readPad = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PAD_KEY) || '{}');
+    return Object.fromEntries(PAD_SIDES.map(([k, , max]) => [k, Number.isFinite(saved[k]) ? Math.min(max, Math.max(0, saved[k])) : PAD_DEFAULT[k]]));
+  } catch {
+    return { ...PAD_DEFAULT };
+  }
+};
+const writePad = (pad) => {
+  try {
+    localStorage.setItem(PAD_KEY, JSON.stringify(pad));
+  } catch { /* storage blocked */ }
+};
+
 // Chrome plays from 1/16× to 16×, but mutes the sound below 0.25× and above 4×.
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16];
 const SAVE_DELAY_MS = 800;
@@ -78,8 +96,25 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('div', { class: 'meta' },
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
         match.games.length ? h('span', { class: 'result' }, ['Result ', gamesView(match.games)]) : null),
-      unitGame ? h('div', { class: 'game-banner' }, `Game ${unitGame}`, match.games[unitGame - 1] ? ` (${match.games[unitGame - 1].join('-')})` : '', h('span', { style: { fontWeight: 400 } }, ' · this video is this game only')) : null),
+      unitSwitch()),
     headRight);
+
+  // Whole match and each game, for moving between a match's game videos from here.
+  function unitSwitch() {
+    const games = data.units.filter((u) => u.game > 0);
+    if (!games.length) return null;
+    const played = Math.max(match.games.length, ...games.map((u) => u.game));
+    const whole = data.units.find((u) => u.game === 0);
+    const units = [...(whole?.linked ? [whole] : []), ...Array.from({ length: played }, (_, k) => games.find((u) => u.game === k + 1) ?? { id: null, game: k + 1, linked: false })];
+    return h('div', { class: 'unit-switch' },
+      h('nav', { 'aria-label': 'Games of this match' }, units.map((u) => {
+        const score = u.game && match.games[u.game - 1] ? ` · ${match.games[u.game - 1].join('-')}` : '';
+        const label = u.game ? `Game ${u.game}${score}` : 'Whole match';
+        if (u.id === match.id) return h('span', { class: 'current', 'aria-current': 'page' }, label);
+        return u.linked ? h('a', { href: `#/m/${u.id}` }, label) : h('span', { class: 'off', title: 'No video linked' }, label);
+      })),
+      unitGame ? h('span', { class: 'muted small' }, 'this video is this game only') : null);
+  }
 
   if (!data.source.ready) {
     const box = h('div', { class: 'card' });
@@ -117,6 +152,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let showShuttle = true;
   let showCourt = true;
   let marking = null; // corners clicked so far while marking the court
+  let onTracking = false; // court lines, marking, the shuttle and black space show only on the Tracking tab
+  const pad = readPad();
   const suggested = new Map(); // rally start -> { winner, sure }
   let sel = -1;
   let openStart = null;
@@ -170,9 +207,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     marking.push([Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]);
     if (marking.length === 4) {
       const done = marking;
-      marking = null;
-      overlay.classList.remove('marking');
-      setTimeout(padPlayer);
+      stopMarking();
       if (!courtMapping(done)) {
         say('Those corners don’t make a court; try again');
       } else {
@@ -232,10 +267,25 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     return { x: video.offsetLeft + (w - vw * k) / 2, y: video.offsetTop + (hgt - vh * k) / 2, w: vw * k, h: vh * k, cw: player.clientWidth, ch: player.clientHeight };
   }
 
-  // Black space above and below the video, so corners outside the picture can be clicked and drawn.
+  // Black space around the video on the Tracking tab, so corners outside the picture can be clicked and drawn.
   function padPlayer() {
-    player.classList.toggle('padded', Boolean(marking) || Boolean(corners && showCourt));
+    for (const [k] of PAD_SIDES) player.style.setProperty(`--pad-${k}`, `${pad[k]}px`);
+    player.classList.toggle('padded', onTracking);
     drawOverlay();
+  }
+
+  function startMarking() {
+    video.pause();
+    marking = [];
+    overlay.classList.add('marking');
+    padPlayer();
+    say(`Click the ${CORNER_NAMES[0]} corner of the court`);
+    drawTrackingPanel();
+  }
+
+  function stopMarking() {
+    marking = null;
+    overlay.classList.remove('marking');
   }
 
   function drawOverlay() {
@@ -250,7 +300,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const g = overlay.getContext('2d');
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, box.cw, box.ch);
-    const px = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
+    if (!onTracking) return;
+    const px =([x, y]) => [box.x + x * box.w, box.y + y * box.h];
     const map = corners && courtMapping(corners);
     if (map && showCourt && !marking) {
       g.strokeStyle = 'rgba(255, 216, 77, 0.8)';
@@ -525,7 +576,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const earlier = h('input', { type: 'text', placeholder: 'e.g. 21-18', 'aria-label': 'Earlier games', style: { width: '9em' } });
   const earlierRow = h('div', { class: 'row small' }, 'Earlier games', earlier, h('span', { class: 'muted' }, 'A’s points first'));
   const startMsg = h('div', { class: 'small' });
-  const startText = (st) => `Starts at ${st.games.length ? `${gamesText(st.games)}, then ` : ''}${st.points.join('-')} in game ${st.games.length + 1}.`;
   startGame.value = String(unitGame || (startScore?.games.length ?? 0) + 1);
   startGame.disabled = unitGame > 0;
   earlier.value = gamesText(startScore?.games ?? []);
@@ -550,12 +600,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       return;
     }
     startScore = cleaned;
-    fill(startMsg, cleaned ? h('span', { class: 'muted' }, startText(cleaned)) : '');
+    fill(startMsg, '');
     changed();
   };
   for (const el of [startGame, startA, startB, earlier]) el.addEventListener('change', startChanged);
   showEarlier();
-  if (startScore) fill(startMsg, h('span', { class: 'muted' }, startText(startScore)));
 
   // ---- where the match starts and finishes in the video ----
   const boundsBox = h('div', { class: 'stack small' });
@@ -680,20 +729,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('option', { value: 'b', selected: nearAtStart === 'b' }, `B (${nameB})`));
     fill(trackingBox,
       h('div', { class: 'row small' },
-        h('button', {
-          class: 'small',
-          onclick: () => {
-            video.pause();
-            marking = [];
-            overlay.classList.add('marking');
-            padPlayer();
-            say(`Click the ${CORNER_NAMES[0]} corner of the court`);
-            drawOverlay();
-            drawTrackingPanel();
-          },
-        }, corners ? 'Mark the court again' : 'Mark the court'),
+        h('button', { class: 'small', onclick: startMarking }, corners ? 'Mark the court again' : 'Mark the court'),
         marking ? h('span', { class: 'muted' }, `Click the 4 outer corners: ${CORNER_NAMES.join(', ')} (near = nearest the camera).`) : null,
-        corners && !marking ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showCourt, onchange: (e) => { showCourt = e.target.checked; padPlayer(); } }), 'Show court lines') : null),
+        corners && !marking ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showCourt, onchange: (e) => { showCourt = e.target.checked; drawOverlay(); } }), 'Show court lines') : null),
       h('div', { class: 'row small' }, 'At the near end when the video starts:', nearSel),
       h('div', { class: 'row small' },
         h('button', {
@@ -720,6 +758,29 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   }
   drawTrackingPanel();
   if (tracked) loadShuttle();
+
+  // Sliders for the black space on each side, applied as they move and remembered.
+  const padInputs = PAD_SIDES.map(([k, label, max]) => {
+    const input = h('input', { type: 'range', min: 0, max, step: 10, value: pad[k], 'aria-label': `${label} black space` });
+    input.addEventListener('input', () => {
+      pad[k] = Number(input.value);
+      writePad(pad);
+      padPlayer();
+    });
+    return [k, label, input];
+  });
+  const padBox = h('div', { class: 'stack small' },
+    h('div', { class: 'row spread' }, h('span', { class: 'muted' }, 'Black space around the video'),
+      h('button', {
+        class: 'small',
+        onclick: () => {
+          Object.assign(pad, PAD_DEFAULT);
+          writePad(pad);
+          for (const [k, , input] of padInputs) input.value = pad[k];
+          padPlayer();
+        },
+      }, 'Reset')),
+    h('div', { class: 'pad-sliders' }, padInputs.map(([, label, input]) => h('label', {}, h('span', {}, label), input))));
   const resizedPlayer = new ResizeObserver(() => drawOverlay());
   resizedPlayer.observe(video);
   resizedPlayer.observe(player);
@@ -922,22 +983,20 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     scoring: h('div', {},
       card('Scoring', 'sliders',
         h('div', { class: 'row small' }, pointsSel, h('label', { class: 'row' }, settingBox, 'setting'), capText, bestOfSel),
-        !formatChosen ? h('p', { class: 'hint' }, 'Guessed from the result; change it if wrong.') : null,
         h('div', { class: 'row small' }, serverSel, h('span', { class: 'muted' }, `A = ${nameA}, B = ${nameB}`)),
         h('div', { class: 'subhead' }, 'Video starts at'),
         h('div', { class: 'row small' }, startGame, 'score', h('span', { class: 'side-a' }, 'A'), startA, '–', startB, h('span', { class: 'side-b' }, 'B')),
         earlierRow,
         startMsg,
-        h('p', { class: 'hint' }, unitGame
-          ? `Earlier games come from the official result. Change the score only if the video starts part-way through game ${unitGame}.`
-          : 'For videos that start mid-match. “A serves first” then means A serves the first rally in the video.'),
+        unitGame ? null : h('p', { class: 'hint' }, 'For videos that start mid-match. “A serves first” then means A serves the first rally in the video.'),
         h('div', { class: 'subhead' }, 'Match in the video'),
         boundsBox,
         h('p', { class: 'hint' }, 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering and of finding rallies.'))),
     tracking: h('div', {},
       card('Who won each rally', 'target',
         h('p', { class: 'hint' }, 'TrackNetV3 follows the shuttle. The winner of a rally serves the next one, so the direction of each serve, checked against where the shuttle landed, suggests who won.'),
-        trackingBox)),
+        trackingBox,
+        padBox)),
     export: h('div', {},
       card('Render', 'scissors',
         h('label', { class: 'row small', title: 'How many seconds to keep each side of a rally is in Settings' }, cutBox, 'Cut the gaps between rallies'),
@@ -960,6 +1019,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     writeTab(k);
     fill(tabBar, TABS.map(([key, label, ic]) => h('button', { role: 'tab', 'aria-selected': String(key === tab), onclick: () => showTab(key) }, icon(ic, 15), label)));
     fill(panel, panels[tab]);
+    onTracking = tab === 'tracking';
+    if (!onTracking && marking) {
+      stopMarking();
+      drawTrackingPanel();
+    }
+    padPlayer();
+    // Opening Tracking on a court not marked yet goes straight to marking it.
+    if (onTracking && !corners && !marking && data.tracking.ready) startMarking();
   };
   showTab(tab);
   fill(headRight, saveState);

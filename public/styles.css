@@ -296,7 +296,12 @@ tr.mine.game-row td { background: color-mix(in srgb, var(--focus) 5%, transparen
 .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .meta span { font-size: var(--fs-xs); padding: 2px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
 .meta span.result { color: var(--text); font-weight: 400; }
-.game-banner { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; padding: 3px 12px; border-radius: 999px; background: var(--info-bg); color: var(--info); font-weight: 650; font-size: var(--fs-sm); }
+.unit-switch { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+.unit-switch nav { display: inline-flex; gap: 2px; background: var(--surface-2); border-radius: 10px; padding: 3px; }
+.unit-switch nav > * { padding: 4px 12px; border-radius: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); text-decoration: none; }
+.unit-switch nav a:hover { background: var(--surface); color: var(--text); }
+.unit-switch nav .current { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.unit-switch nav .off { opacity: 0.45; cursor: not-allowed; }
 .save-state { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); }
 .save-state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 
@@ -313,9 +318,13 @@ tr.mine.game-row td { background: color-mix(in srgb, var(--focus) 5%, transparen
 @keyframes pulse { 50% { opacity: 0.65; } }
 .player canvas.overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
 .player canvas.overlay.marking { pointer-events: auto; cursor: crosshair; }
-.player.padded { padding: 5% 300px; }
+.player.padded { padding: var(--pad-top, 50px) var(--pad-right, 300px) var(--pad-bottom, 50px) var(--pad-left, 300px); }
 .player.padded video { max-height: 54vh; }
 .player.padded .flash { top: 8px; }
+.pad-sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
+.pad-sliders label { display: flex; align-items: center; gap: 8px; }
+.pad-sliders label span { min-width: 3.5em; color: var(--muted); }
+.pad-sliders input { flex: 1; min-width: 0; }
 
 .transport { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; flex-wrap: wrap; padding: 6px 10px 6px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow); }
 .transport .play-btn { width: 40px; height: 40px; border-radius: 50%; padding: 0; background: var(--accent); border-color: var(--accent); color: var(--accent-text); }

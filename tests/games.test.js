@@ -74,6 +74,11 @@ test('linking a video to one game gives that game its own row and status', async
     assert.deepEqual(units.map((u) => u.videoIds), [[1], [2], []]);
     const [g1, g2] = units;
     assert.deepEqual([g1.thumb, g2.thumb], [`/media/thumb/${g1.id}`, `/media/thumb/${g2.id}`]);
+    // B serves first in game 2 unless changed; the editor can move between the match and its games.
+    assert.deepEqual([g1.firstServer, g2.firstServer], ['a', 'b']);
+    assert.deepEqual((await call(`/api/matches/${g2.id}`)).body.units, [
+      { id: m.id, game: 0, linked: false }, { id: g1.id, game: 1, linked: true }, { id: g2.id, game: 2, linked: true }]);
+    assert.deepEqual((await call(`/api/matches/${m.id}`)).body.units.map((u) => u.id), [m.id, g1.id, g2.id]);
     assert.equal(t.tournaments, undefined);
     assert.equal((await call('/api/tournaments')).body.tournaments[0].matches, 3); // game rows aren't extra matches
     assert.equal((await call('/api/tournaments')).body.tournaments[0].filmed, 1);
@@ -95,6 +100,10 @@ test('linking a video to one game gives that game its own row and status', async
     const after = (await call(`/api/tournaments/${tid}`)).body.matches.find((x) => x.id === m.id).units;
     assert.deepEqual([after[0].videoIds, after[0].rallyCount, after[1].rallyCount], [[], 0, 36]);
     assert.equal((await call(`/api/matches/${m.id}/games/9/videos`, 'PUT', { videoIds: [1] })).status, 404);
+    // Unlinking game 2 puts its first server back to B.
+    await call(`/api/matches/${g2.id}`, 'PUT', { firstServer: 'a' });
+    await call(`/api/matches/${g2.id}/videos`, 'PUT', { videoIds: [] });
+    assert.equal((await call(`/api/matches/${g2.id}`)).body.match.firstServer, 'b');
   } finally {
     server.close();
   }

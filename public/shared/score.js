@@ -91,6 +91,9 @@ export function startFor(match) {
   return { games: earlier, points: match.startScore?.points ?? [0, 0] };
 }
 
+/** Who serves first by default in a game's own video: A in games 1 and 3, B in game 2. */
+export const defaultServer = (game) => (game === 2 ? 'b' : 'a');
+
 /** Replays a match's (or a game's) saved tagging. */
 export const replayMatch = (match, format) => replay(match.rallies, format, match.firstServer, startFor(match), { oneGame: (match.game ?? 0) > 0 });
 
