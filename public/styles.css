@@ -215,7 +215,7 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 button.danger { color: var(--no); }
 button.danger:hover { background: var(--no-bg); border-color: var(--no); }
 
-input[type="text"], input[type="url"], input[type="number"], textarea, select {
+input[type="text"], input[type="url"], input[type="number"], input[type="date"], input[type="time"], textarea, select {
   font: inherit;
   font-size: var(--fs-md);
   color: var(--text);
@@ -283,6 +283,24 @@ a.pill:hover { filter: brightness(0.95); }
 .tournament-list a.card::before { content: ''; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--accent), var(--gold)); }
 .tournament-list a.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--accent); }
 .tournament-list h3 { margin: 0 0 4px; font-size: var(--fs-lg); }
+.tournament-list h3 .pill { margin-left: 8px; vertical-align: middle; }
+/* Tournaments grouped under each favourite player */
+.player-group + .player-group { margin-top: 22px; }
+.group-title { display: flex; align-items: baseline; gap: 6px; margin: 0 0 10px; font-size: var(--fs-md); }
+/* Custom tournaments: details, players and the match form */
+.form-grid { display: grid; gap: 12px 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); align-items: start; }
+.form-grid > .row { grid-column: 1 / -1; }
+.cf-field { display: grid; gap: 4px; font-size: var(--fs-sm); font-weight: 400; }
+.cf-label { font-weight: 600; color: var(--muted); }
+.cf-field.side { gap: 6px; }
+.cf-field input, .cf-field select { width: 100%; }
+.custom-panel .card { margin: 12px 0; }
+.custom-panel .card h4 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-md); }
+.custom-panel .card h4 .icon { color: var(--accent); }
+.roster-list { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.roster-list .check, .custom-panel .check { display: inline-flex; gap: 6px; align-items: center; }
+.match-actions { gap: 4px; margin-top: 4px; }
+.match-actions .icon { margin-right: 2px; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 14px; }
 .stat { background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px 8px; }
 .stat b { display: block; font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
@@ -433,10 +451,10 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .panel > .card:first-child, .panel > div:first-child > .notice:first-child { margin-top: 12px; }
 .panel .card h4 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-md); }
 .panel .card h4 .icon { color: var(--accent); }
-.panel .fold-card > summary { display: block; color: var(--text); font-size: inherit; font-weight: inherit; margin: 0; }
-.panel .fold-card > summary h4::after { content: '▸'; margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
-.panel .fold-card[open] > summary h4::after { content: '▾'; }
-.panel .fold-card > summary:hover h4::after { color: var(--text); }
+.fold-card > summary { display: block; color: var(--text); font-size: inherit; font-weight: inherit; margin: 0; }
+.fold-card > summary h4::after { content: '▸'; margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
+.fold-card[open] > summary h4::after { content: '▾'; }
+.fold-card > summary:hover h4::after { color: var(--text); }
 .subhead { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 18px !important; }
 
 .rallies { max-height: 52vh; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
@@ -501,6 +519,8 @@ label.btn { cursor: pointer; }
 /* ---------- Players ---------- */
 .player-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .player-grid .card { margin: 0; }
+.player-card.unstarred { box-shadow: none; }
+.player-card .card-title a { color: inherit; }
 button.fav-star { border: 0; background: none; padding: 0 4px; min-height: 28px; font-size: 1.25rem; line-height: 1; color: var(--faint); box-shadow: none; }
 button.fav-star:hover { color: var(--focus); background: none; }
 button.fav-star.on { color: var(--focus); }

@@ -47,7 +47,7 @@ test('favourites: a name is tied to its player once only one player has it', () 
   const cat = addFavourite(db, { name: 'cat' });
   assert.equal(addFavourite(db, { name: 'Amy' }), amy); // no duplicates
   // Two Amy Lees: Amy stays a name; one Cat Ho: cat becomes her.
-  assert.deepEqual(favourites(db), [{ key: amy, name: 'Amy', id: null, candidates: 2 }, { key: cat, name: 'Cat Ho', id: CAT, candidates: 0 }]);
+  assert.deepEqual(favourites(db), [{ key: amy, name: 'Amy', id: null, candidates: 2, starred: true }, { key: cat, name: 'Cat Ho', id: CAT, candidates: 0, starred: true }]);
   assert.equal(addFavourite(db, { id: CAT, name: 'Cat Ho' }), cat);
   // Pasting the right Amy's link ties her; pasting someone already starred merges the two.
   assert.equal(linkFavourite(db, amy, AMY, 'Amy Lee'), amy);

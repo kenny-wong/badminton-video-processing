@@ -1,10 +1,15 @@
 // GET /api/tournaments: every imported tournament with counts.
-// POST /api/tournaments { link }: imports (or re-imports) one.
+// POST /api/tournaments { link }: imports (or re-imports) one; { name } makes a custom tournament.
 // GET /api/tournaments/:id: its matches (each with its games' own rows, `units`, when
 //   filmed game by game), their videos and suggested links.
 // POST /api/tournaments/:id/refresh: re-reads its matches and results.
 // DELETE /api/tournaments/:id: forgets it (video files are untouched).
 // POST /api/tournaments/:id/render-all: queues a render of every filmed match (or game) whose rallies all have a winner and that isn't rendered yet.
+// Custom tournaments only:
+// PUT /api/tournaments/:id { name?, start?, end?, venue?, format? }: changes its details.
+// PUT /api/tournaments/:id/players { keys }: which listed players are in it.
+// POST /api/tournaments/:id/matches { date, time, draw, round, court, teamA, teamB, games, format }: adds a match.
+// PUT /api/tournaments/:id/matches/:mid { … }: changes one; DELETE removes it (its videos become unlinked).
 
 import { fail, idParam, json, readJson, serverError } from '../lib/http.js';
 import { fetchTournament, saveTournament } from '../lib/tournaments.js';
@@ -21,8 +26,9 @@ import { jobView } from '../lib/jobs.js';
 import { startRender } from './matches.js';
 import { stageOf } from '../lib/overview.js';
 import { existsSync } from 'node:fs';
+import { addMatch, createCustom, deleteMatch, rosterOf, setRoster, updateCustom, updateMatch } from '../lib/custom.js';
 
-const STATUS = { badLink: 400, notFound: 404, unavailable: 502 };
+const STATUS = { badLink: 400, badInput: 400, notFound: 404, conflict: 409, unavailable: 502 };
 
 export function onRequestGet({ app }) {
   const rows = app.db.prepare(`SELECT t.*,
@@ -51,6 +57,7 @@ async function importLink(app, link) {
 
 export async function onRequestPost({ request, app }) {
   const body = await readJson(request);
+  if (typeof body?.link !== 'string' && typeof body?.name === 'string') return custom(() => json({ id: createCustom(app.db, { name: body.name }) }, 201));
   if (typeof body?.link !== 'string') return fail(400, 'badLink', 'Paste a badminfo or Badminton England tournament link');
   return importLink(app, body.link);
 }
@@ -59,6 +66,7 @@ export function refresh({ params, app }) {
   const id = idParam(params.id);
   const t = id && app.db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id);
   if (!t) return fail(404, 'notFound', 'No such tournament');
+  if (t.kind === 'custom') return fail(400, 'custom', 'A custom tournament has nothing to update from: edit it on its page');
   return importLink(app, t.badminfo_id ? `https://badminfo.com/Tournament/${t.badminfo_id}` : beTournamentUrl(t.be_id));
 }
 
@@ -135,5 +143,50 @@ export function getOne({ params, app }) {
     .map((m) => ({ id: m.id, startsAt: Date.parse(m.startsAt), duration: m.duration }));
   const groups = groupParts(free.map((v) => ({ id: v.id, recordedAt: Date.parse(v.recordedAt), duration: v.duration })));
   const here = new Set(shown.flatMap((m) => [...m.favs.a, ...m.favs.b]));
-  return json({ tournament, matches: shown, videos: [...linked, ...free], suggestions: suggest(groups, candidates), favourites: favs.filter((f) => here.has(f.key)) });
+  return json({
+    tournament, matches: shown, videos: [...linked, ...free], suggestions: suggest(groups, candidates), favourites: favs.filter((f) => here.has(f.key)),
+    roster: tournament.kind === 'custom' ? rosterOf(app.db, id) : null,
+  });
+}
+
+/** Runs a custom-tournament change, turning its errors into responses. */
+function custom(change) {
+  try {
+    return change();
+  } catch (err) {
+    if (err.code in STATUS) return fail(STATUS[err.code], err.code, err.message);
+    return serverError(err, 'custom tournament');
+  }
+}
+const noCustom = () => fail(404, 'notFound', 'No such custom tournament (or match)');
+
+export async function update({ request, params, app }) {
+  const body = (await readJson(request)) ?? {};
+  return custom(() => (updateCustom(app.db, idParam(params.id), body) ? json({ ok: true }) : noCustom()));
+}
+
+export async function setPlayers({ request, params, app }) {
+  const keys = (await readJson(request))?.keys;
+  if (!Array.isArray(keys)) return fail(400, 'badInput', 'Send the players’ keys');
+  return custom(() => {
+    const roster = setRoster(app.db, idParam(params.id), keys.map(Number).filter(Number.isInteger));
+    return roster ? json({ roster }) : noCustom();
+  });
+}
+
+export async function addMatchRoute({ request, params, app }) {
+  const body = (await readJson(request)) ?? {};
+  return custom(() => {
+    const id = addMatch(app.db, idParam(params.id), body);
+    return id ? json({ id }, 201) : noCustom();
+  });
+}
+
+export async function updateMatchRoute({ request, params, app }) {
+  const body = (await readJson(request)) ?? {};
+  return custom(() => (updateMatch(app.db, idParam(params.id), idParam(params.mid), body) ? json({ ok: true }) : noCustom()));
+}
+
+export function deleteMatchRoute({ params, app }) {
+  return custom(() => (deleteMatch(app.db, idParam(params.id), idParam(params.mid)) ? json({ ok: true }) : noCustom()));
 }

@@ -25,6 +25,8 @@ const PATHS = {
   scan: 'M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10',
   import: 'M12 3v12M7 10l5 5 5-5M5 21h14',
   check: 'M4 12l5 5L20 6',
+  edit: 'M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4',
+  plus: 'M12 5v14M5 12h14',
   user: 'M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z',
   sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
 };

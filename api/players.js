@@ -1,18 +1,18 @@
-// GET /api/players: the favourite players (★) with their badminfo data and filmed matches.
+// GET /api/players: the listed players, favourites (★) and others, with their badminfo data and filmed matches.
 // GET /api/players/search?q=: players in imported badminfo tournaments whose name has every word of q.
 // POST /api/players/refresh: re-reads every badminfo tournament's entrants and the favourites' profiles.
 // GET /api/players/:id[?refresh=1]: one player, their matches in imported tournaments and rating history.
 // GET /api/matches/:id/people[?refresh=1]: a match's players, win chance, earlier meetings and the opponents' other filmed matches.
-// GET /api/favourites: the favourites with the tournaments each one joined.
-// POST /api/favourites { id } | { link } | { name }: stars a player (by badminfo id or link), or a name.
-// PUT /api/favourites/:key { link }: ties a name-only favourite to a badminfo profile link.
-// DELETE /api/favourites/:key: unstars one.
+// GET /api/favourites[?all=1]: the favourites (or everyone listed) with the tournaments each one joined.
+// POST /api/favourites { id } | { link } | { name }, starred?: lists a player (by badminfo id or link) or a name, starred unless starred is false.
+// PUT /api/favourites/:key { link } ties a name-only entry to a badminfo profile link; { starred } stars or unstars (unstarred players stay listed).
+// DELETE /api/favourites/:key: takes a player off the list.
 
 import { fail, idParam, json, readJson } from '../lib/http.js';
 import { apiUrl, badminfoId, entrants, getJson, playerPageUrl } from '../lib/badminfo.js';
 import { matchFromRow } from '../lib/db.js';
 import { matchPeople, playerFromRow, refreshProfile, refreshProfiles, saveEntrants, teamIds } from '../lib/players.js';
-import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite } from '../lib/favourites.js';
+import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite, setStarred } from '../lib/favourites.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { disciplineOf, ratingSeries, record, resultWinner } from '../public/shared/players.js';
 
@@ -46,7 +46,7 @@ const view = (m, r, side = null) => ({
 });
 
 export function onRequestGet({ app }) {
-  const favs = favourites(app.db);
+  const favs = favourites(app.db, { all: true });
   const joined = favouriteTournaments(app.db, favs);
   const cards = favs.map((f) => {
     const row = f.id && app.db.prepare('SELECT * FROM players WHERE id = ?').get(f.id);
@@ -54,12 +54,13 @@ export function onRequestGet({ app }) {
     const there = Object.values(joined[f.key]);
     return {
       ...f, player: playerFromRow(row) ?? null, tournaments: there.length,
-      matches: f.id ? matches.length : there.reduce((a, b) => a + b, 0), filmed: matches.filter((m) => m.filmed).length, record: record(matches),
+      // Matches by badminfo entry, or by name (custom tournaments count that way too), whichever finds more.
+      matches: Math.max(matches.length, there.reduce((a, b) => a + b, 0)), filmed: matches.filter((m) => m.filmed).length, record: record(matches),
     };
   });
   const known = app.db.prepare('SELECT COUNT(*) AS n FROM players').get().n;
   const badminfoTournaments = app.db.prepare('SELECT COUNT(*) AS n FROM tournaments WHERE badminfo_id IS NOT NULL').get().n;
-  return json({ favourites: cards, known, badminfoTournaments });
+  return json({ favourites: cards.filter((c) => c.starred), others: cards.filter((c) => !c.starred), known, badminfoTournaments });
 }
 
 const MAX_FOUND = 30;
@@ -70,8 +71,8 @@ export function search({ request, app }) {
   const rows = app.db.prepare(`SELECT p.*, (SELECT COUNT(DISTINCT tp.tournament_id) FROM tournament_players tp WHERE tp.player_id = p.id) AS tournaments
     FROM players p WHERE ${words.map(() => "p.name LIKE ? ESCAPE '\\'").join(' AND ')} ORDER BY tournaments DESC, p.name LIMIT ${MAX_FOUND}`)
     .all(...words.map((w) => `%${w.replace(/[\\%_]/g, '\\$&')}%`));
-  const starred = new Map(favourites(app.db).filter((f) => f.id).map((f) => [f.id, f.key]));
-  return json({ players: rows.map((r) => ({ ...playerFromRow(r), tournaments: r.tournaments, favourite: starred.get(r.id) ?? null })) });
+  const listed = new Map(favourites(app.db, { all: true }).filter((f) => f.id).map((f) => [f.id, f]));
+  return json({ players: rows.map((r) => ({ ...playerFromRow(r), tournaments: r.tournaments, favourite: listed.get(r.id)?.starred ? listed.get(r.id).key : null, listed: listed.get(r.id)?.key ?? null })) });
 }
 
 export async function refresh({ app }) {
@@ -87,8 +88,8 @@ export async function refresh({ app }) {
   return json({ ok: true, tournaments, profiles });
 }
 
-export function favouritesList({ app }) {
-  const favs = favourites(app.db);
+export function favouritesList({ request, app }) {
+  const favs = favourites(app.db, { all: new URL(request.url).searchParams.get('all') === '1' });
   const joined = favouriteTournaments(app.db, favs);
   return json({ favourites: favs.map((f) => ({ ...f, tournaments: joined[f.key] })) });
 }
@@ -120,13 +121,18 @@ export async function addFavouriteRoute({ request, app }) {
   }
   // A favourite's profile (win chances, rating history) is read in the background.
   if (player.id) refreshProfile(app.db, player.id).catch((err) => console.error('reading a player profile', err));
-  return json({ key: addFavourite(app.db, player) }, 201);
+  return json({ key: addFavourite(app.db, { ...player, starred: body.starred !== false }) }, 201);
 }
 
 export async function linkFavouriteRoute({ request, params, app }) {
   const key = idParam(params.key);
-  if (!key || !app.db.prepare('SELECT 1 FROM favourites WHERE id = ?').get(key)) return fail(404, 'notFound', 'No such favourite');
-  const player = await linkedPlayer(app.db, (await readJson(request))?.link);
+  if (!key || !app.db.prepare('SELECT 1 FROM favourites WHERE id = ?').get(key)) return fail(404, 'notFound', 'No such player on the list');
+  const body = (await readJson(request)) ?? {};
+  if (typeof body.starred === 'boolean' && body.link === undefined) {
+    setStarred(app.db, key, body.starred);
+    return json({ key, starred: body.starred });
+  }
+  const player = await linkedPlayer(app.db, body.link);
   if (player.error) return player.error;
   return json({ key: linkFavourite(app.db, key, player.id, player.name) });
 }
@@ -149,6 +155,7 @@ export async function getOne({ request, params, app }) {
   return json({
     player: { ...rest, url: playerPageUrl(id) },
     favourite: favourites(app.db).find((f) => f.id === id)?.key ?? null,
+    listed: favourites(app.db, { all: true }).find((f) => f.id === id)?.key ?? null,
     matches,
     record: record(matches),
     filmedRecord: record(matches.filter((m) => m.filmed)),

@@ -17,6 +17,7 @@ import { renderEditor } from './editor.js';
 import { icon } from './icons.js';
 import { tournamentHero, illustratedEmpty } from './visuals.js';
 import { errorNotice } from './notice.js';
+import { customTournamentPanel } from './custom-tournament.js';
 import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, LAYOUTS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
@@ -179,6 +180,21 @@ async function renderHome() {
     },
   }, link, importBtn);
 
+  // ---- or a custom tournament, made by hand ----
+  const customName = h('input', { type: 'text', class: 'grow', placeholder: 'Name, e.g. Club night or Friendly v Kent', maxlength: 120, 'aria-label': 'Custom tournament name' });
+  const customForm = h('form', {
+    class: 'row',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      try {
+        const r = await api('/api/tournaments', { method: 'POST', body: { name: customName.value } });
+        location.hash = `#/t/${r.id}`;
+      } catch (err) {
+        fill(importMsg, errorNotice(err));
+      }
+    },
+  }, customName, h('button', { type: 'submit', title: 'Make a tournament by hand: you add its matches and players yourself' }, icon('plus', 16), 'Make tournament'));
+
   const scanBtn = h('button', {
     onclick: async () => {
       scanBtn.disabled = true;
@@ -238,27 +254,46 @@ async function renderHome() {
   const setup = !settings.videoFolders.length || !favs.length;
   const stat = (n, label) => h('div', { class: 'stat' }, h('b', {}, n), h('span', {}, label));
 
-  // ---- imported tournaments, all or only those a favourite player joined ----
+  // ---- tournaments: grouped under each favourite player (default), all of them, or one player's ----
   const listTitle = h('div', { class: 'section-title' });
   const list = h('div');
   const firstName = (f) => f.name.split(' ')[0];
   const playerSel = favs.length ? h('select', { 'aria-label': 'Whose tournaments', onchange: () => { writeHomePlayer(playerSel.value); drawList(); } },
-    h('option', { value: '' }, 'Every tournament'),
+    h('option', { value: 'group' }, 'Grouped by player'),
+    h('option', { value: 'all' }, 'Every tournament'),
     favs.map((f) => h('option', { value: String(f.key) }, `★ ${f.name} (${Object.keys(f.tournaments).length})`))) : null;
-  if (playerSel) playerSel.value = favs.some((f) => String(f.key) === readHomePlayer()) ? readHomePlayer() : '';
+  if (playerSel) playerSel.value = ['group', 'all', ...favs.map((f) => String(f.key))].includes(readHomePlayer()) ? readHomePlayer() : 'group';
+  const tournamentCard = (t, f = null) => h('a', { class: 'card', href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}` },
+    h('h3', {}, t.name, t.kind === 'custom' ? h('span', { class: 'pill', title: 'Made by hand' }, 'Custom') : null),
+    h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
+    f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
+      ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
+    h('div', { class: 'stats' }, stat(t.matches, 'matches'), stat(t.filmed, 'filmed'), stat(t.rendered, 'rendered'), stat(t.uploaded, 'YouTube')));
+  const libraryEmpty = () => illustratedEmpty('Your match library starts here.', 'Paste a badminfo or Badminton England link above to bring in the matches, or make your own tournament, then link your footage.');
   const drawList = () => {
-    const f = favs.find((x) => String(x.key) === playerSel?.value);
+    const choice = playerSel?.value ?? 'all';
+    if (choice === 'group') {
+      // A tournament with two favourites shows under both; tournaments with none come last.
+      const groups = favs.map((f) => ({ f, list: tournaments.filter((t) => Object.hasOwn(f.tournaments, t.id)) })).filter((g) => g.list.length);
+      const placed = new Set(groups.flatMap((g) => g.list.map((t) => t.id)));
+      const rest = tournaments.filter((t) => !placed.has(t.id));
+      fill(listTitle, icon('trophy', 15), `Tournaments by player (${tournaments.length})`);
+      fill(list, !tournaments.length ? libraryEmpty() : [
+        groups.map(({ f, list: ts }) => h('section', { class: 'player-group' },
+          h('h3', { class: 'group-title' }, h('a', { class: 'plain', href: f.id ? `#/p/${f.id}` : '#/players' }, `★ ${f.name}`), h('span', { class: 'muted small' }, ` ${ts.length} tournament${ts.length === 1 ? '' : 's'}`)),
+          h('div', { class: 'tournament-list' }, ts.map((t) => tournamentCard(t, f))))),
+        rest.length ? h('section', { class: 'player-group' },
+          h('h3', { class: 'group-title' }, groups.length ? 'Other tournaments' : 'Tournaments', h('span', { class: 'muted small' }, groups.length ? ' none of your favourites in them' : ' none of your favourites in them yet')),
+          h('div', { class: 'tournament-list' }, rest.map((t) => tournamentCard(t)))) : null,
+      ]);
+      return;
+    }
+    const f = favs.find((x) => String(x.key) === choice);
     const shown = f ? tournaments.filter((t) => Object.hasOwn(f.tournaments, t.id)) : tournaments;
-    fill(listTitle, icon('trophy', 15), f ? `${f.name}’s tournaments (${shown.length} of ${tournaments.length})` : `Imported tournaments (${tournaments.length})`);
+    fill(listTitle, icon('trophy', 15), f ? `${f.name}’s tournaments (${shown.length} of ${tournaments.length})` : `Tournaments (${tournaments.length})`);
     fill(list, shown.length
-      ? h('div', { class: 'tournament-list' }, shown.map((t) => h('a', { class: 'card', href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}` },
-        h('h3', {}, t.name),
-        h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
-        f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
-          ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
-        h('div', { class: 'stats' }, stat(t.matches, 'matches'), stat(t.filmed, 'filmed'), stat(t.rendered, 'rendered'), stat(t.uploaded, 'YouTube')))))
-      : illustratedEmpty(f ? `No tournaments for ${f.name} yet.` : 'Your match library starts here.',
-        f ? 'Import a tournament they have entered to see their matches here.' : 'Paste a badminfo or Badminton England link above to bring in the matches, then link your footage.'));
+      ? h('div', { class: 'tournament-list' }, shown.map((t) => tournamentCard(t, f)))
+      : f ? illustratedEmpty(`No tournaments for ${f.name} yet.`, 'Import a tournament they have entered, or add them to a custom tournament, to see it here.') : libraryEmpty());
   };
   drawList();
   fill(main,
@@ -277,6 +312,8 @@ async function renderHome() {
         h('h3', { class: 'card-title' }, icon('import'), 'Import a tournament'),
         form,
         h('p', { class: 'hint' }, 'Re-importing the same tournament updates times, courts and results, and keeps your tagging.'),
+        h('div', { class: 'small muted' }, 'Not on badminfo or Badminton England? Make your own and add its matches by hand:'),
+        customForm,
         importMsg),
       h('div', { class: 'card stack' },
         h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('match-video'), 'Phone videos'), scanBtn),
@@ -333,6 +370,8 @@ async function renderTournament(id, notice = null, who = null) {
   const data = await api(`/api/tournaments/${id}`);
   const { tournament, matches, videos, suggestions } = data;
   document.title = `${tournament.name} · Badminton Video`;
+  // A custom tournament (made by hand): its details, players and matches are edited here.
+  const custom = tournament.kind === 'custom' ? customTournamentPanel({ id, data, rerender: (n) => renderTournament(id, n ?? null), errorNotice }) : null;
   const byId = new Map(videos.map((v) => [v.id, v]));
   const suggestionFor = new Map(suggestions.map((s) => [s.matchId, s]));
   const suggested = new Set(suggestions.flatMap((s) => s.ids));
@@ -490,7 +529,7 @@ async function renderTournament(id, notice = null, who = null) {
       h('tr', { class: m.mine ? 'mine' : '' },
         h('td', { class: 'nowrap' }, m.time, m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
         h('td', { class: 'small' }, m.court),
-        h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round)),
+        h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round), custom ? custom.actions(m) : null),
         h('td', {}, teams(m)),
         h('td', { class: 'nowrap' }, m.games?.length ? gamesView(m.games) : h('span', { class: 'muted' }, '—')),
         h('td', {}, videoCell(m)),
@@ -522,6 +561,7 @@ async function renderTournament(id, notice = null, who = null) {
         h('div', { class: 'teams' }, teams(m)),
         h('div', { class: 'small' }, 'Result ', m.games?.length ? h('span', {}, gamesView(m.games)) : '—', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null),
         statusCell(m),
+        custom ? custom.actions(m) : null,
         filmed ? h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `#/m/${m.id}` }, 'Open'), youtubeLink(m),
           h('button', { class: 'small', onclick: () => link(m, []) }, 'Unlink'))
           : gamesLinked(m) ? null : videoCell(m),
@@ -543,7 +583,7 @@ async function renderTournament(id, notice = null, who = null) {
     const days = [...new Set(shown.map((m) => m.date))];
     const view = prefs.view === 'grid' ? gridView : listView;
     fill(table, days.map((d) => [h('div', { class: 'day-title' }, day(d)), view(shown.filter((m) => m.date === d))]));
-    if (!shown.length) fill(table, emptyState('film', prefs.hideNoVideo ? 'No matches with a video yet.' : 'No matches to show.'));
+    if (!shown.length) fill(table, emptyState('film', prefs.hideNoVideo ? 'No matches with a video yet.' : custom && !matches.length ? 'No matches yet: add the first one above.' : 'No matches to show.'));
   };
 
   const setPref = (k, v) => {
@@ -653,11 +693,13 @@ async function renderTournament(id, notice = null, who = null) {
     h('a', { class: 'crumb', href: '#/' }, icon('back', 15), 'Tournaments'),
     pageHead(tournament.name,
       [tournament.start === tournament.end ? day(tournament.start) : `${day(tournament.start)} – ${day(tournament.end)}`, ' · ',
-        h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
+        custom
+          ? [h('span', { class: 'pill' }, 'Custom tournament'), tournament.venue ? ` · ${tournament.venue}` : null]
+          : h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
         tournament.badminfoId ? [' · ', h('a', { href: `https://badminfo.com/Tournament/${tournament.badminfoId}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗')] : null],
       reelBtn,
       renderAllBtn,
-      refreshBtn,
+      custom ? null : refreshBtn,
       h('button', {
         class: 'danger',
         onclick: async () => {
@@ -668,6 +710,7 @@ async function renderTournament(id, notice = null, who = null) {
       }, icon('trash', 16), 'Remove')),
     msg,
     notice,
+    custom?.el,
     suggestions.length ? h('div', { class: 'notice info row spread' },
       h('span', {}, `${suggestions.length === 1 ? 'One match below has a suggested video' : `${suggestions.length} matches below have suggested videos`}, going by when the videos were recorded. Check, then link.`), linkAll) : null,
     !videos.length ? h('div', { class: 'notice warn' }, 'No videos from these dates yet. ', h('a', { href: '#/' }, 'Scan your video folders'), ' after copying them from your phone.') : null,

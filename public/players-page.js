@@ -1,4 +1,4 @@
-// The Players pages: #/players lists the favourite players (★) with their
+// The Players pages: #/players adds players (by name or badminfo link) and lists them, favourites (★) and others, with their
 // badminfo ratings and grades, and finds anyone in imported badminfo
 // tournaments to star; #/p/<badminfo id> is one player's page, with their
 // rating over time and every match of theirs in imported tournaments.
@@ -25,15 +25,20 @@ export function standings(player) {
 
 const recordText = (r) => (r.played ? `${r.won} won, ${r.lost} lost` : 'no results yet');
 
-/** ★ button: stars or unstars a player (by badminfo id), then calls `done`. */
-export function starButton({ id, key }, done, onError = () => {}) {
+/**
+ * ★ button: stars or unstars a player, then calls `done`. `key` is set for a
+ * favourite, `listed` for anyone on the Players list (unstarring keeps them
+ * there); otherwise the badminfo `id` is added to the list, starred.
+ */
+export function starButton({ id, key, listed = key }, done, onError = () => {}) {
   const on = Boolean(key);
   return h('button', {
-    class: `fav-star${on ? ' on' : ''}`, 'aria-pressed': String(on), title: on ? 'Favourite: click to unstar' : 'Star as a favourite player',
+    class: `fav-star${on ? ' on' : ''}`, 'aria-pressed': String(on), title: on ? 'Favourite: click to unstar (they stay on the list)' : 'Star as a favourite player',
     onclick: async (e) => {
       e.currentTarget.disabled = true;
       try {
-        await (on ? api(`/api/favourites/${key}`, { method: 'DELETE' }) : api('/api/favourites', { method: 'POST', body: { id } }));
+        if (on || listed) await api(`/api/favourites/${listed}`, { method: 'PUT', body: { starred: !on } });
+        else await api('/api/favourites', { method: 'POST', body: { id } });
         await done();
       } catch (err) {
         onError(err);
@@ -41,6 +46,8 @@ export function starButton({ id, key }, done, onError = () => {}) {
     },
   }, on ? '★' : '☆');
 }
+
+const BADMINFO_PLAYER = /badminfo\.com\/player\/|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function renderPlayers(main) {
   document.title = 'Players · Badminton Video';
@@ -81,10 +88,24 @@ export async function renderPlayers(main) {
       out);
   };
 
-  const card = (f) => h('div', { class: 'card stack player-card' },
+  const removeBtn = (f) => h('button', {
+    class: 'small ghost', title: 'Take them off the Players list (and out of custom tournaments’ players). Their matches stay.',
+    onclick: async () => {
+      if (!confirm(`Take ${f.name} off the Players list?`)) return;
+      try {
+        await api(`/api/favourites/${f.key}`, { method: 'DELETE' });
+        await refreshCards();
+      } catch (err) {
+        fill(msg, errorNotice(err));
+      }
+    },
+  }, icon('trash', 14), 'Remove');
+
+  const card = (f) => h('div', { class: `card stack player-card${f.starred ? '' : ' unstarred'}` },
     h('div', { class: 'row spread' },
-      h('h3', { class: 'card-title' }, starButton(f, again, (err) => fill(msg, errorNotice(err))), f.id ? h('a', { href: `#/p/${f.id}` }, f.player?.name ?? f.name) : f.name),
-      f.player?.county ? h('span', { class: 'pill' }, f.player.county) : null),
+      h('h3', { class: 'card-title' }, starButton({ id: f.id, key: f.starred ? f.key : null, listed: f.key }, refreshCards, (err) => fill(msg, errorNotice(err))),
+        f.id ? h('a', { href: `#/p/${f.id}` }, f.player?.name ?? f.name) : f.name),
+      h('span', { class: 'row' }, f.player?.county ? h('span', { class: 'pill' }, f.player.county) : null, removeBtn(f))),
     f.id
       ? [standings(f.player),
         h('div', { class: 'small muted' }, `${f.tournaments} tournament${f.tournaments === 1 ? '' : 's'}, ${f.matches} match${f.matches === 1 ? '' : 'es'} (${recordText(f.record)}), ${f.filmed} filmed`),
@@ -118,7 +139,7 @@ export async function renderPlayers(main) {
       fill(results,
         r.players.length
           ? h('div', { class: 'table-scroll' }, h('table', {}, h('tbody', {}, r.players.map((p) => h('tr', {},
-            h('td', {}, starButton({ id: p.id, key: p.favourite }, async () => { await runSearch(); await refreshCards(); }, (err) => fill(results, errorNotice(err)))),
+            h('td', {}, starButton({ id: p.id, key: p.favourite, listed: p.listed }, async () => { await runSearch(); await refreshCards(); }, (err) => fill(results, errorNotice(err)))),
             h('td', {}, h('a', { href: `#/p/${p.id}` }, p.name), p.county ? h('div', { class: 'small muted' }, p.county) : null),
             h('td', { class: 'small' }, DISCIPLINES.filter(([k]) => p.ratings[k] || p.grades[k]).map(([k, label]) => h('span', { class: 'rating-chip', title: label }, `${label[0]} ${p.ratings[k] ?? '—'}${p.grades[k] ? ` ${p.grades[k]}` : ''}`))),
             h('td', { class: 'small muted nowrap' }, `${p.tournaments} tournament${p.tournaments === 1 ? '' : 's'}`))))))
@@ -135,15 +156,50 @@ export async function renderPlayers(main) {
     h('div', { class: 'section-title' }, icon('star', 15), `Favourites (${d.favourites.length})`),
     d.favourites.length
       ? h('div', { class: 'player-grid' }, d.favourites.map(card))
-      : h('div', { class: 'empty' }, icon('user', 34), h('div', {}, 'No favourites yet. Find your players below and star them (☆).')));
-  // After a star from the search, only the cards are drawn again (the search box keeps its text).
+      : h('div', { class: 'empty' }, icon('user', 34), h('div', {}, 'No favourites yet. Add your players above, or find them below, and star them (☆).')),
+    h('div', { class: 'section-title' }, icon('user', 15), `Other players (${d.others.length})`),
+    d.others.length
+      ? h('div', { class: 'player-grid' }, d.others.map(card))
+      : h('p', { class: 'hint' }, 'Players you add without a star, or unstar, stay here: for custom tournaments, and to star again later.'));
+  // After a change, only the cards are drawn again (the boxes keep their text).
   const refreshCards = async () => drawCards(await api('/api/players'));
   drawCards(data);
 
+  // ---- add a player: by name only, or by their badminfo link ----
+  const who = h('input', { type: 'text', class: 'grow', placeholder: 'Name, or badminfo player link (https://badminfo.com/Player/…)', maxlength: 200, 'aria-label': 'Player’s name or badminfo link' });
+  const starIt = h('input', { type: 'checkbox', checked: true });
+  const addMsg = h('div');
+  const addBtn = h('button', { class: 'primary', type: 'submit' }, icon('plus', 16), 'Add player');
+  const addForm = h('form', {
+    class: 'row',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      const value = who.value.trim();
+      if (!value) return;
+      const byLink = BADMINFO_PLAYER.test(value);
+      addBtn.disabled = true;
+      fill(addMsg, byLink ? h('p', { class: 'muted small' }, 'Reading the player from badminfo…') : null);
+      try {
+        await api('/api/favourites', { method: 'POST', body: { ...(byLink ? { link: value } : { name: value }), starred: starIt.checked } });
+        who.value = '';
+        fill(addMsg);
+        await refreshCards();
+      } catch (err) {
+        fill(addMsg, errorNotice(err));
+      }
+      addBtn.disabled = false;
+    },
+  }, who, h('label', { class: 'row small', title: 'Favourites’ matches are picked out on tournament pages and get the video suggestions' }, starIt, '★ Favourite'), addBtn);
+
   fill(main,
-    pageHead('Players', 'Star (★) the players you film: their matches are picked out on tournament pages and get the video suggestions.', refreshBtn),
+    pageHead('Players', 'Your players: star (★) the ones you film, so their matches are picked out on tournament pages and get the video suggestions.', refreshBtn),
     h('div', { class: 'players-msg' }, msg),
-    data.badminfoTournaments ? null : h('div', { class: 'notice info' }, 'Player data comes from badminfo: import tournaments with their badminfo link (or re-import one) to find players here.'),
+    h('div', { class: 'card stack' },
+      h('h3', { class: 'card-title' }, icon('plus'), 'Add a player'),
+      addForm,
+      h('p', { class: 'hint' }, 'A name is enough (use it as it appears in the draws, or in your custom tournaments). With a badminfo link the app also reads their ratings and matches.'),
+      addMsg),
+    data.badminfoTournaments ? null : h('div', { class: 'notice info' }, 'Ratings and grades come from badminfo: import tournaments with their badminfo link, or add players by their badminfo link.'),
     cards,
     h('div', { class: 'section-title' }, icon('user', 15), 'Find a player'),
     h('div', { class: 'card stack' }, h('div', { class: 'row' }, query),
@@ -194,7 +250,7 @@ export async function renderPlayer(main, id) {
   }, icon('highlights', 16), 'Highlight reel');
   fill(main,
     h('a', { class: 'crumb', href: '#/players' }, icon('back', 15), 'Players'),
-    pageHead(h('span', { class: 'row' }, starButton({ id, key: data.favourite }, () => renderPlayer(main, id), (err) => fill(reelBox, errorNotice(err))), p.name),
+    pageHead(h('span', { class: 'row' }, starButton({ id, key: data.favourite, listed: data.listed }, () => renderPlayer(main, id), (err) => fill(reelBox, errorNotice(err))), p.name),
       [p.county, p.beNumber ? `BE ${p.beNumber}` : null].filter(Boolean).join(' · ') || null,
       reelBtn,
       h('a', { class: 'btn', href: p.url, target: '_blank', rel: 'noopener' }, 'badminfo ↗')),
