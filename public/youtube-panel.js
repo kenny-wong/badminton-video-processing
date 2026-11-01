@@ -113,7 +113,7 @@ export function youtubePanel({ id, preview, runJob, errorNotice, say, onUploaded
           h('div', {}, link),
           r.uploadStatus && r.uploadStatus !== 'processed' ? h('div', { class: 'small' }, 'YouTube is still processing it; HD takes a while longer.') : null),
       r.playlist ? h('p', { class: 'small' }, 'Added to the tournament’s playlist: ', h('a', { href: r.playlist.url, target: '_blank', rel: 'noopener' }, 'open playlist ↗')) : null,
-      r.playlistError ? h('p', { class: 'small muted' }, `Not added to a playlist: ${r.playlistError}`) : null);
+      r.playlistError ? h('div', { class: 'notice warn small' }, `Uploaded, but not added to the tournament’s playlist: ${r.playlistError}. Add it in YouTube Studio (Playlists).`) : null);
   };
 
   const follow = async (start) => {

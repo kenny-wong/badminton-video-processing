@@ -66,6 +66,7 @@ const ROUTES = [
   ['POST', '/api/reveal', matches.revealPath],
   ['POST', '/api/matches/:id/youtube', youtube.upload],
   ['GET', '/api/matches/:id/rendered', youtube.renderedList],
+  ['DELETE', '/api/matches/:id/rendered', youtube.renderedDelete],
   ['GET', '/api/youtube', youtube.onRequestGet],
   ['POST', '/api/youtube/signin', youtube.signIn],
   ['GET', '/api/youtube/callback', youtube.callback],

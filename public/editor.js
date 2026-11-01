@@ -69,6 +69,19 @@ const SAVE_DELAY_MS = 800;
 const REVIEW_LEAD_S = 4; // reviewing a rally starts this long before its end
 const UNDO_DEPTH = 100;
 const VIEW_KEYS = new Set([' ', 'ArrowLeft', 'ArrowRight', ',', '.', '[', ']', '?', 'Escape']); // the keys that work on a cut render
+const FOLDS_KEY = 'badminton-video:export-folds:v1'; // which folding cards on the Export tab are open
+function readFolds() {
+  try {
+    return JSON.parse(localStorage.getItem(FOLDS_KEY) ?? '{}') ?? {};
+  } catch {
+    return {};
+  }
+}
+function writeFold(key, open) {
+  try {
+    localStorage.setItem(FOLDS_KEY, JSON.stringify({ ...readFolds(), [key]: open }));
+  } catch { /* storage blocked: the cards start closed next time */ }
+}
 
 const KEYS = [
   ['Space', 'play / pause'],
@@ -189,6 +202,23 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     title: 'Switch between the original video (for tagging) and the rendered ones. A render as long as the original keeps the rally timeline and scores; a cut one, highlights or a clip plays on its own.',
   });
   const showNote = h('div', { class: 'notice info small', hidden: true });
+  const deleteBtn = h('button', {
+    class: 'ghost icon-only', hidden: true, 'aria-label': 'Delete this rendered video', onclick: () => deleteShown(),
+    title: 'Delete this rendered video from the disk. The original video and the tagging stay, and it can be rendered again.',
+  }, icon('trash'));
+  // While the rally timeline is hidden (a cut render, highlights or a clip), a plain seek bar and jumps move through the video.
+  const scrub = h('input', {
+    type: 'range', min: 0, max: 1000, step: 1, value: 0, 'aria-label': 'Position in the video', title: 'Drag to move through the video',
+    oninput: () => { video.currentTime = (scrub.value / 1000) * duration(); },
+  });
+  const jump = (by, label, tip) => h('button', { class: 'small', title: tip, onclick: () => { video.currentTime = Math.max(0, Math.min(duration(), video.currentTime + by)); } }, label);
+  const scrubRow = h('div', { class: 'scrub-row' },
+    jump(-10, '« 10 s', 'Back 10 seconds (Shift+←)'), jump(-2, '‹ 2 s', 'Back 2 seconds (←)'),
+    scrub,
+    jump(2, '2 s ›', 'Forward 2 seconds (→)'), jump(10, '10 s »', 'Forward 10 seconds (Shift+→)'));
+  const moveScrub = () => { if (!onTimeline && document.activeElement !== scrub) scrub.value = String(Math.round((video.currentTime / duration()) * 1000)); };
+  video.addEventListener('timeupdate', moveScrub);
+  video.addEventListener('seeked', moveScrub);
   const playBtn = h('button', { class: 'play-btn', onclick: () => toggle(), 'aria-label': 'Play or pause (Space)', title: 'Play / pause (Space)' }, icon('play', 18));
   const timeText = h('span', { class: 'time' }, '0:00 / 0:00');
   const speedSel = h('select', { 'aria-label': 'Speed', onchange: (e) => { video.playbackRate = Number(e.target.value); } },
@@ -358,6 +388,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const at = seekTo ?? (onTimeline ? video.currentTime : originalAt);
     showing = file ? file.key : '';
     showSel.value = showing;
+    deleteBtn.hidden = !file; // the original can't be deleted
     video.pause();
     video.addEventListener('loadedmetadata', () => {
       onTimeline = !file || Math.abs(video.duration - (data.source.duration || 0)) < 0.5;
@@ -1046,6 +1077,21 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     else showSel.value = showing;
     youtube.setFiles(files);
   }
+  /** Deletes the rendered file the player shows, switching back to the original first so Windows lets go of it. */
+  async function deleteShown() {
+    const file = files.find((f) => f.key === showing);
+    if (!file || !confirm(`Delete the ${file.label.toLowerCase()} from the disk?\n\nThe original video and the tagging stay, and you can render it again.`)) return;
+    showVideo('');
+    try {
+      const r = await api(`/api/matches/${id}/rendered?key=${encodeURIComponent(file.key)}`, { method: 'DELETE' });
+      if (r.kind === 'video') showOutput(data.output, false);
+      if (r.kind === 'highlights') showHighlights(false);
+      say(`Deleted the ${file.label.toLowerCase()}`);
+    } catch (err) {
+      say(err.message);
+    }
+    loadFiles();
+  }
   const renderBtn = h('button', {
     class: 'primary',
     onclick: async () => {
@@ -1256,6 +1302,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // ---- layout ----
   const card = (title, iconName, ...body) => h('div', { class: 'card stack' }, h('h4', {}, icon(iconName, 17), title), body);
+  /** A card that folds to its title, closed until opened; the choice is remembered. */
+  const foldCard = (key, title, iconName, ...body) => h('details', { class: 'card stack fold-card', open: Boolean(readFolds()[key]), ontoggle: (e) => writeFold(key, e.target.open) },
+    h('summary', { title: 'Click to show or hide' }, h('h4', {}, icon(iconName, 17), title)), body);
   const panels = {
     rallies: h('div', {},
       strandedBox,
@@ -1302,12 +1351,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         youtube.el,
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox),
-      card('Clip of one rally', 'film',
+      foldCard('clip', 'Clip of one rally', 'film',
         clipTarget,
         h('div', { class: 'row' }, h('button', { class: 'small primary', onclick: () => makeClip(true) }, 'Upright 9:16 clip'), h('button', { class: 'small', onclick: () => makeClip(false) }, 'Clip as filmed')),
         h('p', { class: 'hint' }, 'For Shorts, Reels or a message: the rally with the seconds from Settings either side and the scoreboard. Upright clips follow the shuttle once it has been tracked.'),
         clipBox),
-      card('Scoreboard', 'sliders',
+      foldCard('scoreboard', 'Scoreboard', 'sliders',
         h('div', { class: 'row small' }, lookSel, cornerSel),
         boardBox,
         h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
@@ -1347,10 +1396,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         player,
         videoError,
         showNote,
-        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, showSel,
+        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, showSel, deleteBtn,
           h('span', { class: 'zoom' }, h('button', { class: 'ghost icon-only', title: 'Zoom out (−)', onclick: () => zoomBy(2) }, '−'), zoomText,
             h('button', { class: 'ghost icon-only', title: 'Zoom in (+)', onclick: () => zoomBy(0.5) }, '+'),
             h('button', { class: 'small', title: 'Whole video (0)', onclick: () => setView(0, duration()) }, 'Fit'))),
+        scrubRow,
         frames,
         timeline,
         wave,

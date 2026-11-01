@@ -9,6 +9,7 @@
 // POST /api/matches/:id/youtube { file?, privacy?, playlist? }: uploads one of the match's finished files ('video' by default,
 //      'highlights' or 'clip:<name>'; a job, one upload at a time) and marks the match with its link.
 // GET  /api/matches/:id/rendered: the finished files, with URLs to play them.
+// DELETE /api/matches/:id/rendered?key=<key>: deletes one finished file (the original video can't be: it isn't one).
 
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -19,7 +20,7 @@ import { loadMatch } from '../lib/pipeline.js';
 import { nowIso } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { matchPeople } from '../lib/players.js';
-import { renderedFile, renderedFiles } from '../lib/rendered.js';
+import { deleteRendered, renderedFile, renderedFiles } from '../lib/rendered.js';
 import { youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
@@ -162,6 +163,7 @@ export async function upload({ request, params, app }) {
     result.locked = privacy !== 'private' && result.privacyNow === 'private';
     j.log(`Status: ${result.privacyNow}, ${result.uploadStatus}${result.locked ? ' (locked to private)' : ''}`);
     if (body.playlist !== false && tournament) {
+      j.message = 'Adding to the tournament’s playlist';
       try {
         const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournamentPlaylistTitle(tournament), privacy }, video.id, await token());
         result.playlist = { id, url: playlistUrl(id) };
@@ -182,4 +184,19 @@ export function renderedList({ params, app }) {
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const files = renderedFiles(loaded, readSettings(app.db), { people: matchPeople(app.db, loaded) });
   return json({ files: files.map((f) => ({ ...f, url: `/media/rendered/${loaded.match.id}?key=${encodeURIComponent(f.key)}&v=${encodeURIComponent(f.mtime)}` })) });
+}
+
+export async function renderedDelete({ request, params, app }) {
+  const loaded = loadMatch(app.db, idParam(params.id));
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const key = new URL(request.url).searchParams.get('key') ?? '';
+  try {
+    const file = await deleteRendered(app.db, loaded, readSettings(app.db), key);
+    if (!file) return fail(404, 'notFound', 'That video isn’t there any more');
+    console.log(`Deleted ${file.path}`);
+    return json({ ok: true, key: file.key, kind: file.kind });
+  } catch (err) {
+    if (['EBUSY', 'EPERM'].includes(err.code)) return fail(409, 'busy', 'The file is still open (in the player or another program): close it and try again');
+    throw err;
+  }
 }

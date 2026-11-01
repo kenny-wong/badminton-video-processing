@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,7 +10,7 @@ import { parseMatches } from '../lib/schedule.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { readSettings } from '../lib/settings.js';
 import { outputPath } from '../lib/naming.js';
-import { clipOf, renderedFile, renderedFiles, withSuffix } from '../lib/rendered.js';
+import { clipOf, deleteRendered, renderedFile, renderedFiles, withSuffix } from '../lib/rendered.js';
 import { PAGE } from './fixtures/be-pages.js';
 
 test('a suffix always fits YouTube’s 100 characters, the start of the title giving way', () => {
@@ -60,4 +60,30 @@ test('finished files: whole video with its .txt, highlights and rally clips, new
   assert.equal(renderedFile(loaded, settings, 'highlights'), null);
   assert.equal(renderedFile(loaded, settings, 'clip:../../secret.mp4'), null);
   assert.equal(renderedFile(loaded, settings, 'video').path, video);
+});
+
+test('deleting a finished file: the whole video goes with its .txt and the match forgets it; unknown keys do nothing', async () => {
+  const db = openDb();
+  const out = mkdtempSync(join(tmpdir(), 'rendered-del-'));
+  db.prepare("INSERT INTO settings (key, value) VALUES ('outputFolder', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(out));
+  const tid = saveTournament(db, { beId: 'b997c3c5-38fb-4caf-a402-009664189ad6', badminfoId: null, name: 'Example', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') });
+  const id = db.prepare('SELECT id FROM matches WHERE tournament_id = ? ORDER BY id LIMIT 1').get(tid).id;
+  const settings = readSettings(db);
+  const name = outputPath(loadMatch(db, id));
+  const folder = join(out, name[0], name[1]);
+  mkdirSync(join(folder, 'Clips'), { recursive: true });
+  const video = join(folder, name[2]);
+  const txt = video.replace(/\.mp4$/, '.txt');
+  const clip = join(folder, 'Clips', `${name[2].replace(/\.mp4$/, '')} - rally 2.mp4`);
+  for (const f of [video, txt, clip]) writeFileSync(f, 'x');
+  db.prepare("UPDATE matches SET output_path = ?, rendered_at = '2026-10-31T10:00:00Z' WHERE id = ?").run(video, id);
+
+  assert.equal(await deleteRendered(db, loadMatch(db, id), settings, 'nothing'), null);
+  assert.equal((await deleteRendered(db, loadMatch(db, id), settings, 'video')).kind, 'video');
+  assert.ok(!existsSync(video) && !existsSync(txt) && existsSync(clip));
+  const row = db.prepare('SELECT output_path, rendered_at FROM matches WHERE id = ?').get(id);
+  assert.deepEqual([row.output_path, row.rendered_at], [null, null]);
+  await deleteRendered(db, loadMatch(db, id), settings, `clip:${name[2].replace(/\.mp4$/, '')} - rally 2.mp4`);
+  assert.ok(!existsSync(clip));
+  assert.deepEqual(renderedFiles(loadMatch(db, id), settings), []);
 });

@@ -157,24 +157,49 @@ test('playlist: made once per tournament, remembered, and made again when delete
   const calls = [];
   let playlists = 0;
   const existing = new Set();
+  const notYet = new Map(); // a new playlist answers "not found" this many more times, as YouTube's do for a few seconds
+  const notFound = () => jsonRes({ error: { code: 404, errors: [{ reason: 'playlistNotFound' }] } }, 404);
   const fake = async (url, opts) => {
+    calls.push(`${opts.method} ${url.replace(/\?.*/, '')}`);
+    if (opts.method === 'GET') { // playlists.list by id
+      const id = new URL(url).searchParams.get('id');
+      return jsonRes({ items: existing.has(id) ? [{ id, snippet: { title: 'Sankey U15' } }] : [] });
+    }
     const body = JSON.parse(opts.body);
-    calls.push(url.replace(/\?.*/, ''));
     if (url.includes('/playlists?')) {
       const id = `PL${++playlists}`;
       existing.add(id);
+      notYet.set(id, 2);
       assert.equal(body.status.privacyStatus, 'unlisted');
       return jsonRes({ id });
     }
-    return existing.has(body.snippet.playlistId) ? jsonRes({ id: 'item' }) : jsonRes({ error: { code: 404, errors: [{ reason: 'playlistNotFound' }] } }, 404);
+    const id = body.snippet.playlistId;
+    if (notYet.get(id) > 0) {
+      notYet.set(id, notYet.get(id) - 1);
+      return notFound();
+    }
+    return existing.has(id) ? jsonRes({ id: 'item' }) : notFound();
   };
+  const waits = [];
+  const opts = { wait: async (ms) => { waits.push(ms); } };
   const where = { tournamentId: 7, title: 'Sankey <U15>', privacy: 'unlisted' };
-  assert.equal(await addToTournamentPlaylist(dir, where, 'v1', 'tok', fake), 'PL1');
-  assert.equal(await addToTournamentPlaylist(dir, where, 'v2', 'tok', fake), 'PL1');
+  assert.equal(await addToTournamentPlaylist(dir, where, 'v1', 'tok', fake, opts), 'PL1');
+  assert.deepEqual(waits, [2000, 4000], 'the new playlist was waited for, not given up on');
+  assert.equal(await addToTournamentPlaylist(dir, where, 'v2', 'tok', fake, opts), 'PL1');
   existing.delete('PL1');
-  assert.equal(await addToTournamentPlaylist(dir, where, 'v3', 'tok', fake), 'PL2');
-  assert.equal(calls.filter((c) => c.endsWith('/playlists')).length, 2);
+  assert.equal(await addToTournamentPlaylist(dir, where, 'v3', 'tok', fake, opts), 'PL2');
+  assert.equal(calls.filter((c) => c === 'POST https://www.googleapis.com/youtube/v3/playlists').length, 2);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'playlists.json'), 'utf8')), { 7: 'PL2' });
+});
+
+test('playlist: a remembered playlist that keeps refusing is reported, not replaced', async () => {
+  const dir = scratch();
+  writeFileSync(join(dir, 'playlists.json'), JSON.stringify({ 7: 'PL1' }));
+  const fake = async (url, opts) => (opts.method === 'GET'
+    ? jsonRes({ items: [{ id: 'PL1', snippet: { title: 'x' } }] })
+    : jsonRes({ error: { code: 403, message: 'Forbidden', errors: [{ reason: 'playlistContainsMaximumNumberOfVideos' }] } }, 403));
+  await assert.rejects(addToTournamentPlaylist(dir, { tournamentId: 7, title: 'x', privacy: 'unlisted' }, 'v1', 'tok', fake, { wait: async () => {} }), /Adding to the playlist failed \(403/);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'playlists.json'), 'utf8')), { 7: 'PL1' });
 });
 
 test('playlist name shown before upload: the tournament name, as the playlist will be made', async () => {

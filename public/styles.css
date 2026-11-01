@@ -394,6 +394,9 @@ tr.mine.game-row td { background: color-mix(in srgb, var(--focus) 5%, transparen
 /* A cut, slowed or card-framed render in the player: its times are not the original's, so the timeline and scores step aside. */
 .off-timeline .frame-strip, .off-timeline .timeline, .off-timeline .wave, .off-timeline .score-strip, .off-timeline .legend, .off-timeline .transport .zoom, .off-timeline .player .overlay { display: none; }
 .off-timeline .scorecard { opacity: 0.4; }
+.scrub-row { display: none; align-items: center; gap: 8px; margin: 8px 0; }
+.off-timeline .scrub-row { display: flex; }
+.scrub-row input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
 .legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; }
 .legend i.a { background: var(--side-a); }
 .legend i.b { background: var(--side-b); }
@@ -430,6 +433,10 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .panel > .card:first-child, .panel > div:first-child > .notice:first-child { margin-top: 12px; }
 .panel .card h4 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-md); }
 .panel .card h4 .icon { color: var(--accent); }
+.panel .fold-card > summary { display: block; color: var(--text); font-size: inherit; font-weight: inherit; margin: 0; }
+.panel .fold-card > summary h4::after { content: '▸'; margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
+.panel .fold-card[open] > summary h4::after { content: '▾'; }
+.panel .fold-card > summary:hover h4::after { color: var(--text); }
 .subhead { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 18px !important; }
 
 .rallies { max-height: 52vh; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
