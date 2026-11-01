@@ -21,6 +21,8 @@ const formatOf = (key) => FORMATS.find(([k]) => k === key)?.[2] ?? null;
 const formatSelect = (current, guessLabel) => h('select', { 'aria-label': 'Scoring' },
   h('option', { value: '' }, guessLabel), FORMATS.map(([k, label]) => h('option', { value: k, selected: k === formatKey(current) }, label)));
 
+const folds = new Map(); // tournament id -> { details, players }: open or closed, for this session
+
 const field = (label, control, hint = null) => h('label', { class: 'cf-field' }, h('span', { class: 'cf-label' }, label), control, hint ? h('span', { class: 'hint' }, hint) : null);
 
 /**
@@ -38,7 +40,9 @@ export function customTournamentPanel({ id, data, rerender, errorNotice }) {
   const end = h('input', { type: 'date', value: tournament.end ?? '' });
   const venue = h('input', { type: 'text', value: tournament.venue ?? '', maxlength: 120, placeholder: 'Sports hall, club…' });
   const scoring = formatSelect(tournament.format, 'Guess from each result');
-  const details = h('details', { class: 'card stack fold-card', open: !matches.length },
+  // The folds stay as the user left them when the page is drawn again after a change.
+  const fold = (key, first) => ({ open: folds.get(id)?.[key] ?? first, ontoggle: (e) => folds.set(id, { ...folds.get(id), [key]: e.target.open }) });
+  const details = h('details', { class: 'card stack fold-card', ...fold('details', !matches.length) },
     h('summary', { title: 'Click to show or hide' }, h('h4', {}, icon('trophy', 17), 'Tournament details')),
     h('form', {
       class: 'form-grid',
@@ -59,14 +63,20 @@ export function customTournamentPanel({ id, data, rerender, errorNotice }) {
   // ---- players from the Players list ----
   const playersBox = h('div', { class: 'stack' }, h('p', { class: 'hint' }, 'Loading the Players list…'));
   let picked = new Set(roster.map((r) => r.key));
+  const playersTitle = h('span', {}, `Players (${roster.length})`);
+  // Saved in place: the count and the names the match form suggests change, the page isn't drawn again.
   const saveRoster = async () => {
     try {
-      await api(`/api/tournaments/${id}/players`, { method: 'PUT', body: { keys: [...picked] } });
-      rerender();
+      const r = await api(`/api/tournaments/${id}/players`, { method: 'PUT', body: { keys: [...picked] } });
+      picked = new Set(r.roster.map((p) => p.key));
+      fill(playersTitle, `Players (${r.roster.length})`);
+      fill(names, r.roster.map((p) => h('option', { value: p.name })));
+      fill(msg);
     } catch (err) {
       fail(err);
     }
   };
+  const loadPlayers = () => api('/api/favourites?all=1').then((r) => drawPlayers([...r.favourites].sort((a, b) => Number(b.starred) - Number(a.starred) || a.name.localeCompare(b.name))), fail);
   const newName = h('input', { type: 'text', placeholder: 'New player’s name', maxlength: 80, 'aria-label': 'New player’s name' });
   const addNew = async (e) => {
     e.preventDefault();
@@ -75,6 +85,8 @@ export function customTournamentPanel({ id, data, rerender, errorNotice }) {
       const { key } = await api('/api/favourites', { method: 'POST', body: { name: newName.value, starred: false } });
       picked.add(key);
       await saveRoster();
+      newName.value = '';
+      await loadPlayers();
     } catch (err) {
       fail(err);
     }
@@ -87,9 +99,9 @@ export function customTournamentPanel({ id, data, rerender, errorNotice }) {
       : h('p', { class: 'hint' }, 'No one on the Players list yet.'),
     h('form', { class: 'row', onsubmit: addNew }, newName, h('button', { class: 'small', type: 'submit' }, '+ Add to the list and here')),
     h('p', { class: 'hint' }, 'Players ticked here are suggested when you add a match. Manage everyone on the ', h('a', { href: '#/players' }, 'Players'), ' page.'));
-  api('/api/favourites?all=1').then((r) => drawPlayers([...r.favourites].sort((a, b) => Number(b.starred) - Number(a.starred) || a.name.localeCompare(b.name))), fail);
-  const players = h('details', { class: 'card stack fold-card', open: !roster.length },
-    h('summary', { title: 'Click to show or hide' }, h('h4', {}, icon('user', 17), `Players (${roster.length})`)),
+  loadPlayers();
+  const players = h('details', { class: 'card stack fold-card', ...fold('players', !roster.length) },
+    h('summary', { title: 'Click to show or hide' }, h('h4', {}, icon('user', 17), playersTitle)),
     playersBox);
 
   // ---- add or change a match ----
