@@ -12,6 +12,7 @@ import { Readable } from 'node:stream';
 import { openDb } from './lib/db.js';
 import { fail, idParam, serverError } from './lib/http.js';
 import { loadMatch, sourceFor } from './lib/pipeline.js';
+import { renderedFile } from './lib/rendered.js';
 import { frameAt, thumbnail } from './lib/thumbs.js';
 import { findTools } from './lib/ffmpeg.js';
 import { readSettings } from './lib/settings.js';
@@ -64,6 +65,7 @@ const ROUTES = [
   ['POST', '/api/matches/:id/clip', matches.clip],
   ['POST', '/api/reveal', matches.revealPath],
   ['POST', '/api/matches/:id/youtube', youtube.upload],
+  ['GET', '/api/matches/:id/rendered', youtube.renderedList],
   ['GET', '/api/youtube', youtube.onRequestGet],
   ['POST', '/api/youtube/signin', youtube.signIn],
   ['GET', '/api/youtube/callback', youtube.callback],
@@ -209,6 +211,18 @@ export function createApp(app) {
           return;
         }
         sendVideo(req, res, source.path);
+        return;
+      }
+      // A finished file of the match (whole video, highlights or a rally clip), for the editor's player.
+      const rendered = /^\/media\/rendered\/(\d+)$/.exec(url.pathname);
+      if (rendered && (req.method === 'GET' || req.method === 'HEAD')) {
+        const loaded = loadMatch(app.db, idParam(rendered[1]));
+        const file = loaded && renderedFile(loaded, readSettings(app.db), url.searchParams.get('key') ?? '');
+        if (!file) {
+          res.writeHead(404).end();
+          return;
+        }
+        sendVideo(req, res, file.path);
         return;
       }
       if (url.pathname.startsWith('/api/')) {

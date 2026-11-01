@@ -1,27 +1,30 @@
 // YouTube sign-in and upload.
 //
-// GET  /api/youtube?match=<id>: { ready, signedIn, channel, jobs: { video, highlights }, playlist: { title, exists, url } }
+// GET  /api/youtube?match=<id>: { ready, signedIn, channel, uploading: job, playlist: { title, exists, url } }
 //      (ready = the OAuth client file is there; playlist = where an upload of this match would go).
 // POST /api/youtube/signin: { url } of Google's sign-in page; Google then sends the browser to
 // GET  /api/youtube/callback, which saves the sign-in and shows a page saying so.
 // POST /api/youtube/signout: forgets the sign-in.
 // POST /api/youtube/open { url }: opens a YouTube or Google page in the normal browser, outside the app's window.
-// POST /api/matches/:id/youtube { highlights?, privacy?, playlist? }: uploads the rendered video (a job; one upload at a time).
+// POST /api/matches/:id/youtube { file?, privacy?, playlist? }: uploads one of the match's finished files ('video' by default,
+//      'highlights' or 'clip:<name>'; a job, one upload at a time) and marks the match with its link.
+// GET  /api/matches/:id/rendered: the finished files, with URLs to play them.
 
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fail, idParam, json, readJson } from '../lib/http.js';
-import { findJob, jobView, startJob } from '../lib/jobs.js';
+import { jobView, listJobs, startJob } from '../lib/jobs.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { nowIso } from '../lib/db.js';
+import { readSettings } from '../lib/settings.js';
+import { matchPeople } from '../lib/players.js';
+import { renderedFile, renderedFiles } from '../lib/rendered.js';
 import { youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
 import {
-  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, parseDescribed, pkce, playlistInfo, PRIVACY, readClient, readToken,
+  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, pkce, playlistInfo, PRIVACY, readClient, readToken,
   signOut as forget, tournamentPlaylistTitle, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
@@ -30,7 +33,7 @@ const pending = new Map(); // state -> { verifier, redirectUri, at }
 
 const dirOf = (app) => youtubeDir(app.dataDir ?? join(tmpdir(), 'badminton-video'));
 const redirectOf = (app) => `http://127.0.0.1:${app.port || Number(process.env.PORT) || 8791}/api/youtube/callback`;
-const jobKey = (id, highlights) => `upload:${id}:${highlights ? 'highlights' : 'video'}`;
+const jobKey = (id, file) => `upload:${id}:${file}`;
 
 export async function onRequestGet({ request, app }) {
   const dir = dirOf(app);
@@ -40,7 +43,7 @@ export async function onRequestGet({ request, app }) {
     ready: Boolean(await readClient(dir)),
     signedIn: Boolean(token?.refreshToken),
     channel: token?.channel ?? null,
-    jobs: id ? { video: jobView(findJob(jobKey(id, false))), highlights: jobView(findJob(jobKey(id, true))) } : null,
+    uploading: id ? jobView(listJobs().find((j) => j.key.startsWith(jobKey(id, '')) && (j.status === 'running' || j.status === 'queued'))) ?? null : null,
     playlist: id && token?.refreshToken ? await playlistFor(dir, loadMatch(app.db, id)?.tournament) : null,
   });
 }
@@ -128,23 +131,21 @@ export async function upload({ request, params, app }) {
   const loaded = loadMatch(app.db, idParam(params.id));
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const body = (await readJson(request)) ?? {};
-  const highlights = body.highlights === true;
+  const key = typeof body.file === 'string' ? body.file : body.highlights === true ? 'highlights' : 'video';
   const privacy = PRIVACY.includes(body.privacy) ? body.privacy : 'unlisted';
-  const path = highlights ? loaded.match.highlightsPath : loaded.match.outputPath;
-  if (!path || !existsSync(path)) return fail(404, 'notFound', 'Render the video first');
+  const file = renderedFile(loaded, readSettings(app.db), key, { people: matchPeople(app.db, loaded) });
+  if (!file) return fail(404, 'notFound', 'That video isn’t there any more: render it again');
   const dir = dirOf(app);
   if (!(await readClient(dir))) return fail(409, 'noClient', 'YouTube upload isn’t set up: the OAuth client file is missing');
   if (!(await readToken(dir))?.refreshToken) return fail(401, 'signin', 'Sign in to YouTube first');
   const { match, tournament } = loaded;
-  const job = startJob('upload', jobKey(match.id, highlights), async (j, signal) => {
-    const txt = path.replace(/\.mp4$/i, '.txt');
-    const described = existsSync(txt) ? parseDescribed(await readFile(txt, 'utf8')) : { title: '', description: '' };
-    const resource = videoResource({ ...described, privacy, recordedOn: match.date });
-    j.log(`Uploading ${path} as ${privacy}: ${resource.snippet.title}`);
+  const job = startJob('upload', jobKey(match.id, key), async (j, signal) => {
+    const resource = videoResource({ title: file.title, description: file.description, privacy, recordedOn: match.date });
+    j.log(`Uploading ${file.path} as ${privacy}: ${resource.snippet.title}`);
     j.message = 'Starting the upload';
     const token = () => accessToken(dir);
     const video = await uploadVideo({
-      path, resource, token, signal,
+      path: file.path, resource, token, signal,
       onProgress: (sent, size) => {
         j.progress = size ? sent / size : 0;
         j.message = `${mb(sent)} of ${mb(size)} MB sent`;
@@ -152,8 +153,9 @@ export async function upload({ request, params, app }) {
     });
     const url = youtubeUrl(video.id);
     j.log(`Uploaded: ${url} (YouTube replied ${video.status?.privacyStatus ?? '?'})`);
-    if (!highlights) app.db.prepare('UPDATE matches SET youtube_url = ?, uploaded_at = ?, updated_at = ? WHERE id = ?').run(url, nowIso(), nowIso(), match.id);
-    const result = { videoId: video.id, url, highlights, privacy, privacyNow: video.status?.privacyStatus ?? null, uploadStatus: video.status?.uploadStatus ?? null, playlist: null, playlistError: null };
+    // The match keeps the link of its latest upload, whichever file it was.
+    app.db.prepare('UPDATE matches SET youtube_url = ?, uploaded_at = ?, updated_at = ? WHERE id = ?').run(url, nowIso(), nowIso(), match.id);
+    const result = { videoId: video.id, url, file: key, label: file.label, privacy, privacyNow: video.status?.privacyStatus ?? null, uploadStatus: video.status?.uploadStatus ?? null, playlist: null, playlistError: null };
     // Asked again after the upload: an unaudited Google project's videos may be locked to private.
     const now = await videoStatus(video.id, await token()).catch((err) => { j.log(`Couldn’t read the status: ${err.message}`); return null; });
     if (now) Object.assign(result, { privacyNow: now.privacyStatus ?? result.privacyNow, uploadStatus: now.uploadStatus ?? result.uploadStatus });
@@ -170,6 +172,14 @@ export async function upload({ request, params, app }) {
       }
     }
     return result;
-  }, { queue: 'upload', label: `YouTube${highlights ? ' highlights' : ''}: ${matchLabel(match)}` });
+  }, { queue: 'upload', label: `YouTube (${file.label}): ${matchLabel(match)}` });
   return json(jobView(job), 202);
+}
+
+/** GET /api/matches/:id/rendered: the match's finished files, newest first, with a URL to play each. */
+export function renderedList({ params, app }) {
+  const loaded = loadMatch(app.db, idParam(params.id));
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const files = renderedFiles(loaded, readSettings(app.db), { people: matchPeople(app.db, loaded) });
+  return json({ files: files.map((f) => ({ ...f, url: `/media/rendered/${loaded.match.id}?key=${encodeURIComponent(f.key)}&v=${encodeURIComponent(f.mtime)}` })) });
 }

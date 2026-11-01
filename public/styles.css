@@ -391,6 +391,9 @@ tr.mine.game-row td { background: color-mix(in srgb, var(--focus) 5%, transparen
 .score-strip span.game { color: var(--accent-text); background: var(--accent); }
 .score-strip span:hover { background: var(--surface-3); }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: var(--fs-xs); color: var(--muted); }
+/* A cut, slowed or card-framed render in the player: its times are not the original's, so the timeline and scores step aside. */
+.off-timeline .frame-strip, .off-timeline .timeline, .off-timeline .wave, .off-timeline .score-strip, .off-timeline .legend, .off-timeline .transport .zoom, .off-timeline .player .overlay { display: none; }
+.off-timeline .scorecard { opacity: 0.4; }
 .legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; }
 .legend i.a { background: var(--side-a); }
 .legend i.b { background: var(--side-b); }

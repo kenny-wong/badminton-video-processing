@@ -68,6 +68,7 @@ const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16];
 const SAVE_DELAY_MS = 800;
 const REVIEW_LEAD_S = 4; // reviewing a rally starts this long before its end
 const UNDO_DEPTH = 100;
+const VIEW_KEYS = new Set([' ', 'ArrowLeft', 'ArrowRight', ',', '.', '[', ']', '?', 'Escape']); // the keys that work on a cut render
 
 const KEYS = [
   ['Space', 'play / pause'],
@@ -178,6 +179,16 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const openBadge = h('div', { class: 'open-rally', hidden: true }, '● Rally running');
   const overlay = h('canvas', { class: 'overlay' });
   const player = h('div', { class: 'player' }, video, overlay, flash, openBadge);
+  // Which video the player shows: the original (for tagging) or one of the finished files.
+  let files = []; // GET /api/matches/:id/rendered
+  let showing = ''; // '' = the original, else a finished file's key
+  let onTimeline = true; // false while a cut, slowed or card-framed render plays: its times aren't the original's
+  let originalAt = 0; // where the original was when a render took over
+  const showSel = h('select', {
+    'aria-label': 'Video shown', hidden: true, onchange: () => showVideo(showSel.value),
+    title: 'Switch between the original video (for tagging) and the rendered ones. A render as long as the original keeps the rally timeline and scores; a cut one, highlights or a clip plays on its own.',
+  });
+  const showNote = h('div', { class: 'notice info small', hidden: true });
   const playBtn = h('button', { class: 'play-btn', onclick: () => toggle(), 'aria-label': 'Play or pause (Space)', title: 'Play / pause (Space)' }, icon('play', 18));
   const timeText = h('span', { class: 'time' }, '0:00 / 0:00');
   const speedSel = h('select', { 'aria-label': 'Speed', onchange: (e) => { video.playbackRate = Number(e.target.value); } },
@@ -339,6 +350,29 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   video.addEventListener('play', () => { fill(playBtn, icon('pause', 18)); tick(); });
   video.addEventListener('pause', () => { fill(playBtn, icon('play', 18)); showTime(); });
   video.addEventListener('loadedmetadata', () => { drawTimeline(); showTime(); });
+
+  /** Plays the original ('') or a finished file; the timeline stays only when the file is as long as the original. */
+  function showVideo(key, seekTo = null) {
+    const file = files.find((f) => f.key === key) ?? null;
+    if (!showing) originalAt = video.currentTime;
+    const at = seekTo ?? (onTimeline ? video.currentTime : originalAt);
+    showing = file ? file.key : '';
+    showSel.value = showing;
+    video.pause();
+    video.addEventListener('loadedmetadata', () => {
+      onTimeline = !file || Math.abs(video.duration - (data.source.duration || 0)) < 0.5;
+      player.closest('.editor')?.classList.toggle('off-timeline', !onTimeline);
+      if (video.videoWidth && video.videoHeight) video.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+      if (onTimeline) video.currentTime = Math.min(at, video.duration);
+      showNote.hidden = !file;
+      fill(showNote, !file ? '' : onTimeline
+        ? `Playing the rendered video (${file.label.toLowerCase()}): as long as the original, so the timeline and scores still line up.`
+        : `Playing the ${file.label.toLowerCase()}: ${file.kind === 'video' ? 'it’s cut, slowed or has cards, so' : 'it plays on its own, so'} the rally timeline and scores are hidden. Choose Original to tag.`);
+      drawTimeline();
+      showTime();
+    }, { once: true });
+    video.src = file ? file.url : data.source.url;
+  }
   const resized = new ResizeObserver(() => {
     drawScores();
     drawWave();
@@ -613,7 +647,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     drawTimeline();
     drawList();
     if (tab === 'export') showClipTarget();
-    if (seek && rallies[i]) video.currentTime = Math.max(0, rallies[i].start - lead);
+    if (seek && rallies[i] && !onTimeline) showVideo('', Math.max(0, rallies[i].start - lead));
+    else if (seek && rallies[i]) video.currentTime = Math.max(0, rallies[i].start - lead);
     listBox.querySelector('tr.sel')?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -935,6 +970,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       const r = await runJob(clipBox, () => api(`/api/matches/${id}/clip`, { method: 'POST', body: { rally: i, upright, removeVoices: voicesBox.checked } }));
       fill(clipBox, h('div', { class: 'notice ok row small' }, `Clip of rally ${i + 1}: ${r.seconds} s${r.upright ? (r.followed ? ', following the shuttle' : ', centred on the court') : ''}.`,
         h('button', { class: 'small', onclick: () => api('/api/reveal', { method: 'POST', body: { path: r.path } }).catch((e) => say(e.message)) }, 'Show in folder')));
+      loadFiles();
     } catch (err) {
       fill(clipBox, errorNotice(err));
     }
@@ -994,9 +1030,22 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // ---- uploading: straight from the app once signed in to YouTube, or by hand ----
   const youtube = youtubePanel({
-    id, output: data.output, highlights: data.highlights, runJob, errorNotice, say,
+    id, preview: data.output, runJob, errorNotice, say,
     onUploaded: (url) => { ytInput.value = url; drawYt(url, new Date().toISOString()); },
   });
+  /** The finished files, for the player's switch and the YouTube box. */
+  async function loadFiles() {
+    try {
+      ({ files } = await api(`/api/matches/${id}/rendered`));
+    } catch {
+      return;
+    }
+    fill(showSel, h('option', { value: '' }, 'Original'), files.map((f) => h('option', { value: f.key }, `Rendered: ${f.label}`)));
+    showSel.hidden = !files.length;
+    if (showing && !files.some((f) => f.key === showing)) showVideo('');
+    else showSel.value = showing;
+    youtube.setFiles(files);
+  }
   const renderBtn = h('button', {
     class: 'primary',
     onclick: async () => {
@@ -1013,7 +1062,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         fill(jobBox, h('div', { class: 'notice ok' }, `Done: ${clock(r.seconds)} of ${r.highlights ? 'highlights' : 'video'} in ${r.parts} part${r.parts === 1 ? '' : 's'}.`), h('div', { class: 'small muted' }, r.path));
         if (r.highlights) showHighlights(true);
         else showOutput(r, true);
-        youtube.rendered(r.highlights ? 'highlights' : 'video', r);
+        loadFiles();
       } catch (err) {
         fill(jobBox, errorNotice(err));
       }
@@ -1107,6 +1156,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (e.ctrlKey || e.altKey || e.metaKey) return;
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     const fps = data.source.fps || 30;
+    if (!onTimeline && !VIEW_KEYS.has(key)) return; // no tagging on a render whose times aren't the original's
     switch (key) {
       case ' ': toggle(); break;
       case 'ArrowLeft': video.currentTime = Math.max(0, video.currentTime - (e.shiftKey ? 10 : 2)); break;
@@ -1296,7 +1346,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('div', { class: 'video-col' },
         player,
         videoError,
-        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn,
+        showNote,
+        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, showSel,
           h('span', { class: 'zoom' }, h('button', { class: 'ghost icon-only', title: 'Zoom out (−)', onclick: () => zoomBy(2) }, '−'), zoomText,
             h('button', { class: 'ghost icon-only', title: 'Zoom in (+)', onclick: () => zoomBy(0.5) }, '+'),
             h('button', { class: 'small', title: 'Whole video (0)', onclick: () => setView(0, duration()) }, 'Fit'))),
@@ -1322,6 +1373,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   drawZoom();
   drawFrames();
   loadLevels();
+  loadFiles();
   // The scoreboard preview follows the video while it is paused.
   video.addEventListener('seeked', () => {
     if (tab === 'export' && video.paused) {
