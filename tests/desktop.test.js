@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { linkAction, windowKey } from '../electron/links.js';
 
 const origin = 'http://127.0.0.1:8792';
@@ -37,4 +37,14 @@ test('the installer ships the app’s files, not the local-only pictures, and FF
   assert.equal(main, 'electron/main.js');
   for (const f of ['server.js', 'electron/**', 'api/**', 'lib/**', 'migrations/**', 'public/**', '!public/visual-kit/*.png']) assert.ok(build.files.includes(f), f);
   assert.deepEqual(build.extraResources, [{ from: 'build/ffmpeg', to: 'ffmpeg' }]);
+});
+
+test('one icon: the installer’s is drawn from the mark the page uses, on every build', () => {
+  const { scripts, build } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.equal(/<link rel="icon" href="([^"]+)"/.exec(html)?.[1], 'visual-kit/app-mark.svg');
+  assert.match(readFileSync(new URL('../scripts/make-icon.mjs', import.meta.url), 'utf8'), /public\/visual-kit\/app-mark\.svg/);
+  assert.match(scripts.dist, /^node scripts\/make-icon\.mjs && /);
+  assert.equal(build.win.icon, 'build/icon.png');
+  assert.ok(!existsSync(new URL('../public/favicon.svg', import.meta.url)), 'the old icon is gone');
 });

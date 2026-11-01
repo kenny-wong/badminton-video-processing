@@ -25,7 +25,7 @@ Needs Windows 10/11, [Node.js](https://nodejs.org/) 24 or later and FFmpeg (`win
 npm start      # the app on http://127.0.0.1:8791 in a Chrome app window, data in data/
 npm run dev    # the same without opening Chrome, restarting when files change
 npm run app    # the desktop (Electron) version, port 8793, data in %LOCALAPPDATA%\Badminton Video (development)
-npm run dist   # builds dist\Badminton-Video-Setup-<version>.exe, with this PC's FFmpeg copied in
+npm run dist   # builds dist\Badminton-Video-Setup-<version>.exe, with this PC's FFmpeg copied in and the icon drawn from public/visual-kit/app-mark.svg
 npm test       # unit tests (Node's built-in test runner)
 ```
 

@@ -1,7 +1,7 @@
 {
   "name": "badminton-video",
   "productName": "Badminton Video",
-  "version": "1.28.0",
+  "version": "1.28.1",
   "private": true,
   "description": "Desktop app that links phone videos of badminton matches to Badminton England's tournament records, tags rallies, burns in the score, cuts the gaps between rallies and names the result for YouTube.",
   "author": "Kenny Wong",
@@ -16,7 +16,8 @@
     "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
     "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.js\"",
     "app": "electron .",
-    "dist": "node scripts/bundle-ffmpeg.mjs && electron-builder --win nsis"
+    "dist": "node scripts/make-icon.mjs && node scripts/bundle-ffmpeg.mjs && electron-builder --win nsis",
+    "icon": "node scripts/make-icon.mjs"
   },
   "devDependencies": {
     "electron": "44.7.2",
