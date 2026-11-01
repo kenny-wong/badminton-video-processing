@@ -314,6 +314,11 @@ a.pill:hover { filter: brightness(0.95); }
 .stat.todo b, .stat.todo span { color: var(--warn); }
 .tournament-list a.card.unfinished { border: 2px solid var(--no); }
 .tournament-list a.card.unfinished:hover { border-color: var(--no); }
+.card-foot { margin-top: 10px; min-height: 28px; }
+/* Year headings within the tournament list */
+.year-group + .year-group { margin-top: 16px; }
+.year-title { font-weight: 750; font-size: var(--fs-lg); margin: 4px 0 8px; font-variant-numeric: tabular-nums; }
+.year-title .muted { font-weight: 400; font-size: var(--fs-sm); }
 .steps { list-style: none; margin: 8px 0 0; padding: 0; counter-reset: step; display: grid; gap: 10px; }
 .steps li { counter-increment: step; display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
 .steps li::before { content: counter(step); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: var(--fs-sm); }

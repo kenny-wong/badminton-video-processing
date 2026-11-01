@@ -267,22 +267,55 @@ async function renderHome() {
   const notDone = (n, d) => d > 0 && n < d;
   const unfinished = (s) => notDone(s.filmedMatches, s.matches) || notDone(s.filmedGames, s.games) || notDone(s.rendered, s.videos) || notDone(s.uploaded, s.rendered);
   const tile = (n, d, label, tip, check = true) => h('div', { class: `stat${check && notDone(n, d) ? ' todo' : ''}`, title: tip }, h('b', {}, `${n}/${d}`), h('span', {}, label));
-  const progressTiles = (s, f) => h('div', { class: 'stats card-progress' },
+  const progressTiles = (s, f, check) => h('div', { class: 'stats card-progress' },
     tile(s.matches, s.total, 'Matches', `${f ? `${f.name}’s` : 'Your favourites’'} matches / all matches here`, false),
-    tile(s.filmedMatches, s.matches, 'Filmed matches', 'Their matches where every game has a linked video (one for the whole match, or one per game) / their matches'),
-    tile(s.filmedGames, s.games, 'Filmed games', 'Games with a linked video / games they played (a match not played yet counts as one game)'),
-    tile(s.rendered, s.videos, 'Rendered', 'Rendered videos / linked videos (a whole match, or one game, each)'),
-    tile(s.uploaded, s.rendered, 'YouTube', 'Rendered videos on YouTube / rendered videos'));
+    tile(s.filmedMatches, s.matches, 'Filmed matches', 'Their matches where every game has a linked video (one for the whole match, or one per game) / their matches', check),
+    tile(s.filmedGames, s.games, 'Filmed games', 'Games with a linked video / games they played (a match not played yet counts as one game)', check),
+    tile(s.rendered, s.videos, 'Rendered', 'Rendered videos / linked videos (a whole match, or one game, each)', check),
+    tile(s.uploaded, s.rendered, 'YouTube', 'Rendered videos on YouTube / rendered videos', check));
+  // Marking a tournament complete (some matches were never filmed, say) stops its highlighting.
+  const completeButton = (t) => h('button', {
+    class: `small ${t.completedAt ? 'ghost' : ''}`,
+    title: t.completedAt ? 'Marked complete: click to show what’s left to do again' : 'Mark complete when nothing more will be filmed, rendered or uploaded here (some matches had no video): the card is no longer highlighted',
+    onclick: async (e) => {
+      e.preventDefault(); // the button sits in the card's link
+      e.stopPropagation();
+      try {
+        const r = await api(`/api/tournaments/${t.id}/complete`, { method: 'PUT', body: { complete: !t.completedAt } });
+        t.completedAt = r.completedAt;
+        drawList();
+      } catch (err) {
+        fill(importMsg, errorNotice(err));
+      }
+    },
+  }, icon(t.completedAt ? 'refresh' : 'check', 14), t.completedAt ? 'Reopen' : 'Mark complete');
   const tournamentCard = (t, f = null) => {
     const s = f ? t.stats?.players?.[f.key] ?? noProgress(t) : t.stats?.mine ?? noProgress(t);
-    const open = unfinished(s);
-    return h('a', { class: `card${open ? ' unfinished' : ''}`, href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}`, title: open ? 'Not finished: the yellow sections still have something to film, render or upload' : null },
+    const done = Boolean(t.completedAt);
+    const open = !done && unfinished(s);
+    return h('a', { class: `card${open ? ' unfinished' : ''}${done ? ' complete' : ''}`, href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}`, title: open ? 'Not finished: the yellow sections still have something to film, render or upload' : null },
       h('h3', {}, t.name, t.kind === 'custom' ? h('span', { class: 'pill', title: 'Made by hand' }, 'Custom') : null),
       h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
       f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
         ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
-      progressTiles(s, f));
+      progressTiles(s, f, !done),
+      h('div', { class: 'row spread card-foot' },
+        done ? h('span', { class: 'pill ok', title: `Marked complete ${day(t.completedAt.slice(0, 10))}` }, '✓ Complete') : h('span'),
+        open || done ? completeButton(t) : null));
   };
+  /** Tournaments by year, newest first (they come sorted by date): [[year, list], …]. */
+  const byYear = (ts) => {
+    const years = new Map();
+    for (const t of ts) {
+      const y = (t.start || t.end || '').slice(0, 4) || 'Undated';
+      if (!years.has(y)) years.set(y, []);
+      years.get(y).push(t);
+    }
+    return [...years];
+  };
+  const yearCards = (ts, f = null) => byYear(ts).map(([y, list]) => h('div', { class: 'year-group' },
+    h('div', { class: 'year-title' }, y, h('span', { class: 'muted' }, ` · ${list.length}`)),
+    h('div', { class: 'tournament-list' }, list.map((t) => tournamentCard(t, f)))));
   const libraryEmpty = () => illustratedEmpty('Your match library starts here.', 'Paste a badminfo or Badminton England link above to bring in the matches, or make your own tournament, then link your footage.');
   const drawList = () => {
     const choice = playerSel?.value ?? 'all';
@@ -295,10 +328,10 @@ async function renderHome() {
       fill(list, !tournaments.length ? libraryEmpty() : [
         groups.map(({ f, list: ts }) => h('section', { class: 'player-group' },
           h('h3', { class: 'group-title' }, h('a', { class: 'plain', href: f.id ? `#/p/${f.id}` : '#/players' }, `★ ${f.name}`), h('span', { class: 'muted small' }, ` ${ts.length} tournament${ts.length === 1 ? '' : 's'}`)),
-          h('div', { class: 'tournament-list' }, ts.map((t) => tournamentCard(t, f))))),
+          yearCards(ts, f))),
         rest.length ? h('section', { class: 'player-group' },
           h('h3', { class: 'group-title' }, groups.length ? 'Other tournaments' : 'Tournaments', h('span', { class: 'muted small' }, groups.length ? ' none of your favourites in them' : ' none of your favourites in them yet')),
-          h('div', { class: 'tournament-list' }, rest.map((t) => tournamentCard(t)))) : null,
+          yearCards(rest)) : null,
       ]);
       return;
     }
@@ -306,7 +339,7 @@ async function renderHome() {
     const shown = f ? tournaments.filter((t) => Object.hasOwn(f.tournaments, t.id)) : tournaments;
     fill(listTitle, icon('trophy', 15), f ? `${f.name}’s tournaments (${shown.length} of ${tournaments.length})` : `Tournaments (${tournaments.length})`);
     fill(list, shown.length
-      ? h('div', { class: 'tournament-list' }, shown.map((t) => tournamentCard(t, f)))
+      ? yearCards(shown, f)
       : f ? illustratedEmpty(`No tournaments for ${f.name} yet.`, 'Import a tournament they have entered, or add them to a custom tournament, to see it here.') : libraryEmpty());
   };
   drawList();
@@ -714,7 +747,19 @@ async function renderTournament(id, notice = null, who = null) {
         custom
           ? [h('span', { class: 'pill' }, 'Custom tournament'), tournament.venue ? ` · ${tournament.venue}` : null]
           : h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
-        tournament.badminfoId ? [' · ', h('a', { href: `https://badminfo.com/Tournament/${tournament.badminfoId}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗')] : null],
+        tournament.badminfoId ? [' · ', h('a', { href: `https://badminfo.com/Tournament/${tournament.badminfoId}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗')] : null,
+        tournament.completedAt ? [' · ', h('span', { class: 'pill ok' }, '✓ Complete')] : null],
+      h('button', {
+        title: tournament.completedAt ? 'Show it as unfinished again on the Tournaments page' : 'Nothing more to film, render or upload here (some matches had no video): stop highlighting it on the Tournaments page',
+        onclick: async () => {
+          try {
+            await api(`/api/tournaments/${id}/complete`, { method: 'PUT', body: { complete: !tournament.completedAt } });
+            renderTournament(id, h('div', { class: 'notice ok' }, tournament.completedAt ? 'Reopened: its card shows what’s left to do again.' : 'Marked complete: its card is no longer highlighted.'));
+          } catch (err) {
+            fill(msg, errorNotice(err));
+          }
+        },
+      }, icon(tournament.completedAt ? 'refresh' : 'check', 16), tournament.completedAt ? 'Reopen' : 'Mark complete'),
       reelBtn,
       renderAllBtn,
       custom ? null : refreshBtn,

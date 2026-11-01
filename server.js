@@ -48,6 +48,7 @@ const ROUTES = [
   ['DELETE', '/api/tournaments/:id', tournaments.onRequestDelete],
   ['POST', '/api/tournaments/:id/render-all', tournaments.renderAll],
   ['PUT', '/api/tournaments/:id', tournaments.update],
+  ['PUT', '/api/tournaments/:id/complete', tournaments.setComplete],
   ['PUT', '/api/tournaments/:id/players', tournaments.setPlayers],
   ['POST', '/api/tournaments/:id/matches', tournaments.addMatchRoute],
   ['PUT', '/api/tournaments/:id/matches/:mid', tournaments.updateMatchRoute],

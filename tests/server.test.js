@@ -105,3 +105,17 @@ test('the page and its scripts are served with a content security policy', async
     assert.equal((await fetch(`${base}/..%2fserver.js`)).status, 404);
   });
 });
+
+test('a tournament can be marked complete and reopened', async () => {
+  await withServer(async ({ db, base }) => {
+    const id = saveTournament(db, { beId: 'b997c3c5-38fb-4caf-a402-009664189ad6', badminfoId: null, name: 'Example', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') });
+    const put = (body) => fetch(`${base}/api/tournaments/${id}/complete`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify(body) });
+    assert.equal((await put({})).status, 400);
+    const done = await (await put({ complete: true })).json();
+    assert.match(done.completedAt, /^\d{4}-\d{2}-\d{2}T/);
+    const list = await (await fetch(`${base}/api/tournaments`)).json();
+    assert.equal(list.tournaments[0].completedAt, done.completedAt);
+    assert.equal((await (await put({ complete: false })).json()).completedAt, null);
+    assert.equal((await fetch(`${base}/api/tournaments/999/complete`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Origin: base }, body: '{"complete":true}' })).status, 404);
+  });
+});

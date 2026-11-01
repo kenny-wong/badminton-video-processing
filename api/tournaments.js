@@ -4,6 +4,7 @@
 //   filmed game by game), their videos and suggested links.
 // POST /api/tournaments/:id/refresh: re-reads its matches and results.
 // DELETE /api/tournaments/:id: forgets it (video files are untouched).
+// PUT /api/tournaments/:id/complete { complete }: marks it complete (no longer highlighted as unfinished), or not.
 // POST /api/tournaments/:id/render-all: queues a render of every filmed match (or game) whose rallies all have a winner and that isn't rendered yet.
 // Custom tournaments only:
 // PUT /api/tournaments/:id { name?, start?, end?, venue?, format? }: changes its details.
@@ -13,7 +14,7 @@
 
 import { fail, idParam, json, readJson, serverError } from '../lib/http.js';
 import { fetchTournament, saveTournament } from '../lib/tournaments.js';
-import { matchFromRow, tournamentFromRow, videoFromRow } from '../lib/db.js';
+import { matchFromRow, nowIso, tournamentFromRow, videoFromRow } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { groupParts, suggest } from '../lib/matching.js';
 import { checkResult, replayMatch } from '../public/shared/score.js';
@@ -80,6 +81,15 @@ export function onRequestDelete({ params, app }) {
   if (!id) return fail(404, 'notFound', 'No such tournament');
   app.db.prepare('DELETE FROM tournaments WHERE id = ?').run(id);
   return json({ ok: true });
+}
+
+export async function setComplete({ request, params, app }) {
+  const id = idParam(params.id);
+  const complete = (await readJson(request))?.complete;
+  if (typeof complete !== 'boolean') return fail(400, 'badInput', 'Send complete: true or false');
+  const at = complete ? nowIso() : null;
+  if (!id || !app.db.prepare('UPDATE tournaments SET completed_at = ? WHERE id = ?').run(at, id).changes) return fail(404, 'notFound', 'No such tournament');
+  return json({ ok: true, completedAt: at });
 }
 
 export function renderAll({ params, app }) {
