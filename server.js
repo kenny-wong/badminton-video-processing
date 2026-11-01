@@ -68,6 +68,7 @@ const ROUTES = [
   ['POST', '/api/youtube/signin', youtube.signIn],
   ['GET', '/api/youtube/callback', youtube.callback],
   ['POST', '/api/youtube/signout', youtube.signOutRoute],
+  ['POST', '/api/youtube/open', youtube.openPage],
   ['GET', '/api/reels', reels.onRequestGet],
   ['POST', '/api/reels', reels.onRequestPost],
   ['GET', '/api/matches/:id/suggestions', matches.suggestions],

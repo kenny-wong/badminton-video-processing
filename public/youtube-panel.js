@@ -59,10 +59,20 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
 
   const copyText = (label, text) => navigator.clipboard.writeText(text).then(() => say(`${label} copied`), () => say(`Couldn’t copy the ${label.toLowerCase()}`));
 
+  /** Opens a YouTube or Google page in the normal browser, not inside the app's window. */
+  const openOutside = (url) => api('/api/youtube/open', { method: 'POST', body: { url } }).catch(() => window.open(url, '_blank', 'noopener'));
+  // Links in the box (the uploaded video, the playlist, the audit form) go to the normal browser too.
+  el.addEventListener('click', (e) => {
+    const a = e.target.closest('a[target="_blank"]');
+    if (!a || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    openOutside(a.href);
+  });
+
   const startByHand = async (which) => {
-    // Clipboard first: once YouTube's tab has focus, the page can't write to the clipboard any more.
+    // Clipboard first: once YouTube's page has focus, the app can't write to the clipboard any more.
     await copyText('Title', uploads[which].title);
-    window.open(YOUTUBE_UPLOAD, '_blank', 'noopener');
+    openOutside(YOUTUBE_UPLOAD);
     api(`/api/matches/${id}/reveal`, { method: 'POST', body: { highlights: which === 'highlights' } }).catch((e) => say(e.message));
     byHand = which;
     draw();
@@ -114,8 +124,8 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
   const signIn = async () => {
     try {
       const { url } = await api('/api/youtube/signin', { method: 'POST' });
-      window.open(url, '_blank', 'noopener');
-      say('Finish signing in in the browser tab that opened');
+      openOutside(url);
+      say('Finish signing in in the browser window that opened');
       const until = Date.now() + SIGNIN_WAIT_MS;
       const poll = async () => {
         await refresh();

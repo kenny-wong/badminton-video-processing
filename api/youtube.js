@@ -5,6 +5,7 @@
 // POST /api/youtube/signin: { url } of Google's sign-in page; Google then sends the browser to
 // GET  /api/youtube/callback, which saves the sign-in and shows a page saying so.
 // POST /api/youtube/signout: forgets the sign-in.
+// POST /api/youtube/open { url }: opens a YouTube or Google page in the normal browser, outside the app's window.
 // POST /api/matches/:id/youtube { highlights?, privacy?, playlist? }: uploads the rendered video (a job; one upload at a time).
 
 import { existsSync } from 'node:fs';
@@ -18,6 +19,7 @@ import { loadMatch } from '../lib/pipeline.js';
 import { nowIso } from '../lib/db.js';
 import { youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
+import { openInBrowser } from '../lib/browser.js';
 import {
   accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, parseDescribed, pkce, playlistInfo, PRIVACY, readClient, readToken,
   signOut as forget, tournamentPlaylistTitle, uploadVideo, videoResource, videoStatus, youtubeDir,
@@ -107,6 +109,11 @@ export async function callback({ request, app }) {
     console.error('YouTube sign-in', err);
     return page('Not signed in', err.message, false);
   }
+}
+
+export async function openPage({ request }) {
+  const body = (await readJson(request)) ?? {};
+  return openInBrowser(body.url) ? json({ ok: true }) : fail(400, 'badInput', 'Only YouTube and Google pages open from here');
 }
 
 export async function signOutRoute({ app }) {
