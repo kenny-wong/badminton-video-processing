@@ -109,3 +109,7 @@ The server writes `logs\app.log` in its data folder (`data\` for `npm start`): s
 
 - Shuttle tracking and voice removal in the installer (they need Python and an NVIDIA GPU; for now only from a checkout with `analysis\setup.ps1`).
 - Automatic updates and a code-signed installer.
+
+## Licence
+
+MIT: see [LICENSE](LICENSE). The installer also brings FFmpeg, which has its own licence (GPL v3, included under `resourcesfmpeg` in the install folder).

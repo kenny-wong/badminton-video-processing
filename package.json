@@ -1,10 +1,11 @@
 {
   "name": "badminton-video",
   "productName": "Badminton Video",
-  "version": "1.28.4",
+  "version": "1.28.5",
   "private": true,
   "description": "Desktop app that links phone videos of badminton matches to Badminton England's tournament records, tags rallies, burns in the score, cuts the gaps between rallies and names the result for YouTube.",
   "author": "Kenny Wong",
+  "license": "MIT",
   "repository": "github:kenny-wong/badminton-video-processing",
   "type": "module",
   "main": "electron/main.js",
@@ -39,7 +40,8 @@
       "lib/**",
       "migrations/**",
       "public/**",
-      "!public/visual-kit/*.txt"
+      "!public/visual-kit/*.txt",
+      "LICENSE"
     ],
     "extraResources": [
       {
