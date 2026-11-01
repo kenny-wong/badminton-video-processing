@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { outputPath, safeName, TITLE_MAX, videoDescription, videoTitle } from '../lib/naming.js';
 import { parseTournamentLink } from '../lib/links.js';
-import { boardNames, cleanNameStyle, isMine, namesMatch, teamName } from '../public/shared/names.js';
+import { boardNames, cleanNameStyle, namesMatch, teamName } from '../public/shared/names.js';
 
 const tournament = { name: 'Example Junior Gold', start: '2026-10-24' };
 const match = { date: '2026-10-24', time: '09:40', draw: 'XD U15 - Group A', round: 'Round 1', court: 'Example School - 3', teamA: ['Amy Lee', 'Ben Ng'], teamB: ['Cat Ho', 'Dan Wu'] };
@@ -38,13 +38,11 @@ test('tournament links from badminfo and Badminton England', () => {
   assert.equal(parseTournamentLink(42), null);
 });
 
-test('player names: matching my players and scoreboard names', () => {
+test('player names: matching favourites and scoreboard names', () => {
   assert.ok(namesMatch('Man', 'Man Chan'));
   assert.ok(namesMatch('chan man', 'Man Chan'));
   assert.ok(!namesMatch('Ann', 'Anna Lee'));
   assert.ok(!namesMatch('', 'Anna Lee'));
-  assert.ok(isMine(['Amy Lee', 'Ben Ng'], ['Ben']));
-  assert.ok(!isMine(['Amy Lee'], []));
   assert.equal(teamName(['Amy Lee']), 'Amy Lee');
 });
 

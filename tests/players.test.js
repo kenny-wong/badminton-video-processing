@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { entrants, playerProfile } from '../lib/badminfo.js';
 import { openDb } from '../lib/db.js';
-import { matchPeople, myPlayers, refreshProfile, saveEntrants, teamIds, tournamentPeople } from '../lib/players.js';
+import { matchPeople, refreshProfile, saveEntrants, teamIds, tournamentPeople } from '../lib/players.js';
 import { videoDescription, videoTitle } from '../lib/naming.js';
 import { disciplineOf, isUpset, matchChance, percents, ratingSeries, record } from '../public/shared/players.js';
 import { playerId } from './fixtures/badminfo-sample.js';
@@ -85,14 +85,11 @@ test('ratingSeries and record', () => {
   assert.deepEqual(percents(0.635), ['64%', '36%']); // always adding up to 100
 });
 
-test('players are saved from imports, found for my names, and matched to a draw', async () => {
+test('players are saved from imports and matched to a draw', async () => {
   const db = openDb();
   db.prepare("INSERT INTO tournaments (be_id, badminfo_id, name, start_date, end_date) VALUES ('b', ?, 'Example Open', '2026-10-24', '2026-10-24')").run(T);
   saveEntrants(db, 1, entrants(TOURNAMENT));
   assert.deepEqual(teamIds(db, 1, ['amy lee', 'Nobody']), [AMY, '']);
-  const mine = myPlayers(db, ['Amy', 'Zed'], {});
-  assert.deepEqual(mine.map((p) => p.id), [AMY, null]);
-  assert.equal(myPlayers(db, ['Zed'], { Zed: DEE })[0].id, DEE);
 
   // Profiles are read only when stale; a failed read keeps what was there.
   let calls = 0;

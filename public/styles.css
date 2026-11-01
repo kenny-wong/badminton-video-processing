@@ -501,6 +501,9 @@ label.btn { cursor: pointer; }
 /* ---------- Players ---------- */
 .player-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .player-grid .card { margin: 0; }
+button.fav-star { border: 0; background: none; padding: 0 4px; min-height: 28px; font-size: 1.25rem; line-height: 1; color: var(--faint); box-shadow: none; }
+button.fav-star:hover { color: var(--focus); background: none; }
+button.fav-star.on { color: var(--focus); }
 .player-card h3 a { color: inherit; text-decoration: none; }
 .player-card h3 a:hover { color: var(--accent); }
 .stats.standings, .stats.summary { margin: 0 0 4px; max-width: 640px; }

@@ -1,4 +1,4 @@
-// Player names: which draw entries are "my players", and the short names the
+// Player names: which draw entries are a favourite player, and the short names the
 // scoreboard shows. No DOM code here; tested in tests/names.test.js.
 
 const words = (s) => String(s ?? '').toLowerCase().split(/[^\p{L}\p{N}'’-]+/u).filter(Boolean);
@@ -13,9 +13,6 @@ export function namesMatch(saved, name) {
   const have = new Set(words(name));
   return want.every((w) => have.has(w));
 }
-
-/** True when any player in the team (an array of names) is one of `players`. */
-export const isMine = (team, players) => (team ?? []).some((n) => (players ?? []).some((p) => namesMatch(p, n)));
 
 /** "Amy Lee / Ben Ng" */
 export const teamName = (team) => (team ?? []).join(' / ');

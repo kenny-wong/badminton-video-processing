@@ -1335,14 +1335,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         trackingBox,
         padBox)),
     export: h('div', {},
-      card('Render', 'scissors',
+      card('Render', 'rally-cut',
         h('label', { class: 'row small', title: 'How many seconds to keep each side of a rally is in Settings' }, cutBox, 'Cut the gaps between rallies'),
         h('label', { class: 'row small' }, overlayBox, 'Show the scoreboard'),
         h('label', { class: 'row small' }, highlightsBox, 'Highlights only: the ★ rallies, to a separate file', favCount),
         h('div', { class: 'row small' }, h('label', { class: 'row' }, titleCardBox, 'Title card'), h('label', { class: 'row' }, endCardBox, 'End card with the result')),
         h('label', { class: 'row small' }, replaysBox, 'Slow-motion replay after each ★ rally'),
         h('label', { class: 'row small', title: data.voices?.ready ? 'Demucs takes out players’ shouts, coaching and talk by the court, and keeps the shuttle hits. The first time takes a minute or so for a match; also used for clips.' : 'Run analysis\\setup.ps1 once to set this up (see the README)' },
-          voicesBox, data.voices?.ready ? 'Remove voices from the sound' : 'Remove voices (not set up yet: run analysis\\setup.ps1)'),
+          voicesBox, icon('voice-clean', 16), data.voices?.ready ? 'Remove voices from the sound' : 'Remove voices (not set up yet: run analysis\\setup.ps1)'),
         h('div', { class: 'row' }, renderBtn),
         renderBox,
         highlightsResult,
@@ -1351,18 +1351,18 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         youtube.el,
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox),
-      foldCard('clip', 'Clip of one rally', 'film',
+      foldCard('clip', 'Clip of one rally', 'match-video',
         clipTarget,
         h('div', { class: 'row' }, h('button', { class: 'small primary', onclick: () => makeClip(true) }, 'Upright 9:16 clip'), h('button', { class: 'small', onclick: () => makeClip(false) }, 'Clip as filmed')),
         h('p', { class: 'hint' }, 'For Shorts, Reels or a message: the rally with the seconds from Settings either side and the scoreboard. Upright clips follow the shuttle once it has been tracked.'),
         clipBox),
-      foldCard('scoreboard', 'Scoreboard', 'sliders',
+      foldCard('scoreboard', 'Scoreboard', 'scoreboard',
         h('div', { class: 'row small' }, lookSel, cornerSel),
         boardBox,
         h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
         h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.'))),
   };
-  const TABS = [['rallies', 'Rallies', 'list'], ['scoring', 'Scoring', 'sliders'], ['players', 'Players', 'user'], ['stats', 'Stats', 'wave'], ['tracking', 'Tracking', 'target'], ['export', 'Export', 'scissors']];
+  const TABS = [['rallies', 'Rallies', 'rally'], ['scoring', 'Scoring', 'scoreboard'], ['players', 'Players', 'user'], ['stats', 'Stats', 'wave'], ['tracking', 'Tracking', 'tracking'], ['export', 'Export', 'export']];
   let tab = TABS.some(([k]) => k === readTab()) ? readTab() : 'rallies';
   const tabBar = h('div', { class: 'panel-tabs', role: 'tablist' });
   const panel = h('div', { class: 'panel' });
@@ -1387,7 +1387,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
   showTab(tab);
   fill(headRight, saveState);
-  renderBtn.prepend(icon('scissors', 16));
+  renderBtn.prepend(icon('export', 16));
 
   fill(main,
     header,

@@ -11,11 +11,11 @@ import { fetchTournament, saveTournament } from '../lib/tournaments.js';
 import { matchFromRow, tournamentFromRow, videoFromRow } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { groupParts, suggest } from '../lib/matching.js';
-import { isMine } from '../public/shared/names.js';
 import { checkResult, replayMatch } from '../public/shared/score.js';
 import { matchFormat } from '../lib/pipeline.js';
 import { beTournamentUrl } from '../lib/links.js';
-import { myPlayers, refreshProfiles, tournamentPeople } from '../lib/players.js';
+import { refreshProfiles, tournamentPeople } from '../lib/players.js';
+import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { findTools } from '../lib/ffmpeg.js';
 import { jobView } from '../lib/jobs.js';
 import { startRender } from './matches.js';
@@ -38,10 +38,9 @@ async function importLink(app, link) {
   try {
     const t = await fetchTournament(link);
     const id = saveTournament(app.db, t);
-    // My players' profiles (for win chances) are read in the background; the page doesn't wait.
-    const settings = readSettings(app.db);
+    // The favourites' profiles (for win chances) are read in the background; the page doesn't wait.
     const entered = new Set((t.players ?? []).map((p) => p.id));
-    const mine = myPlayers(app.db, settings.players, settings.playerLinks).map((p) => p.id).filter((pid) => entered.has(pid));
+    const mine = favourites(app.db).map((f) => f.id).filter((pid) => entered.has(pid));
     refreshProfiles(app.db, mine).catch((err) => console.error('reading player profiles', err));
     return json({ id, matches: t.matches.length, players: t.players?.length ?? 0 }, 201);
   } catch (err) {
@@ -90,8 +89,9 @@ export function getOne({ params, app }) {
   const id = idParam(params.id);
   const tournament = tournamentFromRow(id && app.db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id));
   if (!tournament) return fail(404, 'notFound', 'No such tournament');
-  const { players } = readSettings(app.db);
-  const rows = app.db.prepare('SELECT * FROM matches WHERE tournament_id = ? ORDER BY match_date, match_time, draw, id, game').all(id).map(matchFromRow);
+  const favs = favourites(app.db);
+  const sides = favouriteMatcher(app.db, id, favs);
+  const rows =app.db.prepare('SELECT * FROM matches WHERE tournament_id = ? ORDER BY match_date, match_time, draw, id, game').all(id).map(matchFromRow);
   const matches = rows.filter((m) => !m.game);
   const linked = app.db.prepare(`SELECT v.* FROM videos v JOIN matches m ON m.id = v.match_id WHERE m.tournament_id = ? ORDER BY v.part`).all(id).map(videoFromRow);
   const from = tournament.start ? Date.parse(`${tournament.start}T00:00:00Z`) - DAY_MS : 0;
@@ -115,20 +115,25 @@ export function getOne({ params, app }) {
     };
   };
   const peopleOf = tournamentPeople(app.db, tournament);
-  const shown = matches.map((m) => ({
-    ...status(m),
-    people: peopleOf(m),
-    mine: isMine(m.teamA, players) || isMine(m.teamB, players),
-    // One slot per game played (or with a row already); a slot without a row has no id yet.
-    units: Array.from({ length: Math.max(m.games.length, ...rows.filter((g) => g.parentId === m.id).map((g) => g.game)) }, (_, k) => {
-      const row = rows.find((g) => g.parentId === m.id && g.game === k + 1);
-      return row ? status(row) : { id: null, game: k + 1, videoIds: [], rallyCount: 0 };
-    }),
-  }));
+  const shown = matches.map((m) => {
+    const favsIn = { a: sides(m.teamA), b: sides(m.teamB) };
+    return {
+      ...status(m),
+      people: peopleOf(m),
+      favs: favsIn, // keys of the favourites on each side
+      mine: Boolean(favsIn.a.length || favsIn.b.length),
+      // One slot per game played (or with a row already); a slot without a row has no id yet.
+      units: Array.from({ length: Math.max(m.games.length, ...rows.filter((g) => g.parentId === m.id).map((g) => g.game)) }, (_, k) => {
+        const row = rows.find((g) => g.parentId === m.id && g.game === k + 1);
+        return row ? status(row) : { id: null, game: k + 1, videoIds: [], rallyCount: 0 };
+      }),
+    };
+  });
   const filmed = new Set(linked.map((v) => rows.find((m) => m.id === v.matchId)?.parentId ?? v.matchId));
   const anyMine = shown.some((m) => m.mine);
   const candidates = shown.filter((m) => !filmed.has(m.id) && (!anyMine || m.mine))
     .map((m) => ({ id: m.id, startsAt: Date.parse(m.startsAt), duration: m.duration }));
   const groups = groupParts(free.map((v) => ({ id: v.id, recordedAt: Date.parse(v.recordedAt), duration: v.duration })));
-  return json({ tournament, matches: shown, videos: [...linked, ...free], suggestions: suggest(groups, candidates), players });
+  const here = new Set(shown.flatMap((m) => [...m.favs.a, ...m.favs.b]));
+  return json({ tournament, matches: shown, videos: [...linked, ...free], suggestions: suggest(groups, candidates), favourites: favs.filter((f) => here.has(f.key)) });
 }

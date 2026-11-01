@@ -1,14 +1,18 @@
-// GET /api/players: my players (Settings) with their badminfo data and filmed matches.
-// POST /api/players/refresh: re-reads every badminfo tournament's entrants and my players' profiles.
-// PUT /api/players/link { name, link }: ties one of my players to a badminfo profile link ('' unties).
+// GET /api/players: the favourite players (★) with their badminfo data and filmed matches.
+// GET /api/players/search?q=: players in imported badminfo tournaments whose name has every word of q.
+// POST /api/players/refresh: re-reads every badminfo tournament's entrants and the favourites' profiles.
 // GET /api/players/:id[?refresh=1]: one player, their matches in imported tournaments and rating history.
 // GET /api/matches/:id/people[?refresh=1]: a match's players, win chance, earlier meetings and the opponents' other filmed matches.
+// GET /api/favourites: the favourites with the tournaments each one joined.
+// POST /api/favourites { id } | { link } | { name }: stars a player (by badminfo id or link), or a name.
+// PUT /api/favourites/:key { link }: ties a name-only favourite to a badminfo profile link.
+// DELETE /api/favourites/:key: unstars one.
 
-import { fail, json, readJson } from '../lib/http.js';
+import { fail, idParam, json, readJson } from '../lib/http.js';
 import { apiUrl, badminfoId, entrants, getJson, playerPageUrl } from '../lib/badminfo.js';
 import { matchFromRow } from '../lib/db.js';
-import { matchPeople, myPlayers, playerFromRow, refreshProfile, refreshProfiles, saveEntrants, teamIds } from '../lib/players.js';
-import { readSettings, writeSettings } from '../lib/settings.js';
+import { matchPeople, playerFromRow, refreshProfile, refreshProfiles, saveEntrants, teamIds } from '../lib/players.js';
+import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite } from '../lib/favourites.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { disciplineOf, ratingSeries, record, resultWinner } from '../public/shared/players.js';
 
@@ -42,15 +46,32 @@ const view = (m, r, side = null) => ({
 });
 
 export function onRequestGet({ app }) {
-  const settings = readSettings(app.db);
-  const mine = myPlayers(app.db, settings.players, settings.playerLinks).map((p) => {
-    const row = p.id && app.db.prepare('SELECT * FROM players WHERE id = ?').get(p.id);
-    const matches = p.id ? matchesOf(app.db, p.id) : [];
-    return { ...p, linked: Boolean(settings.playerLinks[p.name]), player: playerFromRow(row) ?? null, matches: matches.length, filmed: matches.filter((m) => m.filmed).length, record: record(matches) };
+  const favs = favourites(app.db);
+  const joined = favouriteTournaments(app.db, favs);
+  const cards = favs.map((f) => {
+    const row = f.id && app.db.prepare('SELECT * FROM players WHERE id = ?').get(f.id);
+    const matches = f.id ? matchesOf(app.db, f.id) : [];
+    const there = Object.values(joined[f.key]);
+    return {
+      ...f, player: playerFromRow(row) ?? null, tournaments: there.length,
+      matches: f.id ? matches.length : there.reduce((a, b) => a + b, 0), filmed: matches.filter((m) => m.filmed).length, record: record(matches),
+    };
   });
   const known = app.db.prepare('SELECT COUNT(*) AS n FROM players').get().n;
   const badminfoTournaments = app.db.prepare('SELECT COUNT(*) AS n FROM tournaments WHERE badminfo_id IS NOT NULL').get().n;
-  return json({ mine, known, badminfoTournaments });
+  return json({ favourites: cards, known, badminfoTournaments });
+}
+
+const MAX_FOUND = 30;
+
+export function search({ request, app }) {
+  const words = (new URL(request.url).searchParams.get('q') ?? '').slice(0, 80).split(/\s+/).filter(Boolean).slice(0, 5);
+  if (!words.length) return json({ players: [] });
+  const rows = app.db.prepare(`SELECT p.*, (SELECT COUNT(DISTINCT tp.tournament_id) FROM tournament_players tp WHERE tp.player_id = p.id) AS tournaments
+    FROM players p WHERE ${words.map(() => "p.name LIKE ? ESCAPE '\\'").join(' AND ')} ORDER BY tournaments DESC, p.name LIMIT ${MAX_FOUND}`)
+    .all(...words.map((w) => `%${w.replace(/[\\%_]/g, '\\$&')}%`));
+  const starred = new Map(favourites(app.db).filter((f) => f.id).map((f) => [f.id, f.key]));
+  return json({ players: rows.map((r) => ({ ...playerFromRow(r), tournaments: r.tournaments, favourite: starred.get(r.id) ?? null })) });
 }
 
 export async function refresh({ app }) {
@@ -62,28 +83,58 @@ export async function refresh({ app }) {
     saveEntrants(db, t.id, entrants(got.json));
     tournaments += 1;
   }
-  const settings = readSettings(db);
-  const ids = myPlayers(db, settings.players, settings.playerLinks).map((p) => p.id);
-  const profiles = await refreshProfiles(db, ids, { maxAge: 0 });
+  const profiles = await refreshProfiles(db, favourites(db).map((f) => f.id), { maxAge: 0 });
   return json({ ok: true, tournaments, profiles });
 }
 
-export async function link({ request, app }) {
-  const body = await readJson(request);
-  const settings = readSettings(app.db);
-  if (!settings.players.includes(body?.name)) return fail(400, 'badInput', 'That isn’t one of your players (Settings)');
-  const links = { ...settings.playerLinks };
-  if (!body.link) delete links[body.name];
-  else {
-    const id = badminfoId(String(body.link), 'player') ?? (GUID.test(String(body.link).trim().toLowerCase()) ? String(body.link).trim().toLowerCase() : null);
-    if (!id) return fail(400, 'badLink', 'Paste the player’s badminfo link, like https://badminfo.com/Player/…');
-    if (!(await refreshProfile(app.db, id, { maxAge: 0 })) && !app.db.prepare('SELECT 1 FROM players WHERE id = ?').get(id)) {
-      return fail(404, 'notFound', 'badminfo has no player with that link (or couldn’t be reached)');
-    }
-    links[body.name] = id;
+export function favouritesList({ app }) {
+  const favs = favourites(app.db);
+  const joined = favouriteTournaments(app.db, favs);
+  return json({ favourites: favs.map((f) => ({ ...f, tournaments: joined[f.key] })) });
+}
+
+/** The player a pasted badminfo link (or id) names, read from badminfo; or an error response. */
+async function linkedPlayer(db, link) {
+  const text = String(link ?? '').trim();
+  const id = badminfoId(text, 'player') ?? (GUID.test(text.toLowerCase()) ? text.toLowerCase() : null);
+  if (!id) return { error: fail(400, 'badLink', 'Paste the player’s badminfo link, like https://badminfo.com/Player/…') };
+  await refreshProfile(db, id, { maxAge: 0 }).catch(() => false);
+  const row = db.prepare('SELECT id, name FROM players WHERE id = ?').get(id);
+  return row ?? { error: fail(404, 'notFound', 'badminfo has no player with that link (or couldn’t be reached)') };
+}
+
+export async function addFavouriteRoute({ request, app }) {
+  const body = (await readJson(request)) ?? {};
+  let player;
+  if (body.id !== undefined) {
+    const id = String(body.id).toLowerCase();
+    player = GUID.test(id) && app.db.prepare('SELECT id, name FROM players WHERE id = ?').get(id);
+    if (!player) return fail(404, 'notFound', 'That player isn’t in any imported tournament');
+  } else if (body.link !== undefined) {
+    player = await linkedPlayer(app.db, body.link);
+    if (player.error) return player.error;
+  } else {
+    const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ').slice(0, 80) : '';
+    if (!name) return fail(400, 'badInput', 'Type the player’s name as in the draws');
+    player = { id: null, name };
   }
-  writeSettings(app.db, { ...settings, playerLinks: links });
-  return json({ ok: true, playerLinks: links });
+  // A favourite's profile (win chances, rating history) is read in the background.
+  if (player.id) refreshProfile(app.db, player.id).catch((err) => console.error('reading a player profile', err));
+  return json({ key: addFavourite(app.db, player) }, 201);
+}
+
+export async function linkFavouriteRoute({ request, params, app }) {
+  const key = idParam(params.key);
+  if (!key || !app.db.prepare('SELECT 1 FROM favourites WHERE id = ?').get(key)) return fail(404, 'notFound', 'No such favourite');
+  const player = await linkedPlayer(app.db, (await readJson(request))?.link);
+  if (player.error) return player.error;
+  return json({ key: linkFavourite(app.db, key, player.id, player.name) });
+}
+
+export function removeFavouriteRoute({ params, app }) {
+  const key = idParam(params.key);
+  if (!key || !removeFavourite(app.db, key)) return fail(404, 'notFound', 'No such favourite');
+  return json({ ok: true });
 }
 
 export async function getOne({ request, params, app }) {
@@ -97,6 +148,7 @@ export async function getOne({ request, params, app }) {
   const { rubbers, ...rest } = player;
   return json({
     player: { ...rest, url: playerPageUrl(id) },
+    favourite: favourites(app.db).find((f) => f.id === id)?.key ?? null,
     matches,
     record: record(matches),
     filmedRecord: record(matches.filter((m) => m.filmed)),
@@ -120,10 +172,9 @@ export async function matchPeopleRoute({ request, params, app }) {
   const has = (team, side) => team.some((n) => side.includes(n.toLowerCase()));
   const names = (k) => [loaded.match.teamA, loaded.match.teamB][k].map((n) => n.toLowerCase());
   const meetings = [...others.values()].filter((m) => (has(m.teamA, names(0)) && has(m.teamB, names(1))) || (has(m.teamA, names(1)) && has(m.teamB, names(0))));
-  // The opponents: the side without my players, when exactly one side has them.
-  const settings = readSettings(db);
-  const mineIds = new Set(myPlayers(db, settings.players, settings.playerLinks).map((p) => p.id).filter(Boolean));
-  const mineSide = [0, 1].filter((k) => ids[k].some((x) => mineIds.has(x)));
+  // The opponents: the side without favourites, when exactly one side has them.
+  const sides = favouriteMatcher(db, loaded.tournament.id, favourites(db));
+  const mineSide = [0, 1].filter((k) => sides([loaded.match.teamA, loaded.match.teamB][k]).length);
   const opp = mineSide.length === 1 ? 1 - mineSide[0] : null;
   const scouting = opp === null ? [] : [...others.values()]
     .filter((m) => m.filmed && !meetings.includes(m) && (has(m.teamA, names(opp)) || has(m.teamB, names(opp))));

@@ -63,7 +63,7 @@ test('settings keep only valid values', () => {
   assert.deepEqual(readSettings(db), DEFAULTS);
   const s = cleanSettings({ videoFolders: [' C:\\Videos ', '', 'C:\\Videos'], players: 'Amy', pre: 99, post: 1.5, outputFolder: '  ' });
   assert.deepEqual(s.videoFolders, ['C:\\Videos']);
-  assert.deepEqual(s.players, []);
+  assert.equal(s.players, undefined); // favourites live in their own table now
   assert.equal(s.pre, DEFAULTS.pre);
   assert.equal(s.post, 1.5);
   assert.equal(s.outputFolder, DEFAULTS.outputFolder);

@@ -35,7 +35,8 @@ import { renderClip } from '../lib/clip.js';
 import { suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
-import { isMine, teamName } from '../public/shared/names.js';
+import { teamName } from '../public/shared/names.js';
+import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
 
@@ -50,8 +51,8 @@ export function onRequestGet({ params, app }) {
   const loaded = load(app, params);
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const settings = readSettings(app.db);
-  const { players } = settings;
   const { match } = loaded;
+  const sides = favouriteMatcher(app.db, loaded.tournament.id, favourites(app.db));
   const source = sourceFor(loaded);
   const described = { people: matchPeople(app.db, loaded), options: settings.description };
   const jobs = Object.fromEntries(['prepare', 'analyse', 'render', 'track'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
@@ -61,7 +62,7 @@ export function onRequestGet({ params, app }) {
     format: matchFormat(match),
     tracking: { ready: tracker().ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
     formatChosen: Boolean(match.format),
-    mine: { a: isMine(match.teamA, players), b: isMine(match.teamB, players) },
+    mine: { a: sides(match.teamA).length > 0, b: sides(match.teamB).length > 0 },
     nameStyle: settings.nameStyle,
     board: resolveBoard(settings.board, match.boardStyle),
     cards: settings.cards,

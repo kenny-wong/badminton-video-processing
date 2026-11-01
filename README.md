@@ -44,6 +44,7 @@ Data (the SQLite database) lives in `data/`; rendered videos go to the folder ch
 
 ## Getting around
 
+- The home page has a compact court banner. A shuttle-and-play app mark, badminton-specific icons, and illustrated setup and empty libraries follow the app's light or dark theme.
 - The home page has a **search** across every imported match (player, tournament or event; narrow it to matches with a video, tagged or on YouTube) and a **To do** list of filmed matches still to tag, to render or to upload, plus videos not linked to anything.
 - **Jobs** (in the header while anything runs) lists the background work. Renders and shuttle tracking take turns on the graphics card: start several and they queue. **Render all tagged** on a tournament page queues every filmed match whose rallies all have a winner and that has no video yet.
 - In the editor, the switch next to the speed plays the original or any rendered file (whole match, highlights, clips). A render as long as the original keeps the rally timeline and scores; a cut one, highlights or a clip plays on its own, with a plain seek bar and 2 s / 10 s jumps, and tagging keys off until you choose Original again. The bin next to the switch deletes the rendered file being played (never the original), and the match forgets it. On the Export tab, Scoreboard and Clip of one rally fold away and remember whether they were open.
@@ -100,4 +101,5 @@ The server writes `data\logs\app.log`: starts and stops, and when each backgroun
 
 ## Not yet
 
+- Direct upload to YouTube (needs a Google Cloud project that has passed Google's API audit; until then uploads through the API are locked to private).
 - Working out who won each rally from the video itself (shuttle tracking).

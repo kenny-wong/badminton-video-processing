@@ -1,36 +1,74 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { readdirSync, readFileSync } from 'node:fs';
 
-import { cleanRallies, mergeWinners } from '../public/shared/score.js';
-import { outputPath, videoTitle } from '../lib/naming.js';
-import { plan } from '../lib/render.js';
-import { thumbTime } from '../lib/thumbs.js';
+import { migrate, openDb } from '../lib/db.js';
+import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite } from '../lib/favourites.js';
+import { playerId } from './fixtures/badminfo-sample.js';
 
-const tournament = { name: 'Example Junior Gold', start: '2026-10-24' };
-const match = { date: '2026-10-24', time: '09:40', draw: 'XD U15 - Group A', round: 'Round 1', teamA: ['Amy Lee'], teamB: ['Cat Ho'] };
+const [AMY, AMY2, CAT] = [1, 2, 3].map(playerId);
 
-test('favourite marks survive saving and finding rallies again', () => {
-  assert.deepEqual(cleanRallies([{ start: 1, end: 4, winner: 'a', fav: true }, { start: 6, end: 9, winner: 'b', fav: 'yes' }]),
-    [{ start: 1, end: 4, winner: 'a', fav: true }, { start: 6, end: 9, winner: 'b' }]);
-  const merged = mergeWinners([{ start: 0, end: 5 }, { start: 10, end: 15 }], [{ start: 1, end: 4, winner: null, fav: true }]);
-  assert.deepEqual(merged, [{ start: 0, end: 5, winner: null, fav: true }, { start: 10, end: 15, winner: null }]);
+/** Two tournaments: one from badminfo (two players called Amy), one from Badminton England only (names, no ids). */
+function setUp() {
+  const db = openDb();
+  const t = db.prepare("INSERT INTO tournaments (be_id, badminfo_id, name, start_date, end_date) VALUES (?, ?, ?, '2026-10-24', '2026-10-24')");
+  t.run('b1', 'f1', 'Example Open');
+  t.run('b2', null, 'Example Cup');
+  const p = db.prepare('INSERT INTO players (id, name) VALUES (?, ?)');
+  for (const [id, name] of [[AMY, 'Amy Lee'], [AMY2, 'Amy Lee'], [CAT, 'Cat Ho']]) p.run(id, name);
+  const tp = db.prepare('INSERT INTO tournament_players (tournament_id, name, player_id) VALUES (1, ?, ?)');
+  tp.run('Amy Lee', AMY);
+  tp.run('Cat Ho', CAT);
+  const m = db.prepare("INSERT INTO matches (tournament_id, draw, round, team_a, team_b, match_date, match_time) VALUES (?, ?, 'R1', ?, ?, '2026-10-24', '09:00')");
+  m.run(1, 'WS', JSON.stringify(['Amy Lee']), JSON.stringify(['Cat Ho']));
+  m.run(2, 'WS', JSON.stringify(['amy lee']), JSON.stringify(['Eve Ng']));
+  m.run(2, 'WD', JSON.stringify(['Eve Ng', 'Fay Wu']), JSON.stringify(['Cat Ho', 'Gil Yu']));
+  return db;
+}
+
+test('the old "My players" settings move to favourites, with their pasted links', () => {
+  const db = new DatabaseSync(':memory:');
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const f of readdirSync(dir).filter((x) => x < '0011').sort()) db.exec(readFileSync(new URL(f, dir), 'utf8'));
+  db.exec('PRAGMA user_version = 10');
+  const put = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
+  put.run('players', JSON.stringify(['Zed', 'Amy', 'Zed']));
+  put.run('playerLinks', JSON.stringify({ Amy: AMY }));
+  put.run('sensitivity', '5');
+  migrate(db);
+  assert.deepEqual(db.prepare('SELECT name, player_id FROM favourites ORDER BY id').all().map((r) => ({ ...r })), [{ name: 'Zed', player_id: null }, { name: 'Amy', player_id: AMY }]);
+  assert.deepEqual(db.prepare('SELECT key FROM settings').all().map((r) => r.key), ['sensitivity']);
 });
 
-test('highlights get their own title and file name', () => {
-  assert.match(videoTitle({ tournament, match, games: [[21, 3]], highlights: true }), /^Highlights: Example Junior Gold/);
-  assert.equal(outputPath({ tournament, match, highlights: true })[2], '0940 XD U15 - Group A Round 1 - Lee v Ho (highlights).mp4');
+test('favourites: a name is tied to its player once only one player has it', () => {
+  const db = setUp();
+  const amy = addFavourite(db, { name: 'Amy' });
+  const cat = addFavourite(db, { name: 'cat' });
+  assert.equal(addFavourite(db, { name: 'Amy' }), amy); // no duplicates
+  // Two Amy Lees: Amy stays a name; one Cat Ho: cat becomes her.
+  assert.deepEqual(favourites(db), [{ key: amy, name: 'Amy', id: null, candidates: 2 }, { key: cat, name: 'Cat Ho', id: CAT, candidates: 0 }]);
+  assert.equal(addFavourite(db, { id: CAT, name: 'Cat Ho' }), cat);
+  // Pasting the right Amy's link ties her; pasting someone already starred merges the two.
+  assert.equal(linkFavourite(db, amy, AMY, 'Amy Lee'), amy);
+  const dup = addFavourite(db, { name: 'Ho' });
+  assert.equal(linkFavourite(db, dup, CAT, 'Cat Ho'), cat);
+  assert.deepEqual(favourites(db).map((f) => [f.name, f.id]), [['Amy Lee', AMY], ['Cat Ho', CAT]]);
+  assert.equal(removeFavourite(db, cat), true);
+  assert.equal(removeFavourite(db, cat), false);
 });
 
-test('highlights keep each favourite rally as its own clip', () => {
-  const favs = [{ start: 10, end: 20 }, { start: 23, end: 30 }];
-  assert.equal(plan(favs, 100, { pre: 2, post: 2, mergeGap: 0 }).length, 1); // overlapping clips still join
-  assert.equal(plan([{ start: 10, end: 20 }, { start: 26, end: 30 }], 100, { pre: 2, post: 2, mergeGap: 0 }).length, 2);
-});
-
-test('thumbnails are taken a minute into the match, or a tenth of a short video', () => {
-  assert.equal(thumbTime(null, 2400), 60);
-  assert.equal(thumbTime(300, 2400), 360);
-  assert.equal(thumbTime(null, 120), 12);
-  assert.equal(thumbTime(null, 0.5), 0);
-  assert.equal(thumbTime(null, null), 0);
+test('favourites are picked out by id in badminfo draws and by name elsewhere, with the tournaments they joined', () => {
+  const db = setUp();
+  const amy2 = addFavourite(db, { id: AMY2, name: 'Amy Lee' }); // the other Amy Lee
+  const cat = addFavourite(db, { id: CAT, name: 'Cat Ho' });
+  const favs = favourites(db);
+  const inOpen = favouriteMatcher(db, 1, favs);
+  assert.deepEqual(inOpen(['Amy Lee']), []); // her namesake, by id
+  assert.deepEqual(inOpen(['cat ho']), [cat]);
+  const inCup = favouriteMatcher(db, 2, favs);
+  assert.deepEqual(inCup(['amy lee']), [amy2]); // no ids there: by name
+  assert.deepEqual(inCup(['Cat Ho', 'Gil Yu']), [cat]);
+  assert.deepEqual(favouriteTournaments(db, favs), { [amy2]: { 2: 1 }, [cat]: { 1: 1, 2: 1 } });
+  assert.deepEqual(favouriteTournaments(db, []), {});
 });

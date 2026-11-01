@@ -1,4 +1,5 @@
 // A small set of line icons (24×24, drawn with the current text colour), as SVG elements.
+import { paths as visualPaths, visualIcon } from './visual-kit/icons.js';
 
 const PATHS = {
   trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3',
@@ -30,6 +31,7 @@ const PATHS = {
 
 /** An icon as an SVG element, e.g. icon('play'). */
 export function icon(name, size = 18) {
+  if (Object.hasOwn(visualPaths, name)) return visualIcon(name, size);
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');

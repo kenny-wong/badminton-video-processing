@@ -2,19 +2,20 @@
 //   #/            tournaments, import, scan
 //   #/t/<id>      a tournament's matches and their videos
 //   #/m/<id>      the match editor
-//   #/players     my players' badminfo ratings (players-page.js)
+//   #/players     favourite players (★) and a search of everyone (players-page.js)
 //   #/p/<id>      one player, by badminfo id
 //   #/videos      every video found
 //   #/jobs        background jobs (jobs-page.js)
-//   #/settings    folders, players, cutting
+//   #/settings    folders, cutting, scoreboard, output
 
 import { h, fill, when, day, megabytes, ukDate, gamesView } from './dom.js';
 import { api, waitJob } from './api.js';
-import { boardNames, isMine, NAME_STYLES, teamName } from './shared/names.js';
+import { boardNames, NAME_STYLES, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
 import { clock } from './shared/time.js';
 import { renderEditor } from './editor.js';
 import { icon } from './icons.js';
+import { tournamentHero, illustratedEmpty } from './visuals.js';
 import { errorNotice } from './notice.js';
 import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, LAYOUTS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
@@ -125,7 +126,7 @@ function setTab(name) {
 }
 
 // Icons in the header's section links.
-for (const [tab, name] of [['home', 'trophy'], ['players', 'user'], ['videos', 'film'], ['settings', 'settings']]) {
+for (const [tab, name] of [['home', 'court'], ['players', 'user'], ['videos', 'match-video'], ['settings', 'settings']]) {
   document.querySelector(`.tabs a[data-tab="${tab}"]`)?.prepend(icon(name, 17));
 }
 
@@ -157,7 +158,7 @@ async function runJob(box, start) {
 async function renderHome() {
   setTab('home');
   document.title = 'Badminton Video';
-  const [{ settings }, { tournaments }, todo] = await Promise.all([api('/api/settings'), api('/api/tournaments'), api('/api/overview')]);
+  const [{ settings }, { tournaments }, todo, { favourites: favs }] = await Promise.all([api('/api/settings'), api('/api/tournaments'), api('/api/overview'), api('/api/favourites')]);
   const importMsg = h('div');
   const scanBox = h('div');
   const link = h('input', { type: 'url', placeholder: 'https://badminfo.com/Tournament/… or https://be.tournamentsoftware.com/tournament/…', 'aria-label': 'Tournament link' });
@@ -234,17 +235,43 @@ async function renderHome() {
         todo[k].length ? h('ul', { class: 'match-list' }, todo[k].map(todoItem)) : h('p', { class: 'hint' }, 'Nothing here.')))))
     : null;
 
-  const setup = !settings.videoFolders.length || !settings.players.length;
+  const setup = !settings.videoFolders.length || !favs.length;
   const stat = (n, label) => h('div', { class: 'stat' }, h('b', {}, n), h('span', {}, label));
+
+  // ---- imported tournaments, all or only those a favourite player joined ----
+  const listTitle = h('div', { class: 'section-title' });
+  const list = h('div');
+  const firstName = (f) => f.name.split(' ')[0];
+  const playerSel = favs.length ? h('select', { 'aria-label': 'Whose tournaments', onchange: () => { writeHomePlayer(playerSel.value); drawList(); } },
+    h('option', { value: '' }, 'Every tournament'),
+    favs.map((f) => h('option', { value: String(f.key) }, `★ ${f.name} (${Object.keys(f.tournaments).length})`))) : null;
+  if (playerSel) playerSel.value = favs.some((f) => String(f.key) === readHomePlayer()) ? readHomePlayer() : '';
+  const drawList = () => {
+    const f = favs.find((x) => String(x.key) === playerSel?.value);
+    const shown = f ? tournaments.filter((t) => Object.hasOwn(f.tournaments, t.id)) : tournaments;
+    fill(listTitle, icon('trophy', 15), f ? `${f.name}’s tournaments (${shown.length} of ${tournaments.length})` : `Imported tournaments (${tournaments.length})`);
+    fill(list, shown.length
+      ? h('div', { class: 'tournament-list' }, shown.map((t) => h('a', { class: 'card', href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}` },
+        h('h3', {}, t.name),
+        h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
+        f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
+          ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
+        h('div', { class: 'stats' }, stat(t.matches, 'matches'), stat(t.filmed, 'filmed'), stat(t.rendered, 'rendered'), stat(t.uploaded, 'YouTube')))))
+      : illustratedEmpty(f ? `No tournaments for ${f.name} yet.` : 'Your match library starts here.',
+        f ? 'Import a tournament they have entered to see their matches here.' : 'Paste a badminfo or Badminton England link above to bring in the matches, then link your footage.'));
+  };
+  drawList();
   fill(main,
-    pageHead('Tournaments', 'Link phone videos to Badminton England matches, tag rallies, and make edited videos.'),
-    setup ? h('div', { class: 'card' },
+    tournamentHero(tournaments),
+    setup ? h('div', { class: 'card setup-card' }, h('div', {},
       h('h3', { class: 'card-title' }, icon('check'), 'Getting started'),
       h('ol', { class: 'steps' },
-        h('li', {}, h('span', {}, h('a', { href: '#/settings' }, 'Settings'), ': add the folders where your phone videos are, and your players’ names.')),
+        h('li', {}, h('span', {}, h('a', { href: '#/settings' }, 'Settings'), ': add the folders where your phone videos are.')),
+        h('li', {}, h('span', {}, h('a', { href: '#/players' }, 'Players'), ': star your players (★) to pick out their matches.')),
         h('li', {}, h('span', {}, 'Import a tournament with its badminfo or Badminton England link.')),
         h('li', {}, h('span', {}, 'Scan the video folders: each video is matched to a match by when it was recorded.')),
-        h('li', {}, h('span', {}, 'Open a match to tag rallies, then render it with the score and without the gaps.')))) : null,
+        h('li', {}, h('span', {}, 'Open a match to tag rallies, then render it with the score and without the gaps.')))),
+      h('img', { class: 'setup-art', src: 'visual-kit/shuttle-video.png', alt: '', width: 190, height: 175, loading: 'lazy' })) : null,
     h('div', { class: 'home-grid' },
       h('div', { class: 'card stack' },
         h('h3', { class: 'card-title' }, icon('import'), 'Import a tournament'),
@@ -252,18 +279,28 @@ async function renderHome() {
         h('p', { class: 'hint' }, 'Re-importing the same tournament updates times, courts and results, and keeps your tagging.'),
         importMsg),
       h('div', { class: 'card stack' },
-        h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('film'), 'Phone videos'), scanBtn),
+        h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('match-video'), 'Phone videos'), scanBtn),
         h('p', { class: 'hint' }, settings.videoFolders.length ? settings.videoFolders.join(' · ') : ['No video folders yet. ', h('a', { href: '#/settings' }, 'Add them in Settings.')]),
         scanBox)),
     h('div', { class: 'card stack' }, h('div', { class: 'row' }, query, only), results),
     todoBox,
-    h('div', { class: 'section-title' }, icon('trophy', 15), `Imported tournaments (${tournaments.length})`),
-    tournaments.length
-      ? h('div', { class: 'tournament-list' }, tournaments.map((t) => h('a', { class: 'card', href: `#/t/${t.id}` },
-        h('h3', {}, t.name),
-        h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
-        h('div', { class: 'stats' }, stat(t.matches, 'matches'), stat(t.filmed, 'filmed'), stat(t.rendered, 'rendered'), stat(t.uploaded, 'YouTube')))))
-      : emptyState('trophy', 'No tournaments yet. Paste a badminfo or Badminton England link above.'));
+    h('div', { class: 'row spread' }, listTitle, playerSel),
+    list);
+}
+
+// The Tournaments page's favourite player (whose tournaments it lists), per device.
+const HOME_PLAYER_KEY = 'badminton-video:home-player:v1';
+function readHomePlayer() {
+  try {
+    return localStorage.getItem(HOME_PLAYER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+function writeHomePlayer(key) {
+  try {
+    localStorage.setItem(HOME_PLAYER_KEY, key);
+  } catch { /* storage blocked */ }
 }
 
 // ---------- One tournament ----------
@@ -291,7 +328,7 @@ function writePrefs(prefs) {
 const youtubeLink = (m) => m.youtubeUrl && h('a', { class: 'yt-link small', href: m.youtubeUrl, target: '_blank', rel: 'noopener', title: 'Watch on YouTube' },
   '▶ YouTube ', h('span', { class: 'muted' }, m.youtubeUrl.replace(/^https:\/\//, '')));
 
-async function renderTournament(id, notice = null) {
+async function renderTournament(id, notice = null, who = null) {
   setTab('home');
   const data = await api(`/api/tournaments/${id}`);
   const { tournament, matches, videos, suggestions } = data;
@@ -301,7 +338,15 @@ async function renderTournament(id, notice = null) {
   const suggested = new Set(suggestions.flatMap((s) => s.ids));
   const free = videos.filter((v) => !v.matchId);
   const anyMine = matches.some((m) => m.mine);
-  const prefs = { view: 'list', onlyMine: true, hideNoVideo: false, ...readPrefs() };
+  const saved = readPrefs();
+  // whose matches: '' everyone's, 'fav' the favourites', or one favourite's key (onlyMine was the old checkbox)
+  const prefs = { view: 'list', hideNoVideo: false, ...saved, who: saved.who ?? (saved.onlyMine === false ? '' : 'fav') };
+  if (who !== null) {
+    prefs.who = who; // from the Tournaments page's player choice; kept for this page's re-draws
+    writePrefs(prefs);
+  }
+  if (!['', 'fav'].includes(prefs.who) && !data.favourites.some((f) => String(f.key) === prefs.who)) prefs.who = 'fav';
+  const hasFav = (m, key) => m.favs.a.includes(key) || m.favs.b.includes(key);
   const msg = h('div');
   const table = h('div');
 
@@ -434,9 +479,9 @@ async function renderTournament(id, notice = null) {
       st?.rating ? h('span', { class: 'rating-chip', title: `badminfo rating${st.grade ? `, grade ${st.grade}` : ''}` }, st.rating) : null];
   });
   const teams = (m) => [
-    h('div', { class: isMine(m.teamA, data.players) ? 'team-mine' : '' }, named(m, 0)),
+    h('div', { class: m.favs.a.length ? 'team-mine' : '' }, named(m, 0)),
     h('div', { class: 'muted small' }, 'v'),
-    h('div', { class: isMine(m.teamB, data.players) ? 'team-mine' : '' }, named(m, 1)),
+    h('div', { class: m.favs.b.length ? 'team-mine' : '' }, named(m, 1)),
   ];
 
   const listView = (list) => h('div', { class: 'table-scroll' }, h('table', {},
@@ -492,7 +537,9 @@ async function renderTournament(id, notice = null) {
   }));
 
   const drawTable = () => {
-    const shown = matches.filter((m) => (!anyMine || !prefs.onlyMine || m.mine || hasVideo(m)) && (!prefs.hideNoVideo || hasVideo(m)));
+    // One favourite: only their matches. All favourites: theirs, and any other match with a video.
+    const picked = (m) => (!anyMine || !prefs.who ? true : prefs.who === 'fav' ? m.mine || hasVideo(m) : hasFav(m, Number(prefs.who)));
+    const shown = matches.filter((m) => picked(m) && (!prefs.hideNoVideo || hasVideo(m)));
     const days = [...new Set(shown.map((m) => m.date))];
     const view = prefs.view === 'grid' ? gridView : listView;
     fill(table, days.map((d) => [h('div', { class: 'day-title' }, day(d)), view(shown.filter((m) => m.date === d))]));
@@ -505,13 +552,17 @@ async function renderTournament(id, notice = null) {
     drawViewButtons();
     drawTable();
   };
+  const whoSel = h('select', { class: 'small', 'aria-label': 'Whose matches', onchange: (e) => setPref('who', e.target.value) },
+    h('option', { value: '' }, 'Every match'), h('option', { value: 'fav' }, '★ Favourite players’ matches'),
+    data.favourites.map((f) => h('option', { value: String(f.key) }, `${f.name}’s matches`)));
+  whoSel.value = prefs.who;
   const viewButtons = h('div', { class: 'segmented', role: 'group', 'aria-label': 'View' });
   const drawViewButtons = () => fill(viewButtons, [['list', 'List'], ['grid', 'Grid']].map(([v, label]) =>
     h('button', { class: 'small', 'aria-pressed': String(prefs.view === v), onclick: () => setPref('view', v) }, icon(v, 15), label)));
   drawViewButtons();
   const toolbar = h('div', { class: 'row spread toolbar' },
     h('div', { class: 'row' },
-      anyMine ? h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: prefs.onlyMine, onchange: (e) => setPref('onlyMine', e.target.checked) }), 'Only my players’ matches') : null,
+      anyMine ? whoSel : null,
       h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: prefs.hideNoVideo, onchange: (e) => setPref('hideNoVideo', e.target.checked) }), 'Hide matches without a video')),
     viewButtons);
 
@@ -523,17 +574,22 @@ async function renderTournament(id, notice = null) {
     },
   }, `Link all ${suggestions.length} suggested`) : null;
 
-  // ---- highlight reel: everyone's ★ rallies here, or one of my players' ----
+  // ---- highlight reel: everyone's ★ rallies here, or one favourite player's ----
   const reelBtn = h('button', {
     title: 'Join the ★ rallies of the filmed matches here into one video',
     onclick: async () => {
-      const mine = data.players.filter((p) => matches.some((m) => isMine(m.teamA, [p]) || isMine(m.teamB, [p])));
-      const who = h('select', { 'aria-label': 'Whose rallies' }, h('option', { value: '' }, 'Everyone’s ★ rallies'), mine.map((p) => h('option', { value: p }, `${p}’s matches`)));
+      const who = h('select', { 'aria-label': 'Whose rallies' }, h('option', { value: '' }, 'Everyone’s ★ rallies'), data.favourites.map((f) => h('option', { value: String(f.key) }, `${f.name}’s matches`)));
+      if (data.favourites.some((f) => String(f.key) === prefs.who)) who.value = prefs.who;
+      // A favourite by badminfo id when known, else by name.
+      const whose = () => {
+        const f = data.favourites.find((x) => String(x.key) === who.value);
+        return f ? (f.id ? { playerId: f.id } : { player: f.name }) : {};
+      };
       const info = h('span', { class: 'small muted' });
       const jobBox = h('div');
       const count = async () => {
         try {
-          const r = await api(`/api/reels?tournamentId=${id}&player=${encodeURIComponent(who.value)}`);
+          const r = await api(`/api/reels?${new URLSearchParams({ tournamentId: id, ...whose() })}`);
           fill(info, `${r.favourites} ★ rall${r.favourites === 1 ? 'y' : 'ies'} from ${r.matches} filmed match${r.matches === 1 ? '' : 'es'}`);
           make.disabled = !r.favourites;
         } catch (err) {
@@ -545,7 +601,7 @@ async function renderTournament(id, notice = null) {
         onclick: async () => {
           make.disabled = true;
           try {
-            const r = await runJob(jobBox, () => api('/api/reels', { method: 'POST', body: { tournamentId: Number(id), player: who.value || undefined } }));
+            const r = await runJob(jobBox, () => api('/api/reels', { method: 'POST', body: { tournamentId: Number(id), ...whose() } }));
             fill(jobBox, h('div', { class: 'notice ok row' }, `Done: ${clock(r.seconds)} from ${r.matches} matches.`,
               h('button', { class: 'small', onclick: () => api('/api/reveal', { method: 'POST', body: { path: r.path } }) }, 'Show in folder')));
           } catch (err) {
@@ -553,15 +609,15 @@ async function renderTournament(id, notice = null) {
           }
           make.disabled = false;
         },
-      }, icon('star', 15), 'Make the reel');
+      }, icon('highlights', 15), 'Make the reel');
       who.addEventListener('change', count);
-      fill(msg, h('div', { class: 'card stack' }, h('h3', { class: 'card-title' }, icon('star'), 'Highlight reel'),
+      fill(msg, h('div', { class: 'card stack' }, h('h3', { class: 'card-title' }, icon('highlights'), 'Highlight reel'),
         h('div', { class: 'row' }, who, make, info),
         h('p', { class: 'hint' }, 'Each match gets a short card with its event and players, then its ★ rallies with its own scoreboard. Size, replays, logo and music follow Settings.'),
         jobBox));
       count();
     },
-  }, icon('star', 16), 'Highlight reel');
+  }, icon('highlights', 16), 'Highlight reel');
 
   const renderAllBtn = h('button', {
     title: 'Queue a render of every filmed match whose rallies all have a winner and that isn’t rendered yet; they run one after another',
@@ -618,7 +674,7 @@ async function renderTournament(id, notice = null) {
     unmatched.length ? h('div', { class: 'stack small' },
       h('div', { class: 'muted' }, `${unmatched.length} video${unmatched.length === 1 ? '' : 's'} from these dates aren’t linked or suggested: drag one onto its match, or choose it in the Video column. A video file can also be dragged straight from Explorer.`),
       h('div', { class: 'video-tray' }, unmatched.map(videoChip))) : null,
-    anyMine ? null : h('p', { class: 'hint' }, 'Add your players’ names in Settings to pick out their matches.'),
+    anyMine ? null : h('p', { class: 'hint' }, 'Star your players on the ', h('a', { href: '#/players' }, 'Players'), ' page (★) to pick out their matches.'),
     toolbar,
     table);
   drawTable();
@@ -646,7 +702,7 @@ async function renderVideos() {
         h('td', {}, v.match ? h('button', {
           class: 'small',
           onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { matchId: null } }); renderVideos(); },
-        }, 'Unlink') : null)))))) : emptyState('film', 'No videos yet. Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the Tournaments page.'));
+        }, 'Unlink') : null)))))) : illustratedEmpty('Your video library starts here.', 'Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the ', h('a', { href: '#/' }, 'Tournaments page'), ' to find your match footage.'));
 }
 
 // ---------- Settings ----------
@@ -658,7 +714,6 @@ async function renderSettings() {
   const s = data.settings;
   const lines = (v) => v.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   const folders = h('textarea', { id: 'folders', placeholder: 'C:\\Users\\you\\Pictures\\Phone\\Badminton' }, s.videoFolders.join('\n'));
-  const players = h('textarea', { id: 'players', placeholder: 'Amy Lee\nBen Ng' }, s.players.join('\n'));
   const output = h('input', { type: 'text', id: 'output', class: 'grow', value: s.outputFolder });
   const ffmpeg = h('input', { type: 'text', id: 'ffmpeg', class: 'grow', value: s.ffmpegFolder, placeholder: 'Found by itself' });
   const pre = h('input', { type: 'number', id: 'pre', min: 0, max: 10, step: 0.5, value: s.pre });
@@ -843,7 +898,7 @@ async function renderSettings() {
         try {
           const saved = await api('/api/settings', {
             method: 'PUT',
-            body: { videoFolders: lines(folders.value), players: lines(players.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
+            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
               logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value), stats: cardStats.checked },
               description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
@@ -860,8 +915,6 @@ async function renderSettings() {
     h('div', { class: 'settings-grid' },
       section('Video folders', 'Copy videos off your phone into one of these, then scan. Subfolders are included.',
         folders, h('p', { class: 'hint' }, 'One folder per line.')),
-      section('My players', 'Their matches are picked out on tournament pages.',
-        players, h('p', { class: 'hint' }, 'One name per line, as in the draws. A first name alone works when it’s unambiguous (“Man” matches “Man Chan”).')),
       section('Finished videos', 'Rendered videos go here, by year and tournament, each with a .txt of its YouTube title and description.',
         h('div', { class: 'row' }, output),
         h('div', { class: 'stack small' }, h('div', { class: 'muted' }, 'The YouTube description also gives (from badminfo, for badminfo imports):'),
@@ -915,9 +968,10 @@ async function router() {
   leaving?.();
   leaving = null;
   main.classList.remove('wide');
-  const [, section, id] = (location.hash || '#/').split('/');
+  const [path, query] = (location.hash || '#/').split('?');
+  const [, section, id] = path.split('/');
   try {
-    if (section === 't' && id) await renderTournament(id);
+    if (section === 't' && id) await renderTournament(id, null, new URLSearchParams(query ?? '').get('who'));
     else if (section === 'm' && id) {
       setTab('home');
       main.classList.add('wide');

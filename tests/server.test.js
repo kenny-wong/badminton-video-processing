@@ -42,8 +42,9 @@ test('the API serves settings, tournaments and match tagging', async () => {
   await withServer(async ({ db, base }) => {
     const settings = await (await fetch(`${base}/api/settings`)).json();
     assert.equal(settings.version, JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version);
-    const put = await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify({ players: ['Amy'] }) });
-    assert.deepEqual((await put.json()).settings.players, ['Amy']);
+    const star = await fetch(`${base}/api/favourites`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify({ name: ' Amy ' }) });
+    assert.equal(star.status, 201);
+    assert.deepEqual((await (await fetch(`${base}/api/favourites`)).json()).favourites.map((f) => f.name), ['Amy']);
 
     const tid = saveTournament(db, { beId: 'b997c3c5-38fb-4caf-a402-009664189ad6', badminfoId: null, name: 'Example', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') });
     db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at, duration, width, height, fps) VALUES ('C:/v/a.mp4', 1, 'x', '2026-10-24T08:20:00Z', 900, 1920, 1080, 30)`).run();
@@ -51,6 +52,8 @@ test('the API serves settings, tournaments and match tagging', async () => {
     assert.equal(t.matches.length, 3);
     // Sorted by time, then event; Amy plays in both XD matches.
     assert.deepEqual(t.matches.map((m) => [m.draw, m.mine]), [['OS U15 - Group B', false], ['XD U15 - Group A', true], ['XD U15', true]]);
+    assert.deepEqual(t.matches[1].favs, { a: [1], b: [] });
+    assert.deepEqual(t.favourites.map((f) => f.name), ['Amy']);
     // The 9:20 video is Amy's 9:00 match.
     assert.equal(t.suggestions.length, 1);
     assert.equal(t.suggestions[0].matchId, t.matches[1].id);

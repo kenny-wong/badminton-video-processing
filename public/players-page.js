@@ -1,5 +1,6 @@
-// The Players pages: #/players lists my players (Settings) with their badminfo
-// ratings and grades; #/p/<badminfo id> is one player's page, with their
+// The Players pages: #/players lists the favourite players (★) with their
+// badminfo ratings and grades, and finds anyone in imported badminfo
+// tournaments to star; #/p/<badminfo id> is one player's page, with their
 // rating over time and every match of theirs in imported tournaments.
 
 import { h, fill, day, gamesView } from './dom.js';
@@ -24,10 +25,28 @@ export function standings(player) {
 
 const recordText = (r) => (r.played ? `${r.won} won, ${r.lost} lost` : 'no results yet');
 
+/** ★ button: stars or unstars a player (by badminfo id), then calls `done`. */
+export function starButton({ id, key }, done, onError = () => {}) {
+  const on = Boolean(key);
+  return h('button', {
+    class: `fav-star${on ? ' on' : ''}`, 'aria-pressed': String(on), title: on ? 'Favourite: click to unstar' : 'Star as a favourite player',
+    onclick: async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await (on ? api(`/api/favourites/${key}`, { method: 'DELETE' }) : api('/api/favourites', { method: 'POST', body: { id } }));
+        await done();
+      } catch (err) {
+        onError(err);
+      }
+    },
+  }, on ? '★' : '☆');
+}
+
 export async function renderPlayers(main) {
   document.title = 'Players · Badminton Video';
   const data = await api('/api/players');
   const msg = h('div');
+  const again = () => renderPlayers(main);
   const refreshBtn = h('button', {
     onclick: async () => {
       refreshBtn.disabled = true;
@@ -43,45 +62,92 @@ export async function renderPlayers(main) {
     },
   }, icon('refresh', 16), 'Update from badminfo');
 
-  const linkBox = (p) => {
-    const input = h('input', { type: 'url', placeholder: 'https://badminfo.com/Player/…', 'aria-label': `badminfo link for ${p.name}` });
+  // A name-only favourite: paste their badminfo link to tie it to them.
+  const linkBox = (f) => {
+    const input = h('input', { type: 'url', placeholder: 'https://badminfo.com/Player/…', 'aria-label': `badminfo link for ${f.name}` });
     const out = h('div');
-    const save = async (link) => {
-      try {
-        await api('/api/players/link', { method: 'PUT', body: { name: p.name, link } });
-        renderPlayers(main);
-      } catch (err) {
-        fill(out, errorNotice(err));
-      }
-    };
     return h('div', { class: 'stack small' },
-      h('div', { class: 'row' }, input, h('button', { class: 'small', onclick: () => save(input.value.trim()) }, 'Link')),
-      p.linked ? h('button', { class: 'small', onclick: () => save('') }, 'Use the name instead') : null,
+      h('div', { class: 'row' }, input, h('button', {
+        class: 'small',
+        onclick: async () => {
+          try {
+            await api(`/api/favourites/${f.key}`, { method: 'PUT', body: { link: input.value.trim() } });
+            again();
+          } catch (err) {
+            fill(out, errorNotice(err));
+          }
+        },
+      }, 'Link')),
       out);
   };
 
-  const card = (p) => h('div', { class: 'card stack player-card' },
+  const card = (f) => h('div', { class: 'card stack player-card' },
     h('div', { class: 'row spread' },
-      h('h3', { class: 'card-title' }, icon('user'), p.id ? h('a', { href: `#/p/${p.id}` }, p.player?.name ?? p.name) : p.name),
-      p.player?.county ? h('span', { class: 'pill' }, p.player.county) : null),
-    p.id
-      ? [standings(p.player),
-        h('div', { class: 'small muted' }, `${p.matches} match${p.matches === 1 ? '' : 'es'} in imported tournaments (${recordText(p.record)}), ${p.filmed} filmed`),
-        h('div', { class: 'row small' }, h('a', { class: 'btn small primary', href: `#/p/${p.id}` }, 'Open'),
-          h('a', { href: `https://badminfo.com/Player/${p.id}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗'),
-          p.linked ? h('span', { class: 'muted' }, 'linked by hand') : null),
-        p.linked ? linkBox(p) : null]
-      : [h('p', { class: 'hint' }, p.candidates
-        ? `${p.candidates} players in imported tournaments match “${p.name}”. Paste the right one’s badminfo link:`
-        : `Not found in any imported badminfo tournament. Paste their badminfo link:`), linkBox(p)]);
+      h('h3', { class: 'card-title' }, starButton(f, again, (err) => fill(msg, errorNotice(err))), f.id ? h('a', { href: `#/p/${f.id}` }, f.player?.name ?? f.name) : f.name),
+      f.player?.county ? h('span', { class: 'pill' }, f.player.county) : null),
+    f.id
+      ? [standings(f.player),
+        h('div', { class: 'small muted' }, `${f.tournaments} tournament${f.tournaments === 1 ? '' : 's'}, ${f.matches} match${f.matches === 1 ? '' : 'es'} (${recordText(f.record)}), ${f.filmed} filmed`),
+        h('div', { class: 'row small' }, h('a', { class: 'btn small primary', href: `#/p/${f.id}` }, 'Open'),
+          h('a', { href: `https://badminfo.com/Player/${f.id}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗'))]
+      : [h('div', { class: 'small muted' }, `Picked out by name: ${f.tournaments} tournament${f.tournaments === 1 ? '' : 's'}, ${f.matches} match${f.matches === 1 ? '' : 'es'}.`),
+        h('p', { class: 'hint' }, f.candidates
+          ? `${f.candidates} players in imported tournaments match “${f.name}”. Paste the right one’s badminfo link:`
+          : 'Not found in any imported badminfo tournament. Paste their badminfo link:'), linkBox(f)]);
+
+  // ---- find anyone in the imported badminfo tournaments, and star them ----
+  const query = h('input', { type: 'search', class: 'grow', placeholder: 'Find a player by name', 'aria-label': 'Find a player' });
+  const results = h('div');
+  let timer = null;
+  const runSearch = async () => {
+    const q = query.value.trim();
+    if (!q) return fill(results);
+    try {
+      const r = await api(`/api/players/search?q=${encodeURIComponent(q)}`);
+      const byName = h('button', {
+        class: 'small',
+        onclick: async () => {
+          try {
+            await api('/api/favourites', { method: 'POST', body: { name: q } });
+            again();
+          } catch (err) {
+            fill(results, errorNotice(err));
+          }
+        },
+      }, '☆ Star the name “', q, '”');
+      fill(results,
+        r.players.length
+          ? h('div', { class: 'table-scroll' }, h('table', {}, h('tbody', {}, r.players.map((p) => h('tr', {},
+            h('td', {}, starButton({ id: p.id, key: p.favourite }, async () => { await runSearch(); await refreshCards(); }, (err) => fill(results, errorNotice(err)))),
+            h('td', {}, h('a', { href: `#/p/${p.id}` }, p.name), p.county ? h('div', { class: 'small muted' }, p.county) : null),
+            h('td', { class: 'small' }, DISCIPLINES.filter(([k]) => p.ratings[k] || p.grades[k]).map(([k, label]) => h('span', { class: 'rating-chip', title: label }, `${label[0]} ${p.ratings[k] ?? '—'}${p.grades[k] ? ` ${p.grades[k]}` : ''}`))),
+            h('td', { class: 'small muted nowrap' }, `${p.tournaments} tournament${p.tournaments === 1 ? '' : 's'}`))))))
+          : h('p', { class: 'hint' }, 'No one by that name in the imported badminfo tournaments.'),
+        h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Not in a badminfo draw (a Badminton England-only import)?'), byName));
+    } catch (err) {
+      fill(results, errorNotice(err));
+    }
+  };
+  query.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(runSearch, 250); });
+
+  const cards = h('div');
+  const drawCards = (d) => fill(cards,
+    h('div', { class: 'section-title' }, icon('star', 15), `Favourites (${d.favourites.length})`),
+    d.favourites.length
+      ? h('div', { class: 'player-grid' }, d.favourites.map(card))
+      : h('div', { class: 'empty' }, icon('user', 34), h('div', {}, 'No favourites yet. Find your players below and star them (☆).')));
+  // After a star from the search, only the cards are drawn again (the search box keeps its text).
+  const refreshCards = async () => drawCards(await api('/api/players'));
+  drawCards(data);
 
   fill(main,
-    pageHead('Players', 'Your players’ badminfo ratings and grades, and their matches.', refreshBtn),
+    pageHead('Players', 'Star (★) the players you film: their matches are picked out on tournament pages and get the video suggestions.', refreshBtn),
     h('div', { class: 'players-msg' }, msg),
-    data.badminfoTournaments ? null : h('div', { class: 'notice info' }, 'Player data comes from badminfo: import tournaments with their badminfo link (or re-import one) to see ratings here.'),
-    data.mine.length
-      ? h('div', { class: 'player-grid' }, data.mine.map(card))
-      : h('div', { class: 'empty' }, icon('user', 34), h('div', {}, 'No players yet. Add your players’ names in ', h('a', { href: '#/settings' }, 'Settings'), '.')));
+    data.badminfoTournaments ? null : h('div', { class: 'notice info' }, 'Player data comes from badminfo: import tournaments with their badminfo link (or re-import one) to find players here.'),
+    cards,
+    h('div', { class: 'section-title' }, icon('user', 15), 'Find a player'),
+    h('div', { class: 'card stack' }, h('div', { class: 'row' }, query),
+      h('p', { class: 'hint' }, `${data.known} player${data.known === 1 ? '' : 's'} from imported badminfo tournaments.`), results));
 }
 
 /** One match in a player's list: date, event, the other side, result from the player's side. */
@@ -125,10 +191,11 @@ export async function renderPlayer(main, id) {
       }
       reelBtn.disabled = false;
     },
-  }, icon('star', 16), 'Highlight reel');
+  }, icon('highlights', 16), 'Highlight reel');
   fill(main,
     h('a', { class: 'crumb', href: '#/players' }, icon('back', 15), 'Players'),
-    pageHead(p.name, [p.county, p.beNumber ? `BE ${p.beNumber}` : null].filter(Boolean).join(' · ') || null,
+    pageHead(h('span', { class: 'row' }, starButton({ id, key: data.favourite }, () => renderPlayer(main, id), (err) => fill(reelBox, errorNotice(err))), p.name),
+      [p.county, p.beNumber ? `BE ${p.beNumber}` : null].filter(Boolean).join(' · ') || null,
       reelBtn,
       h('a', { class: 'btn', href: p.url, target: '_blank', rel: 'noopener' }, 'badminfo ↗')),
     reelBox,
