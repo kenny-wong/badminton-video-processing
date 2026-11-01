@@ -137,6 +137,21 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
     uploads.video.exists ? h('button', { class: primary ? 'primary' : 'small', title: TIPS.byHand, onclick: () => startByHand('video') }, primary ? icon('youtube', 16) : null, primary ? 'Upload to YouTube' : 'Upload by hand') : null,
     uploads.highlights.exists ? h('button', { class: primary ? '' : 'small', title: TIPS.byHand, onclick: () => startByHand('highlights') }, primary ? '★ Upload highlights' : '★ Highlights by hand') : null);
 
+  const copyArea = (label, text) => {
+    const ta = h('textarea', { readonly: true, rows: label === 'Title' ? 2 : 6 }, text);
+    return h('div', { class: 'copy-box' },
+      h('div', { class: 'row spread small' }, h('strong', {}, label), h('button', { class: 'small', title: `Puts the ${label.toLowerCase()} on the clipboard`, onclick: () => copyText(label, ta.value) }, 'Copy')),
+      ta);
+  };
+  /** The title and description to paste into YouTube: the highlights' after “★ Highlights by hand”, else the video's. */
+  const texts = () => {
+    const o = uploads[byHand ?? 'video'];
+    return o?.title ? [copyArea('Title', o.title), copyArea('Description', o.description)] : null;
+  };
+  let foldOpen = false; // kept across redraws
+  const fold = (summary, ...content) => h('details', { class: 'by-hand', open: foldOpen || byHand !== null, ontoggle: (e) => { foldOpen = e.target.open; } },
+    h('summary', { class: 'small', title: TIPS.byHand }, summary), ...content);
+
   const draw = () => {
     const { video, highlights: hl } = uploads;
     const any = video.exists || hl.exists;
@@ -149,7 +164,8 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
       return fill(el, account,
         any ? handButtons(true) : h('p', { class: 'hint' }, 'Render the video first, then upload it from here.'),
         byHand ? handSteps() : any ? h('p', { class: 'hint' }, 'Copies the title, opens YouTube’s upload page and shows the file in Explorer.') : null,
-        jobBox, resultBox);
+        jobBox, resultBox,
+        texts() ? fold('Title and description', texts()) : null);
     }
     const privacySel = h('select', { 'aria-label': 'Visibility', title: TIPS.privacy, disabled: busy, onchange: () => { prefs.privacy = privacySel.value; savePrefs(prefs); } },
       PRIVACY.map(([v, label]) => h('option', { value: v, selected: v === prefs.privacy }, label)));
@@ -163,7 +179,8 @@ export function youtubePanel({ id, output, highlights, runJob, errorNotice, say,
         hl.exists ? h('button', { title: TIPS.uploadHighlights, disabled: busy, onclick: () => upload('highlights') }, '★ Upload highlights') : null,
         any ? null : h('span', { class: 'hint' }, 'Render the video first, then upload it from here.')),
       jobBox, resultBox,
-      any ? h('details', { class: 'by-hand', open: byHand !== null }, h('summary', { class: 'small', title: TIPS.byHand }, 'Upload by hand instead'), handButtons(false), byHand ? handSteps() : null) : null);
+      any ? fold('Upload by hand instead', handButtons(false), byHand ? handSteps() : null, texts())
+        : texts() ? fold('Title and description', texts()) : null);
   };
 
   const refresh = async () => {

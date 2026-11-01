@@ -908,18 +908,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const voicesBox = h('input', { type: 'checkbox', checked: Boolean(data.voices?.remove && data.voices?.ready), disabled: !data.voices?.ready });
   const favCount = h('span', { class: 'muted' });
   const renderResult = h('div');
-  const copyArea = (label, text) => {
-    const ta = h('textarea', { readonly: true, rows: label === 'Title' ? 2 : 6 }, text);
-    return h('div', { class: 'copy-box' },
-      h('div', { class: 'row spread small' }, h('strong', {}, label), h('button', { class: 'small', onclick: () => navigator.clipboard.writeText(ta.value).then(() => say(`${label} copied`)) }, 'Copy')),
-      ta);
-  };
+  // The title and description to paste into YouTube are in the YouTube box, under Upload by hand.
   const showOutput = (o, exists) => fill(renderResult,
     exists ? h('div', { class: 'row' }, h('span', { class: 'pill ok' }, 'Rendered'),
-      h('button', { class: 'small', onclick: () => api(`/api/matches/${id}/reveal`, { method: 'POST' }).catch((e) => say(e.message)) }, 'Show in folder')) : null,
-    copyArea('Title', o.title),
-    copyArea('Description', o.description),
-    h('p', { class: 'hint' }, 'To upload, use Upload to YouTube in the YouTube box below: Unlisted, so anyone with the link can watch.'));
+      h('button', { class: 'small', onclick: () => api(`/api/matches/${id}/reveal`, { method: 'POST' }).catch((e) => say(e.message)) }, 'Show in folder')) : null);
   showOutput(data.output, data.output.exists);
   const highlightsResult = h('div');
   const showHighlights = (exists) => fill(highlightsResult, exists ? h('div', { class: 'row small' }, h('span', { class: 'pill ok' }, '★ Highlights rendered'),

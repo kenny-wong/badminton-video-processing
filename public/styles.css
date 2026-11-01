@@ -455,6 +455,7 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .youtube-panel { display: grid; gap: 10px; margin-bottom: 12px; }
 .youtube-panel .notice { margin: 0; }
 .by-hand summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+.by-hand .copy-box { margin-top: 10px; }
 .playlist-choice { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .playlist-choice .check { display: flex; gap: 8px; align-items: baseline; }
 
