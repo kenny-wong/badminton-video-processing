@@ -8,7 +8,7 @@ export const dropMissing = (e) => e.currentTarget.remove();
 export function tournamentHero(tournaments) {
   const filmed = tournaments.reduce((total, t) => total + (t.filmed || 0), 0);
   return h('section', { class: 'home-hero', 'aria-labelledby': 'home-title' },
-    h('img', { class: 'home-hero-art', src: 'visual-kit/court-banner-short-angled.png', alt: '', width: 2172, height: 724, fetchpriority: 'high', onerror: dropMissing }),
+    h('img', { class: 'home-hero-art', src: 'visual-kit/court-banner.png', alt: '', width: 2172, height: 724, fetchpriority: 'high', onerror: dropMissing }),
     h('div', { class: 'home-hero-copy' },
       h('div', { class: 'home-eyebrow' }, icon('court', 17), 'Tournaments · Your match library'),
       h('h1', { id: 'home-title' }, 'Every rally. Worth keeping.'),

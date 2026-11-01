@@ -28,7 +28,7 @@ function pngChunks(buf) {
 const files = [...images('public'), join('build', 'icon.png')];
 
 test('the app has pictures to check', () => {
-  assert.ok(files.some((f) => f.endsWith('court-banner-short-angled.png')));
+  assert.ok(files.some((f) => f.endsWith('court-banner.png')));
   assert.ok(files.some((f) => f.endsWith('app-mark.svg')));
 });
 

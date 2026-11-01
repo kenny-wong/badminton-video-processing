@@ -13,9 +13,7 @@ in `../visuals.js` and their styles in `../visuals.css`.
 
 | File | Use |
 | --- | --- |
-| `court-banner.png` | 1536 × 1024 cinematic image for a home-page or onboarding banner. Leave HTML text over its dark left half. |
-| `court-banner-short.png` | Earlier 2172 × 724 panoramic variant with a horizontal shuttle. |
-| `court-banner-short-angled.png` | Active 2172 × 724 compact home banner. The shuttle tilts diagonally with its cork down-left and feathers up-right; its full silhouette stays inside the banner's height safe area. |
+| `court-banner.png` | The 2172 × 724 home banner (Tournaments page). The shuttle tilts diagonally with its cork down-left and feathers up-right; leave HTML text over its dark left half. |
 | `shuttle-video.png` | Transparent PNG illustration for onboarding or an empty video library. Keep its alpha; use around 220–320 CSS pixels wide. |
 | `app-mark.svg` | Scalable shuttle/play mark for a header, favicon or shortcut. Test your intended small size before replacement. |
 | `icons.js` | Ten theme-aware SVG icons for DOM-based controls. |
