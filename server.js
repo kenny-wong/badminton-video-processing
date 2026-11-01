@@ -85,6 +85,7 @@ const ROUTES = [
   ['POST', '/api/players/refresh', players.refresh],
   ['GET', '/api/players/search', players.search],
   ['GET', '/api/players/:id', players.getOne],
+  ['POST', '/api/players/:id/tournaments', players.importTournaments],
   ['GET', '/api/favourites', players.favouritesList],
   ['POST', '/api/favourites', players.addFavouriteRoute],
   ['PUT', '/api/favourites/:key', players.linkFavouriteRoute],

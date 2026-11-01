@@ -49,6 +49,47 @@ export function starButton({ id, key, listed = key }, done, onError = () => {}) 
 
 const BADMINFO_PLAYER = /badminfo\.com\/player\/|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** What an import of a player's tournaments did, for the page. */
+function importOutcome(r, update) {
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  return h('div', { class: 'notice ok stack' },
+    h('div', { class: 'notice-msg' }, update
+      ? `${r.player}: updated ${plural(r.imported.length, 'tournament')}`
+      : r.imported.length ? `${r.player}: imported ${plural(r.imported.length, 'new tournament')}` : `${r.player}: no new tournaments`),
+    r.imported.length ? h('ul', { class: 'small import-list' }, r.imported.map((t) => h('li', {}, h('a', { href: `#/t/${t.id}` }, t.name), h('span', { class: 'muted' }, ` · ${t.start ?? ''} · ${plural(t.matches, 'match')}${t.matches ? '' : ' (draws not out yet: use Update results later)'}`)))) : null,
+    r.already ? h('div', { class: 'small muted' }, update ? `${plural(r.already, 'tournament')} not imported yet, left alone.` : `${plural(r.already, 'tournament')} already in the app, skipped.`) : null,
+    r.skipped.length ? h('details', { class: 'small' }, h('summary', {}, `${plural(r.skipped.length, 'tournament')} couldn’t be read`),
+      h('ul', {}, r.skipped.map((s) => h('li', {}, `${s.name}: ${s.reason}`)))) : null);
+}
+
+/**
+ * Button that imports a badminfo player's tournaments not in the app yet, or with
+ * `update` reads the imported ones again for new times and results. Progress and
+ * the outcome go in `box`; `done()` runs after.
+ */
+function importButton(id, update, box, done, small) {
+  const btn = h('button', {
+    class: small ? 'small' : '',
+    title: update
+      ? 'Read every tournament of theirs already in the app again from badminfo and Badminton England: new draws, times and results'
+      : 'Import every tournament they have entered on badminfo (upcoming too) that isn’t in the app yet. Ones already imported are skipped.',
+    onclick: async () => {
+      btn.disabled = true;
+      try {
+        const job = await api(`/api/players/${id}/tournaments`, { method: 'POST', body: { update } });
+        const r = await waitJob(job, (j) => fill(box, h('div', { class: 'notice info' },
+          j.status === 'queued' ? 'Waiting for the import before it…' : `${j.message || 'Reading badminfo…'} (${Math.round(j.progress * 100)}%)`)));
+        await done();
+        fill(box, importOutcome(r, update));
+      } catch (err) {
+        fill(box, errorNotice(err));
+      }
+      btn.disabled = false;
+    },
+  }, icon(update ? 'refresh' : 'import', small ? 14 : 16), update ? 'Update their results' : small ? 'Import tournaments' : 'Import their tournaments');
+  return btn;
+}
+
 export async function renderPlayers(main) {
   document.title = 'Players · Badminton Video';
   const data = await api('/api/players');
@@ -110,6 +151,8 @@ export async function renderPlayers(main) {
       ? [standings(f.player),
         h('div', { class: 'small muted' }, `${f.tournaments} tournament${f.tournaments === 1 ? '' : 's'}, ${f.matches} match${f.matches === 1 ? '' : 'es'} (${recordText(f.record)}), ${f.filmed} filmed`),
         h('div', { class: 'row small' }, h('a', { class: 'btn small primary', href: `#/p/${f.id}` }, 'Open'),
+          // The outcome goes above the cards, which are drawn again after the import.
+          importButton(f.id, false, msg, refreshCards, true),
           h('a', { href: `https://badminfo.com/Player/${f.id}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗'))]
       : [h('div', { class: 'small muted' }, `Picked out by name: ${f.tournaments} tournament${f.tournaments === 1 ? '' : 's'}, ${f.matches} match${f.matches === 1 ? '' : 'es'}.`),
         h('p', { class: 'hint' }, f.candidates
@@ -252,6 +295,8 @@ export async function renderPlayer(main, id) {
     h('a', { class: 'crumb', href: '#/players' }, icon('back', 15), 'Players'),
     pageHead(h('span', { class: 'row' }, starButton({ id, key: data.favourite, listed: data.listed }, () => renderPlayer(main, id), (err) => fill(reelBox, errorNotice(err))), p.name),
       [p.county, p.beNumber ? `BE ${p.beNumber}` : null].filter(Boolean).join(' · ') || null,
+      importButton(id, false, reelBox, () => {}, false),
+      importButton(id, true, reelBox, () => {}, false),
       reelBtn,
       h('a', { class: 'btn', href: p.url, target: '_blank', rel: 'noopener' }, 'badminfo ↗')),
     reelBox,

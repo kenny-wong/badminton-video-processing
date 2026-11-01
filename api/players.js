@@ -2,6 +2,8 @@
 // GET /api/players/search?q=: players in imported badminfo tournaments whose name has every word of q.
 // POST /api/players/refresh: re-reads every badminfo tournament's entrants and the favourites' profiles.
 // GET /api/players/:id[?refresh=1]: one player, their matches in imported tournaments and rating history.
+// POST /api/players/:id/tournaments { update? }: imports every tournament they entered on badminfo that isn't in the app yet
+//   (with update, re-reads the ones that are, for new times and results); a background job.
 // GET /api/matches/:id/people[?refresh=1]: a match's players, win chance, earlier meetings and the opponents' other filmed matches.
 // GET /api/favourites[?all=1]: the favourites (or everyone listed) with the tournaments each one joined.
 // POST /api/favourites { id } | { link } | { name }, starred?: lists a player (by badminfo id or link) or a name, starred unless starred is false.
@@ -14,6 +16,8 @@ import { matchFromRow } from '../lib/db.js';
 import { matchPeople, playerFromRow, refreshProfile, refreshProfiles, saveEntrants, teamIds } from '../lib/players.js';
 import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite, setStarred } from '../lib/favourites.js';
 import { loadMatch } from '../lib/pipeline.js';
+import { importPlayerTournaments } from '../lib/player-import.js';
+import { jobView, startJob } from '../lib/jobs.js';
 import { disciplineOf, ratingSeries, record, resultWinner } from '../public/shared/players.js';
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -161,6 +165,19 @@ export async function getOne({ request, params, app }) {
     filmedRecord: record(matches.filter((m) => m.filmed)),
     series: ratingSeries(rubbers ?? [], id, player.ratings, player.ratingsDate),
   });
+}
+
+export async function importTournaments({ request, params, app }) {
+  const id = String(params.id).toLowerCase();
+  if (!GUID.test(id)) return fail(404, 'notFound', 'No such player');
+  const update = (await readJson(request))?.update === true;
+  const name = app.db.prepare('SELECT name FROM players WHERE id = ?').get(id)?.name ?? 'player';
+  const job = startJob('import', `player-tournaments:${id}:${update ? 'update' : 'new'}`, async (j, signal) => {
+    const result = await importPlayerTournaments(app.db, id, { update, job: j, signal });
+    await refreshProfile(app.db, id).catch(() => false);
+    return result;
+  }, { queue: 'import', label: `${update ? 'Update' : 'Import'} ${name}’s tournaments` });
+  return json(jobView(job), 202);
 }
 
 const MAX_LIST = 20;

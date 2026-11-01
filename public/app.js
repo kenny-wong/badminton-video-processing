@@ -675,12 +675,16 @@ async function renderTournament(id, notice = null, who = null) {
   }, icon('scissors', 16), 'Render all tagged');
 
   const refreshBtn = h('button', {
+    title: tournament.badminfoId
+      ? 'Read the draws, match times and results again from badminfo and Badminton England (new tournaments fill in as they are played). Your tagging stays.'
+      : 'Read the draws, match times and results again from Badminton England (new tournaments fill in as they are played). Your tagging stays.',
     onclick: async () => {
       refreshBtn.disabled = true;
-      fill(msg, h('p', { class: 'muted small' }, 'Updating from Badminton England…'));
+      fill(msg, h('p', { class: 'muted small' }, tournament.badminfoId ? 'Updating from badminfo and Badminton England…' : 'Updating from Badminton England…'));
       try {
-        await api(`/api/tournaments/${id}/refresh`, { method: 'POST' });
-        renderTournament(id);
+        const r = await api(`/api/tournaments/${id}/refresh`, { method: 'POST' });
+        const before = matches.length;
+        renderTournament(id, h('div', { class: 'notice ok' }, `Updated: ${r.matches} match${r.matches === 1 ? '' : 'es'}${r.matches > before ? ` (${r.matches - before} new)` : ''}, with the latest times and results.`));
       } catch (err) {
         fill(msg, errorNotice(err));
         refreshBtn.disabled = false;
