@@ -32,10 +32,11 @@ test('window keys: F5 / Ctrl+R reload, F12 / Ctrl+Shift+I developer tools; the e
   assert.equal(windowKey({ type: 'keyUp', key: 'F5' }), null);
 });
 
-test('the installer ships the app’s files, not the local-only pictures, and FFmpeg as a resource', () => {
+test('the installer ships the app’s files with the artwork (not the notes beside it), and FFmpeg as a resource', () => {
   const { main, build } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(main, 'electron/main.js');
-  for (const f of ['server.js', 'electron/**', 'api/**', 'lib/**', 'migrations/**', 'public/**', '!public/visual-kit/*.png']) assert.ok(build.files.includes(f), f);
+  for (const f of ['server.js', 'electron/**', 'api/**', 'lib/**', 'migrations/**', 'public/**', '!public/visual-kit/*.txt']) assert.ok(build.files.includes(f), f);
+  assert.ok(!build.files.some((f) => f.startsWith('!') && f.endsWith('.png')), 'the banner and illustration PNGs go in');
   assert.deepEqual(build.extraResources, [{ from: 'build/ffmpeg', to: 'ffmpeg' }]);
 });
 

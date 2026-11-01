@@ -2,7 +2,7 @@
 import { h } from './dom.js';
 import { icon } from './icons.js';
 
-/** The artwork PNGs stay out of the repo and the installer: without them the page just leaves them out. */
+/** The artwork PNGs aren't in the repo (the installer has them): in a fresh checkout the page just leaves them out. */
 export const dropMissing = (e) => e.currentTarget.remove();
 
 export function tournamentHero(tournaments) {
