@@ -112,4 +112,4 @@ The server writes `logs\app.log` in its data folder (`data\` for `npm start`): s
 
 ## Licence
 
-MIT: see [LICENSE](LICENSE). The installer also brings FFmpeg, which has its own licence (GPL v3, included under `resourcesfmpeg` in the install folder).
+MIT: see [LICENSE](LICENSE). The installer also brings FFmpeg, which has its own licence (GPL v3, included under `resources\ffmpeg` in the install folder).
