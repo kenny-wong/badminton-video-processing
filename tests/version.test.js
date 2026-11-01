@@ -70,3 +70,23 @@ test('the page may restart the server, but not over running jobs unless told to'
     server.close();
   }
 });
+
+test('in the desktop app a restart is the app’s own (Electron relaunches), after answering', async () => {
+  const { createApp } = await import('../server.js');
+  const { openDb } = await import('../lib/db.js');
+  let restarted = 0;
+  const app = { db: openDb(), port: 0, restart: () => { restarted += 1; } };
+  const server = createApp(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  app.port = server.address().port;
+  const base = `http://127.0.0.1:${app.port}`;
+  try {
+    const res = await fetch(`${base}/api/restart`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(res.status, 202);
+    assert.equal(restarted, 0);
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(restarted, 1);
+  } finally {
+    server.close();
+  }
+});

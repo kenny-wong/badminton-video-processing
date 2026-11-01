@@ -15,7 +15,7 @@ import { gamesText } from './shared/score.js';
 import { clock } from './shared/time.js';
 import { renderEditor } from './editor.js';
 import { icon } from './icons.js';
-import { tournamentHero, illustratedEmpty } from './visuals.js';
+import { dropMissing, tournamentHero, illustratedEmpty } from './visuals.js';
 import { errorNotice } from './notice.js';
 import { customTournamentPanel } from './custom-tournament.js';
 import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, LAYOUTS, PRESETS } from './shared/board.js';
@@ -353,7 +353,7 @@ async function renderHome() {
         h('li', {}, h('span', {}, 'Import a tournament with its badminfo or Badminton England link.')),
         h('li', {}, h('span', {}, 'Scan the video folders: each video is matched to a match by when it was recorded.')),
         h('li', {}, h('span', {}, 'Open a match to tag rallies, then render it with the score and without the gaps.')))),
-      h('img', { class: 'setup-art', src: 'visual-kit/shuttle-video.png', alt: '', width: 190, height: 175, loading: 'lazy' })) : null,
+      h('img', { class: 'setup-art', src: 'visual-kit/shuttle-video.png', alt: '', width: 190, height: 175, loading: 'lazy', onerror: dropMissing })) : null,
     h('div', { class: 'home-grid' },
       h('div', { class: 'card stack' },
         h('h3', { class: 'card-title' }, icon('import'), 'Import a tournament'),

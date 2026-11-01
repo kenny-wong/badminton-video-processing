@@ -269,8 +269,12 @@ export function createApp(app) {
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv[1])) {
-  const dataDir = fileURLToPath(new URL('./data/', import.meta.url));
+/**
+ * Opens the log and database in `dataDir` and listens on 127.0.0.1:`port`.
+ * Used by `npm start` below and by the desktop app (electron/main.js), which
+ * passes its own folder, port and `restart`.
+ */
+export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.db'), port = PORT, restart = null, onListening = () => {} }) {
   mkdirSync(dataDir, { recursive: true });
   startLog(join(dataDir, 'logs', 'app.log'));
   const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -278,19 +282,27 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv
   // A server that is ended outright (Task Manager, taskkill /F) can't log anything:
   // a job "started" in the log with no "finished" or "failed" after it is how that shows.
   process.on('exit', (code) => console.log(`Server stopping (exit code ${code})`));
+  const db = openDb(dbPath);
+  const server = createApp({ db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart });
+  listenWhenFree(server, port, '127.0.0.1', () => {
+    const address = `http://127.0.0.1:${port}/`;
+    console.log(`Badminton Video running at ${address}`);
+    onListening(address);
+  });
+  return { server, db };
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv[1])) {
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, () => process.exit(0));
   process.on('uncaughtException', (err) => {
     console.error('Uncaught error, stopping:', err);
     process.exit(1);
   });
-  const db =openDb(process.env.DB_PATH || join(dataDir, `badminton-video.db`));
-  const server = createApp({ db, port: PORT, thumbDir: join(dataDir, 'thumbs'), dataDir });
-  listenWhenFree(server, PORT, '127.0.0.1', () => {
-    const address = `http://127.0.0.1:${PORT}/`;
-    console.log(`Badminton Video running at ${address}`);
+  const dataDir = fileURLToPath(new URL('./data/', import.meta.url));
+  startServer({ dataDir, dbPath: process.env.DB_PATH || undefined, onListening: (address) => {
     if (process.argv.includes('--open') && existsSync(CHROME)) {
       spawn(CHROME, [`--app=${address}`, '--window-size=1400,900'], { detached: true, stdio: 'ignore' }).unref();
     }
-  });
+  } });
 }
 

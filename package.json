@@ -1,15 +1,65 @@
 {
   "name": "badminton-video",
-  "version": "1.27.0",
+  "productName": "Badminton Video",
+  "version": "1.28.0",
   "private": true,
   "description": "Desktop app that links phone videos of badminton matches to Badminton England's tournament records, tags rallies, burns in the score, cuts the gaps between rallies and names the result for YouTube.",
+  "author": "Kenny Wong",
+  "repository": "github:kenny-wong/badminton-video-processing",
   "type": "module",
+  "main": "electron/main.js",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js --open",
     "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
-    "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.js\""
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/*.test.js\"",
+    "app": "electron .",
+    "dist": "node scripts/bundle-ffmpeg.mjs && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "io.github.kenny-wong.badminton-video",
+    "productName": "Badminton Video",
+    "copyright": "Copyright © 2026 Kenny Wong",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "package.json",
+      "server.js",
+      "electron/**",
+      "api/**",
+      "lib/**",
+      "migrations/**",
+      "public/**",
+      "!public/visual-kit/*.png",
+      "!public/visual-kit/*.txt"
+    ],
+    "extraResources": [
+      {
+        "from": "build/ffmpeg",
+        "to": "ffmpeg"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Badminton Video",
+      "artifactName": "Badminton-Video-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": null
   }
 }

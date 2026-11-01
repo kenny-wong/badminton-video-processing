@@ -8,3 +8,5 @@ analysis/vendor/
 analysis/ckpts/
 __pycache__/
 *.pyc
+dist/
+build/ffmpeg/

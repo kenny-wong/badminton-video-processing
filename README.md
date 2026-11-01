@@ -11,23 +11,25 @@ A Windows desktop app for phone videos of badminton matches. It:
 
 Everything runs on your PC. Video files are never moved or changed.
 
-## Requirements
+## Installing
 
-- Windows 10/11, [Node.js](https://nodejs.org/) 24 or later, Google Chrome
-- FFmpeg: `winget install Gyan.FFmpeg` (found automatically, or set its folder in Settings)
-- An NVIDIA GPU is optional; without one, rendering uses the CPU (slower)
+Run `Badminton-Video-Setup-<version>.exe`. It installs for your Windows account only (no administrator needed), adds Start-menu and desktop shortcuts, and brings its own copy of FFmpeg. The installer isn't code-signed yet, so Windows may say "Windows protected your PC": choose **More info → Run anyway**.
 
-No npm packages are needed.
+The installed app keeps everything (database, logs, thumbnails, YouTube sign-in) in `%LOCALAPPDATA%\Badminton Video`; uninstalling leaves that folder alone. Rendered videos go to the folder chosen in Settings (default `Videos\Badminton`). An NVIDIA GPU is optional; without one, rendering uses the CPU (slower). Shuttle tracking and voice removal need the Python set-up below and aren't part of the installer yet.
 
-## Running
+## Building and developing
+
+Needs Windows 10/11, [Node.js](https://nodejs.org/) 24 or later and FFmpeg (`winget install Gyan.FFmpeg`; found automatically, or set its folder in Settings). The app itself uses no npm packages; Electron and electron-builder are development tools only (`npm install`).
 
 ```
-npm start      # starts the app on http://127.0.0.1:8791 and opens it in a Chrome app window
+npm start      # the app on http://127.0.0.1:8791 in a Chrome app window, data in data/
 npm run dev    # the same without opening Chrome, restarting when files change
+npm run app    # the desktop (Electron) version, port 8793, data in %LOCALAPPDATA%\Badminton Video (development)
+npm run dist   # builds dist\Badminton-Video-Setup-<version>.exe, with this PC's FFmpeg copied in
 npm test       # unit tests (Node's built-in test runner)
 ```
 
-Data (the SQLite database) lives in `data/`; rendered videos go to the folder chosen in Settings (default `Videos\Badminton`).
+The desktop version (`electron/main.js`) runs the same server inside Electron's own process on port 8792, in its own window; web links open in the default browser. `BADMINTON_VIDEO_DATA` points it at another data folder.
 
 ## Using it
 
@@ -94,7 +96,7 @@ While the consent screen is in Testing, Google ends the sign-in after 7 days, so
 
 ## Logs
 
-The server writes `data\logs\app.log`: starts and stops, and when each background job started, finished or failed, with the full error. When something fails, the red box's **Details** shows the longer story, the job's log (**Show log**), and buttons to open the log file and copy the details. Closing or restarting the server stops any job that is running.
+The server writes `logs\app.log` in its data folder (`data\` for `npm start`): starts and stops, and when each background job started, finished or failed, with the full error. When something fails, the red box's **Details** shows the longer story, the job's log (**Show log**), and buttons to open the log file and copy the details. Closing or restarting the server stops any job that is running.
 
 ## How it works
 
@@ -105,5 +107,5 @@ The server writes `data\logs\app.log`: starts and stops, and when each backgroun
 
 ## Not yet
 
-- Direct upload to YouTube (needs a Google Cloud project that has passed Google's API audit; until then uploads through the API are locked to private).
-- Working out who won each rally from the video itself (shuttle tracking).
+- Shuttle tracking and voice removal in the installer (they need Python and an NVIDIA GPU; for now only from a checkout with `analysis\setup.ps1`).
+- Automatic updates and a code-signed installer.

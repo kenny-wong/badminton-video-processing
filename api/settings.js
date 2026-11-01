@@ -31,7 +31,9 @@ export async function restart({ request, app }) {
   }
   if (app.noRestart) return json({ ok: true, restarting: false }); // tests
   console.log(`Restart asked for from the page${running.length ? ` (stopping ${running.length} job${running.length === 1 ? '' : 's'})` : ''}`);
-  if (!restartSoon()) return fail(400, 'devMode', 'The server restarts by itself when its files change (development mode)');
+  // The desktop app restarts itself (Electron relaunches); after the answer has gone.
+  if (app.restart) setTimeout(app.restart, 300);
+  else if (!restartSoon())return fail(400, 'devMode', 'The server restarts by itself when its files change (development mode)');
   return json({ ok: true, restarting: true, boot: BOOT }, 202);
 }
 
