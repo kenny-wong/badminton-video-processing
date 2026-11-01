@@ -1,4 +1,4 @@
-// GET /api/tournaments: every imported tournament with counts.
+// GET /api/tournaments: every tournament with counts, and its progress for the favourites (`stats`: mine, players[key]).
 // POST /api/tournaments { link }: imports (or re-imports) one; { name } makes a custom tournament.
 // GET /api/tournaments/:id: its matches (each with its games' own rows, `units`, when
 //   filmed game by game), their videos and suggested links.
@@ -26,6 +26,7 @@ import { jobView } from '../lib/jobs.js';
 import { startRender } from './matches.js';
 import { stageOf } from '../lib/overview.js';
 import { existsSync } from 'node:fs';
+import { progress, tournamentStats } from '../lib/tournament-stats.js';
 import { addMatch, createCustom, deleteMatch, rosterOf, setRoster, updateCustom, updateMatch } from '../lib/custom.js';
 
 const STATUS = { badLink: 400, badInput: 400, notFound: 404, conflict: 409, unavailable: 502 };
@@ -37,7 +38,11 @@ export function onRequestGet({ app }) {
       (SELECT COUNT(*) FROM matches m WHERE m.tournament_id = t.id AND m.output_path IS NOT NULL) AS rendered,
       (SELECT COUNT(*) FROM matches m WHERE m.tournament_id = t.id AND m.youtube_url IS NOT NULL) AS uploaded
     FROM tournaments t ORDER BY t.start_date DESC, t.id DESC`).all();
-  return json({ tournaments: rows.map((r) => ({ ...tournamentFromRow(r), matches: r.match_count, filmed: r.filmed, rendered: r.rendered, uploaded: r.uploaded })) });
+  const stats = tournamentStats(app.db, favourites(app.db));
+  return json({ tournaments: rows.map((r) => ({
+    ...tournamentFromRow(r), matches: r.match_count, filmed: r.filmed, rendered: r.rendered, uploaded: r.uploaded,
+    stats: stats[r.id] ?? { mine: progress([], r.match_count), players: {} },
+  })) });
 }
 
 async function importLink(app, link) {

@@ -252,7 +252,6 @@ async function renderHome() {
     : null;
 
   const setup = !settings.videoFolders.length || !favs.length;
-  const stat = (n, label) => h('div', { class: 'stat' }, h('b', {}, n), h('span', {}, label));
 
   // ---- tournaments: grouped under each favourite player (default), all of them, or one player's ----
   const listTitle = h('div', { class: 'section-title' });
@@ -263,12 +262,27 @@ async function renderHome() {
     h('option', { value: 'all' }, 'Every tournament'),
     favs.map((f) => h('option', { value: String(f.key) }, `★ ${f.name} (${Object.keys(f.tournaments).length})`))) : null;
   if (playerSel) playerSel.value = ['group', 'all', ...favs.map((f) => String(f.key))].includes(readHomePlayer()) ? readHomePlayer() : 'group';
-  const tournamentCard = (t, f = null) => h('a', { class: 'card', href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}` },
-    h('h3', {}, t.name, t.kind === 'custom' ? h('span', { class: 'pill', title: 'Made by hand' }, 'Custom') : null),
-    h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
-    f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
-      ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
-    h('div', { class: 'stats' }, stat(t.matches, 'matches'), stat(t.filmed, 'filmed'), stat(t.rendered, 'rendered'), stat(t.uploaded, 'YouTube')));
+  // Progress for the card's player (or all favourites): a section not done yet is yellow, a card with one is outlined red.
+  const noProgress = (t) => ({ total: t.matches, matches: 0, filmedMatches: 0, games: 0, filmedGames: 0, videos: 0, rendered: 0, uploaded: 0 });
+  const notDone = (n, d) => d > 0 && n < d;
+  const unfinished = (s) => notDone(s.filmedMatches, s.matches) || notDone(s.filmedGames, s.games) || notDone(s.rendered, s.videos) || notDone(s.uploaded, s.rendered);
+  const tile = (n, d, label, tip, check = true) => h('div', { class: `stat${check && notDone(n, d) ? ' todo' : ''}`, title: tip }, h('b', {}, `${n}/${d}`), h('span', {}, label));
+  const progressTiles = (s, f) => h('div', { class: 'stats card-progress' },
+    tile(s.matches, s.total, 'Matches', `${f ? `${f.name}’s` : 'Your favourites’'} matches / all matches here`, false),
+    tile(s.filmedMatches, s.matches, 'Filmed matches', 'Their matches where every game has a linked video (one for the whole match, or one per game) / their matches'),
+    tile(s.filmedGames, s.games, 'Filmed games', 'Games with a linked video / games they played (a match not played yet counts as one game)'),
+    tile(s.rendered, s.videos, 'Rendered', 'Rendered videos / linked videos (a whole match, or one game, each)'),
+    tile(s.uploaded, s.rendered, 'YouTube', 'Rendered videos on YouTube / rendered videos'));
+  const tournamentCard = (t, f = null) => {
+    const s = f ? t.stats?.players?.[f.key] ?? noProgress(t) : t.stats?.mine ?? noProgress(t);
+    const open = unfinished(s);
+    return h('a', { class: `card${open ? ' unfinished' : ''}`, href: f ? `#/t/${t.id}?who=${f.key}` : `#/t/${t.id}`, title: open ? 'Not finished: the yellow sections still have something to film, render or upload' : null },
+      h('h3', {}, t.name, t.kind === 'custom' ? h('span', { class: 'pill', title: 'Made by hand' }, 'Custom') : null),
+      h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
+      f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
+        ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
+      progressTiles(s, f));
+  };
   const libraryEmpty = () => illustratedEmpty('Your match library starts here.', 'Paste a badminfo or Badminton England link above to bring in the matches, or make your own tournament, then link your footage.');
   const drawList = () => {
     const choice = playerSel?.value ?? 'all';
