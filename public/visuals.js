@@ -2,7 +2,7 @@
 import { h } from './dom.js';
 import { icon } from './icons.js';
 
-/** The artwork PNGs aren't in the repo (the installer has them): in a fresh checkout the page just leaves them out. */
+/** Decorative art: if a picture is missing, the page just leaves it out rather than showing a broken image. */
 export const dropMissing = (e) => e.currentTarget.remove();
 
 export function tournamentHero(tournaments) {

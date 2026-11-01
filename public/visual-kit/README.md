@@ -21,7 +21,7 @@ in `../visuals.js` and their styles in `../visuals.css`.
 | `icons.js` | Ten theme-aware SVG icons for DOM-based controls. |
 | `icons/*.svg` | Standalone 24 × 24 SVG files for design tools and image references. |
 
-The PNG illustrations are kept on this PC only and are not in the repository.
+The PNG illustrations hold image data only (no embedded metadata; `tests/assets.test.js` checks).
 The app mark and icons are native SVG. No external fonts, runtime packages,
 third-party imagery or network requests are needed by the preview.
 
