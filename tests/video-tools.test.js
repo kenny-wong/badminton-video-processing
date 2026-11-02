@@ -4,7 +4,7 @@
 // udta boxes. Skipped when FFmpeg isn't installed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../lib/db.js';
@@ -12,7 +12,7 @@ import { findTools, probe, run } from '../lib/ffmpeg.js';
 import { saveVideo } from '../lib/videos.js';
 import { box, boxes, carryMetadataFile } from '../lib/mp4.js';
 import { fileTimes } from '../lib/filetimes.js';
-import { mergeVideos, packetCounts, splitVideo, streamProblems } from '../lib/video-tools.js';
+import { mergeVideos, packetCounts, removeOriginals, splitVideo, streamProblems } from '../lib/video-tools.js';
 import { splitTime } from '../public/shared/video-files.js';
 
 const tools = findTools('');
@@ -47,8 +47,10 @@ test('a video is split losslessly into parts with their own names and times, and
     const id = await saveVideo(db, tools, src);
     const before = await fileTimes(src); // reading it for the library moved its accessed time
     const job = { log: () => {} };
+    const binned = []; // stands in for the Recycle Bin, so tests don't fill the real one
+    const remove = async (path) => { binned.push(path); rmSync(path); };
 
-    const split = await splitVideo(db, tools, { id, parts: [{ start: 0.5, end: 2 }, { start: 2.5, end: 4 }, { start: null, end: null }], setAside: true, job });
+    const split = await splitVideo(db, tools, { id, parts: [{ start: 0.5, end: 2 }, { start: 2.5, end: 4 }, { start: null, end: null }], removeOriginal: true, remove, job });
     assert.equal(split.parts.length, 2);
     const [p1, p2] = split.parts;
     assert.equal(p1.from, 0); // key frames every second: the cuts start on them
@@ -68,8 +70,10 @@ test('a video is split losslessly into parts with their own names and times, and
       assert.deepEqual(p.video.madeFrom, { kind: 'split', from: [{ id, name: '20261101_121208.mp4' }], part: p.n, offset: p.from, length: p.length });
     }
     assert.ok(Math.abs((await fileTimes(p2.path)).modified - END) < 5); // the last part ends where the original did
-    assert.equal(db.prepare('SELECT set_aside FROM videos WHERE id = ?').get(id).set_aside, 1);
     assert.deepEqual(split.notes, []);
+    assert.deepEqual(split.removed, [{ id, name: '20261101_121208.mp4' }]); // the original went to the bin once both parts were made
+    assert.deepEqual(binned, [src]);
+    assert.equal(db.prepare('SELECT id FROM videos WHERE id = ?').get(id), undefined);
 
     const merged = await mergeVideos(db, tools, { ids: [p1.video.id, p2.video.id], job });
     assert.equal(merged.video.name, '20261101_121208 part 1 merged.mp4');
@@ -84,16 +88,43 @@ test('a video is split losslessly into parts with their own names and times, and
     assert.ok(Math.abs(mt.modified - (await fileTimes(p2.path)).modified) < 5); // ends when the last one ended
     assert.ok(Math.abs(Date.parse((await probe(tools, merged.path)).format.tags.creation_time) - END) < 1000);
     assert.equal(merged.video.madeFrom.kind, 'merge');
-    assert.equal(db.prepare('SELECT set_aside FROM videos WHERE id = ?').get(p1.video.id).set_aside, 0); // not asked to
+    assert.deepEqual(merged.removed, []); // not asked to
+    assert.ok(existsSync(p1.path) && existsSync(p2.path));
 
     const other = await makeVideo(dir, '20261101_130000.mp4', '160x120');
     const otherId = await saveVideo(db, tools, other);
-    await assert.rejects(mergeVideos(db, tools, { ids: [id, otherId], job }), (err) => err.code === 'notCompatible' && /160×120/.test(err.message));
-    await assert.rejects(splitVideo(db, tools, { id, parts: [{ start: 1, end: 1.2 }], job }), /at least 1 s/);
+    await assert.rejects(mergeVideos(db, tools, { ids: [merged.video.id, otherId], removeOriginal: true, remove, job }), (err) => err.code === 'notCompatible' && /160×120/.test(err.message));
+    await assert.rejects(splitVideo(db, tools, { id: merged.video.id, parts: [{ start: 1, end: 1.2 }], removeOriginal: true, remove, job }), /at least 1 s/);
+    assert.ok(existsSync(merged.path) && existsSync(other)); // nothing removed when nothing was made
+
+    const again = await mergeVideos(db, tools, { ids: [p1.video.id, p2.video.id], removeOriginal: true, remove, job });
+    assert.equal(again.video.name, '20261101_121208 part 1 merged (2).mp4');
+    assert.deepEqual(again.removed.map((v) => v.name), ['20261101_121208 part 1.mp4', '20261101_121210 part 2.mp4']);
+    assert.ok(!existsSync(p1.path) && !existsSync(p2.path));
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('originals stay when something went wrong, when linked to a match, or when the bin refuses', async () => {
+  const db = openDb(':memory:');
+  db.exec('PRAGMA foreign_keys = OFF');
+  const add = (path, matchId = null) => db.prepare('INSERT INTO videos (path, size, modified_at, match_id) VALUES (?, 1, ?, ?) RETURNING id').get(path, '2026-11-01T12:00:00Z', matchId).id;
+  const v = (id) => { const { path } = db.prepare('SELECT path FROM videos WHERE id = ?').get(id); return { id, name: path, path }; };
+  const binned = [];
+  const remove = async (path) => { if (path === 'locked.mp4') throw new Error('in use'); binned.push(path); };
+  const a = add('a.mp4');
+  assert.deepEqual(await removeOriginals(db, [v(a)], ['Packet counts differ'], { remove }), { removed: [], notes: ['The original videos were kept because of the notes above.'] });
+  const linked = add('linked.mp4', 99);
+  const locked = add('locked.mp4');
+  const r = await removeOriginals(db, [v(a), v(linked), v(locked)], [], { remove });
+  assert.deepEqual(r.removed, [{ id: a, name: 'a.mp4' }]);
+  assert.match(r.notes[0], /linked\.mp4 was kept: it’s linked to a match/);
+  assert.match(r.notes[1], /locked\.mp4 couldn’t be moved to the Recycle Bin: in use/);
+  assert.deepEqual(binned, ['a.mp4']);
+  assert.deepEqual(db.prepare('SELECT path FROM videos ORDER BY id').all().map((x) => x.path), ['linked.mp4', 'locked.mp4']);
+  db.close();
 });
 
 test('streams must match, in the same order, to be joined', () => {

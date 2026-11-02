@@ -119,7 +119,7 @@ export function getOne({ params, app }) {
   const linked = app.db.prepare(`SELECT v.* FROM videos v JOIN matches m ON m.id = v.match_id WHERE m.tournament_id = ? ORDER BY v.part`).all(id).map(videoFromRow);
   const from = tournament.start ? Date.parse(`${tournament.start}T00:00:00Z`) - DAY_MS : 0;
   const to = tournament.end ? Date.parse(`${tournament.end}T00:00:00Z`) + 2 * DAY_MS : 0;
-  const free = from ? app.db.prepare('SELECT * FROM videos WHERE match_id IS NULL AND missing = 0 AND set_aside = 0 AND recorded_at >= ? AND recorded_at < ? ORDER BY recorded_at')
+  const free = from ? app.db.prepare('SELECT * FROM videos WHERE match_id IS NULL AND missing = 0 AND recorded_at >= ? AND recorded_at < ? ORDER BY recorded_at')
     .all(new Date(from).toISOString(), new Date(to).toISOString()).map(videoFromRow) : [];
   // What the page shows of a match or a game's row: videos, tagging progress, outputs.
   const status = (m) => {

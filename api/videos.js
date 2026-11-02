@@ -1,6 +1,6 @@
 // GET /api/videos: every video found, newest first, with the match it shows.
 // POST /api/videos/scan: scans the video folders (a job).
-// PUT /api/videos/:id { matchId: null } unlinks a video; { setAside } keeps it out of matching (or brings it back).
+// PUT /api/videos/:id { matchId: null }: unlinks a video.
 
 import { fail, idParam, json, readJson } from '../lib/http.js';
 import { videoFromRow } from '../lib/db.js';
@@ -39,12 +39,9 @@ export function scan({ app }) {
 export async function onRequestPut({ request, params, app }) {
   const id = idParam(params.id);
   const body = await readJson(request);
-  const unlink = body?.matchId === null;
-  const setAside = typeof body?.setAside === 'boolean' ? body.setAside : null;
-  if (!id || (!unlink && setAside === null)) return fail(400, 'badInput', 'Only unlinking or setting aside is supported here');
+  if (!id || body?.matchId !== null) return fail(400, 'badInput', 'Only unlinking is supported here');
   const v = app.db.prepare('SELECT match_id FROM videos WHERE id = ?').get(id);
   if (!v) return fail(404, 'notFound', 'No such video');
-  if (unlink) detachVideo(app.db, id);
-  if (setAside !== null) app.db.prepare('UPDATE videos SET set_aside = ? WHERE id = ?').run(setAside ? 1 : 0, id);
+  detachVideo(app.db, id);
   return json({ ok: true });
 }

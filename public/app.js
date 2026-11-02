@@ -809,7 +809,6 @@ async function renderVideos() {
       h('tbody', {}, videos.map((v) => h('tr', {},
         h('td', { class: 'nowrap' }, when(v.recordedAt), h('div', { class: 'small muted' }, SOURCE[v.recordedSource] ?? '')),
         h('td', {}, v.name, v.missing ? [' ', h('span', { class: 'pill bad' }, 'missing')] : null,
-          v.setAside ? [' ', h('span', { class: 'pill', title: 'Left out of matching (merged or split, or set aside by hand)' }, 'set aside')] : null,
           h('div', { class: 'small muted' }, megabytes(v.size), madeFromText(v.madeFrom))),
         h('td', { class: 'nowrap' }, clock(v.duration ?? 0)),
         h('td', { class: 'small' }, `${v.width}×${v.height}`, h('div', { class: 'muted' }, `${Math.round(v.fps ?? 0)} fps · ${v.codec ?? '?'}${v.hdr ? ' · HDR' : ''}`)),
@@ -821,12 +820,7 @@ async function renderVideos() {
             class: 'small',
             onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { matchId: null } }); renderVideos(); },
           }, 'Unlink') : null,
-          v.missing ? null : h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: 'Cut this video into parts on the Tools page' }, icon('scissors', 14), 'Split'),
-          h('button', {
-            class: 'small ghost',
-            title: v.setAside ? 'Let matching suggest this video again' : 'Leave this video out of matching (it stays here and on disk)',
-            onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { setAside: !v.setAside } }); renderVideos(); },
-          }, v.setAside ? 'Use again' : 'Set aside')))))))) : illustratedEmpty('Your video library starts here.', 'Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the ', h('a', { href: '#/' }, 'Tournaments page'), ' to find your match footage.'));
+          v.missing ? null : h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: 'Cut this video into parts on the Tools page' }, icon('scissors', 14), 'Split')))))))) : illustratedEmpty('Your video library starts here.', 'Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the ', h('a', { href: '#/' }, 'Tournaments page'), ' to find your match footage.'));
 }
 
 // ---------- Settings ----------

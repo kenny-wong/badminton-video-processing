@@ -1,6 +1,7 @@
 // #/tools: merging videos end to end in an order you choose, and splitting one
 // video into up to three. The picture and sound are copied as they are and
-// the originals are never changed (lib/video-tools.js does the work).
+// the originals are never edited; unless unticked, they go to the Recycle Bin
+// once the new files are made (lib/video-tools.js does the work).
 // #/tools?split=<video id> opens the splitter on that video.
 //
 // Splitter keys: Space play / pause, ← / → 2 s (Shift 10 s), , / . one frame,
@@ -26,7 +27,7 @@ const PART_KEYS = [
 ];
 
 // What you were doing, kept while the window is open: the merge order and each video's parts.
-const memory = { order: [], parts: new Map(), splitId: null, setAside: true };
+const memory = { order: [], parts: new Map(), splitId: null, removeOriginal: true };
 
 function readTab() {
   try {
@@ -48,13 +49,27 @@ const folderOf = (path) => path.split(/[\\/]/).slice(0, -1).join('\\');
 
 const reveal = (v) => api(`/api/videos/${v.id}/reveal`, { method: 'POST' }).catch(() => {});
 
-const setAsideBox = () => {
-  const box = h('input', { type: 'checkbox', checked: memory.setAside, onchange: () => { memory.setAside = box.checked; } });
-  return { box, label: h('label', { class: 'tool-check' }, box, 'Set the originals aside: they stay on disk and in Videos, but matching leaves them out') };
+/** The "Remove the original" tick box (ticked unless you untick it this session). */
+const removeBox = (text) => {
+  const box = h('input', { type: 'checkbox', checked: memory.removeOriginal, onchange: () => { memory.removeOriginal = box.checked; } });
+  return { box, label: h('label', { class: 'tool-check' }, box, text) };
 };
 
 function notesView(notes) {
   return notes?.length ? h('div', { class: 'notice warn small' }, h('div', { class: 'stack' }, notes.map((n) => h('div', {}, n)))) : null;
+}
+
+const removedView = (removed) => (removed?.length ? h('div', { class: 'small' }, icon('trash', 14), ` Moved to the Recycle Bin: ${removed.map((v) => v.name).join(', ')}`) : null);
+
+/** Takes removed originals ([{ id }]) off the page's lists. */
+function forget(library, byId, removed) {
+  for (const { id } of removed ?? []) {
+    const i = library.findIndex((v) => v.id === id);
+    if (i >= 0) library.splice(i, 1);
+    byId.delete(id);
+    memory.parts.delete(id);
+    memory.order = memory.order.filter((x) => x !== id);
+  }
 }
 
 export async function renderTools(main, { runJob, query }) {
@@ -88,7 +103,7 @@ export async function renderTools(main, { runJob, query }) {
 
   fill(main,
     h('div', { class: 'page-head' },
-      h('div', {}, h('h1', {}, 'Tools'), h('div', { class: 'sub' }, 'Join videos end to end, or cut one into parts. The picture and sound are copied exactly, the phone’s details and times are kept, and the originals are never changed.')),
+      h('div', {}, h('h1', {}, 'Tools'), h('div', { class: 'sub' }, 'Join videos end to end, or cut one into parts. The picture and sound are copied exactly and the phone’s details and times are kept. The originals are never edited; unless you untick the box, they go to the Recycle Bin once the new files are made.')),
       h('div', { class: 'segmented', role: 'group', 'aria-label': 'Tool' }, buttons)),
     library.length ? body : h('div', { class: 'empty' }, icon('match-video', 34), h('div', {}, 'No videos yet. Scan your folders from the ', h('a', { href: '#/' }, 'Tournaments page'), ' first.')));
   if (library.length) show();
@@ -104,7 +119,7 @@ function mergeView(box, library, byId, runJob) {
   const summary = h('div');
   const jobBox = h('div');
   const result = h('div');
-  const { box: asideBox, label: asideLabel } = setAsideBox();
+  const { box: removeTick, label: removeLabel } = removeBox('Remove the original videos once the merged video is made and checked (they go to the Recycle Bin)');
   const mergeBtn = h('button', { class: 'primary', type: 'button' }, icon('link', 16), 'Merge');
   let dragFrom = null;
 
@@ -121,7 +136,7 @@ function mergeView(box, library, byId, runJob) {
           onclick: () => { memory.order.push(v.id); draw(); },
         }, added ? icon('check', 14) : icon('plus', 14), added ? 'Added' : 'Add'),
         h('div', { class: 'grow' },
-          h('div', { class: 'ellipsis', title: v.path }, v.name, v.setAside ? [' ', h('span', { class: 'pill' }, 'set aside')] : null),
+          h('div', { class: 'ellipsis', title: v.path }, v.name),
           h('div', { class: 'small muted' }, `${when(v.recordedAt)} · ${clock(v.duration ?? 0)} · ${megabytes(v.size)} · ${v.width}×${v.height} ${v.codec ?? ''}`)));
     }) : h('p', { class: 'muted small pad' }, 'No video matches that.'));
   }
@@ -179,17 +194,16 @@ function mergeView(box, library, byId, runJob) {
     mergeBtn.disabled = true;
     fill(result);
     try {
-      const r = await runJob(jobBox, () => api('/api/tools/merge', { method: 'POST', body: { ids: memory.order, setAside: asideBox.checked } }));
+      const r = await runJob(jobBox, () => api('/api/tools/merge', { method: 'POST', body: { ids: memory.order, removeOriginal: removeTick.checked } }));
       fill(jobBox);
-      fill(result, h('div', { class: 'notice ok' },
-        icon('check', 18), h('span', {}, 'Saved ', h('b', {}, r.video.name), ` (${clock(r.video.duration ?? 0)}, ${megabytes(r.video.size)})`),
-        h('button', { class: 'small', type: 'button', onclick: () => reveal(r.video) }, icon('folder', 14), 'Show in Explorer'),
-        h('a', { href: '#/videos', class: 'btn small' }, 'See videos')),
+      fill(result, h('div', { class: 'notice ok' }, h('div', { class: 'stack' },
+        h('div', { class: 'row' },
+          icon('check', 18), h('span', {}, 'Saved ', h('b', {}, r.video.name), ` (${clock(r.video.duration ?? 0)}, ${megabytes(r.video.size)})`),
+          h('button', { class: 'small', type: 'button', onclick: () => reveal(r.video) }, icon('folder', 14), 'Show in Explorer'),
+          h('a', { href: '#/videos', class: 'btn small' }, 'See videos')),
+        removedView(r.removed))),
       notesView(r.notes));
-      for (const id of [...memory.order]) {
-        const v = byId.get(id);
-        if (v && asideBox.checked) v.setAside = true;
-      }
+      forget(library, byId, r.removed);
       library.unshift(r.video);
       byId.set(r.video.id, r.video);
       memory.order = [];
@@ -204,7 +218,7 @@ function mergeView(box, library, byId, runJob) {
   search.addEventListener('input', drawPicks);
   fill(box, h('div', { class: 'tools-grid' },
     h('div', { class: 'card stack' }, h('h3', { class: 'card-title' }, icon('match-video', 18), 'Videos'), search, pickList),
-    h('div', { class: 'card stack' }, h('h3', { class: 'card-title' }, icon('list', 18), 'Merge order'), orderList, summary, asideLabel,
+    h('div', { class: 'card stack' }, h('h3', { class: 'card-title' }, icon('list', 18), 'Merge order'), orderList, summary, removeLabel,
       h('div', { class: 'row' }, mergeBtn), jobBox, result)));
   draw();
   return null;
@@ -231,14 +245,19 @@ function splitView(box, library, byId, runJob) {
       fill(area, h('p', { class: 'hint' }, 'Choose the video to cut. You can make up to three parts; each is saved as its own video next to the original, named and timed from where it starts.'));
       return;
     }
-    leave = splitter(area, v, byId, runJob, library);
+    leave = splitter(area, v, byId, runJob, library, (removed) => {
+      forget(library, byId, removed);
+      for (const { id } of removed) picker.querySelector(`option[value="${id}"]`)?.remove();
+      memory.splitId = null;
+      picker.value = '';
+    });
   }
   fill(box, h('div', { class: 'card stack' }, h('div', { class: 'row' }, h('label', { class: 'cf-label' }, 'Video'), picker), area));
   open();
   return () => leave?.();
 }
 
-function splitter(area, video, byId, runJob, library) {
+function splitter(area, video, byId, runJob, library, onRemoved) {
   const parts = memory.parts.get(video.id) ?? Array.from({ length: MAX_PARTS }, () => ({ start: null, end: null }));
   memory.parts.set(video.id, parts);
   let active = Math.max(0, parts.findIndex((p) => p.start === null || p.end === null));
@@ -255,7 +274,7 @@ function splitter(area, video, byId, runJob, library) {
   const summary = h('div');
   const jobBox = h('div');
   const result = h('div');
-  const { box: asideBox, label: asideLabel } = setAsideBox();
+  const { box: removeTick, label: removeLabel } = removeBox('Remove the original video once the parts are made (it goes to the Recycle Bin, with anything outside the parts)');
   const splitBtn = h('button', { class: 'primary', type: 'button' }, icon('scissors', 16), 'Split');
   const duration = () => (Number.isFinite(player.duration) ? player.duration : video.duration ?? 0);
   const recorded = video.recordedAt ? Date.parse(video.recordedAt) : null;
@@ -425,8 +444,16 @@ function splitter(area, video, byId, runJob, library) {
   splitBtn.addEventListener('click', async () => {
     splitBtn.disabled = true;
     fill(result);
+    const removing = removeTick.checked;
+    const at = player.currentTime;
+    if (removing) {
+      // Let go of the file, so Windows can move it to the Recycle Bin.
+      player.pause();
+      player.removeAttribute('src');
+      player.load();
+    }
     try {
-      const body = { id: video.id, parts: parts.map((p) => ({ start: p.start, end: p.end })), setAside: asideBox.checked };
+      const body = { id: video.id, parts: parts.map((p) => ({ start: p.start, end: p.end })), removeOriginal: removing };
       const r = await runJob(jobBox, () => api('/api/tools/split', { method: 'POST', body }));
       fill(jobBox);
       fill(result, h('div', { class: 'notice ok' }, h('div', { class: 'stack' },
@@ -434,18 +461,31 @@ function splitter(area, video, byId, runJob, library) {
         r.parts.map((p) => h('div', { class: 'row' },
           h('span', {}, h('b', {}, p.video.name), ` · ${clock(p.length)} · ${megabytes(p.video.size)}`),
           h('button', { class: 'small', type: 'button', onclick: () => reveal(p.video) }, icon('folder', 14), 'Show in Explorer'))),
+        removedView(r.removed),
         h('div', {}, h('a', { href: '#/videos', class: 'btn small' }, 'See videos')))),
       notesView(r.notes));
       for (const p of r.parts) {
         library.unshift(p.video);
         byId.set(p.video.id, p.video);
       }
-      if (asideBox.checked) video.setAside = true;
+      if (r.removed?.length) {
+        // The original is gone: only the outcome stays on the page.
+        leave();
+        onRemoved(r.removed);
+        fill(area, result);
+        return;
+      }
+      if (removing) restore();
       drawSummary();
     } catch (err) {
       fill(jobBox);
       fill(result, errorNotice(err));
+      if (removing) restore();
       drawSummary();
+    }
+    function restore() {
+      player.src = `/media/video/${video.id}`;
+      player.addEventListener('loadedmetadata', () => { player.currentTime = at; }, { once: true });
     }
   });
 
@@ -457,7 +497,7 @@ function splitter(area, video, byId, runJob, library) {
     h('div', { class: 'table-scroll' }, h('table', { class: 'parts' },
       h('thead', {}, h('tr', {}, ['', 'Start', 'End', 'Length', 'Saved as', ''].map((x) => h('th', {}, x)))),
       rows)),
-    summary, asideLabel, h('div', { class: 'row' }, splitBtn), jobBox, result);
+    summary, removeLabel, h('div', { class: 'row' }, splitBtn), jobBox, result);
   draw();
 
   api(`/api/videos/${video.id}/keyframes`).then((r) => {
@@ -469,12 +509,13 @@ function splitter(area, video, byId, runJob, library) {
     fill(keyNote, h('span', { class: 'pill bad' }, 'Key frames unknown'), ' ', err.message);
   });
 
-  return () => {
+  function leave() {
     window.removeEventListener('keydown', onKey);
     cancelAnimationFrame(raf);
     clearTimeout(flashTimer);
     player.pause();
     player.removeAttribute('src');
     player.load();
-  };
+  }
+  return leave;
 }

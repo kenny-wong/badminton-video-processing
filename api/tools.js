@@ -1,7 +1,8 @@
 // The Tools page: merging videos and splitting one (lib/video-tools.js).
 // GET  /api/videos/:id/keyframes: { keys, duration }, where a lossless cut can start.
-// POST /api/tools/merge { ids, setAside }: joins the videos in that order (a job).
-// POST /api/tools/split { id, parts: [{ start, end }], setAside }: cuts up to 3 parts (a job).
+// POST /api/tools/merge { ids, removeOriginal }: joins the videos in that order (a job).
+// POST /api/tools/split { id, parts: [{ start, end }], removeOriginal }: cuts up to 3 parts (a job).
+// With removeOriginal the originals go to the Recycle Bin once the new files are made.
 // POST /api/videos/:id/reveal: shows a library video in Explorer.
 
 import { spawn } from 'node:child_process';
@@ -34,7 +35,7 @@ export async function merge({ request, app }) {
   for (const id of ids) if (!videoRow(app, id)) return fail(404, 'notFound', `No video ${id}`);
   const t = tools(app);
   if (!t) return noFfmpeg();
-  const job = startJob('merge', `merge:${ids.join(',')}`, (j, signal) => mergeVideos(app.db, t, { ids, setAside: body.setAside === true, signal, job: j }),
+  const job = startJob('merge', `merge:${ids.join(',')}`, (j, signal) => mergeVideos(app.db, t, { ids, removeOriginal: body.removeOriginal === true, signal, job: j }),
     { queue: 'files', label: `Merge ${ids.length} videos` });
   return json(jobView(job), 202);
 }
@@ -49,7 +50,7 @@ export async function split({ request, app }) {
   const t = tools(app);
   if (!t) return noFfmpeg();
   const name = row.path.split(/[\\/]/).pop();
-  const job = startJob('split', `split:${id}`, (j, signal) => splitVideo(app.db, t, { id, parts: body.parts, setAside: body.setAside === true, signal, job: j }),
+  const job = startJob('split', `split:${id}`, (j, signal) => splitVideo(app.db, t, { id, parts: body.parts, removeOriginal: body.removeOriginal === true, signal, job: j }),
     { queue: 'files', label: `Split ${name}` });
   return json(jobView(job), 202);
 }
