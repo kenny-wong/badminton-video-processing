@@ -52,12 +52,13 @@ export function day(ymd) {
 
 export const megabytes = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`);
 
-/** "12-15 15-8 15-13" as nodes, with the higher score of each game in bold. */
+/** "12-15 15-8 15-13" as nodes: each game's winning score marked .win (green, bold), the losing one .lose (red). */
 export function gamesView(games) {
   const out = [];
   for (const [x, y] of games ?? []) {
     if (out.length) out.push(' ');
-    out.push(h('span', { class: 'game-score' }, x > y ? h('b', {}, x) : x, '-', y > x ? h('b', {}, y) : y));
+    const side = (me, them) => (me > them ? 'win' : me < them ? 'lose' : null);
+    out.push(h('span', { class: 'game-score' }, h('span', { class: side(x, y) }, x), '-', h('span', { class: side(y, x) }, y)));
   }
   return out;
 }

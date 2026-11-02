@@ -11,7 +11,7 @@
 
 import { h, fill, when, day, megabytes, ukDate, gamesView } from './dom.js';
 import { api, waitJob } from './api.js';
-import { boardNames, NAME_STYLES, teamName } from './shared/names.js';
+import { boardNames, NAME_STYLES, namesMatch, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
 import { clock } from './shared/time.js';
 import { renderEditor } from './editor.js';
@@ -561,7 +561,7 @@ async function renderTournament(id, notice = null, who = null) {
           },
         }, `Link ${games.length === 2 ? 'both' : `all ${games.length}`}`));
     }
-    return h('div', { class: 'stack' }, chooser(m, m.date), perGame(m) ? h('span', { class: 'hint' }, 'whole match, or per game below') : null);
+    return h('div', { class: 'stack' }, chooser(m, m.date), perGame(m) ? h('div', { class: 'hint' }, 'whole match, or per game below') : null);
   };
 
   const unitVideoCell = (u) => {
@@ -570,40 +570,57 @@ async function renderTournament(id, notice = null, who = null) {
     return s ? suggestedCell(u, s) : chooser(u, u.parent.date);
   };
 
+  // What's done for a match (or game), as a row of labels: each in its own colour when done, greyed when not.
   const statusCell = (m) => {
-    const bits = [];
-    if (m.rallyCount) {
-      bits.push(h('span', { class: `pill ${m.tagged === m.rallyCount ? 'ok' : 'warn'}` }, `${m.tagged}/${m.rallyCount} rallies`));
-      if (m.check && m.games?.length) bits.push(h('span', { class: `pill ${m.check.ok ? 'ok' : 'bad'}`, title: `Tagged: ${gamesText(m.tagGames)}` }, m.check.ok ? 'score ✓' : 'score ≠ result'));
-    }
-    if (m.favourites) bits.push(h('span', { class: 'pill', title: 'Favourite rallies' }, `★ ${m.favourites}`));
-    if (typeof m.people?.chance === 'number') {
-      const [pa, pb] = percents(m.people.chance);
-      bits.push(h('span', { class: 'pill', title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` }, `${pa}–${pb}`));
-    }
-    if (m.people?.upset) bits.push(h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset'));
-    if (m.outputPath) bits.push(h('span', { class: 'pill ok' }, 'rendered'));
-    if (m.youtubeUrl) bits.push(h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener', title: m.youtubeUrl }, 'on YouTube ↗'));
-    return h('div', { class: 'row' }, bits);
+    const tag = (done, kind, text, title, href = null) => (done && href
+      ? h('a', { class: `tag ${kind}`, href, target: '_blank', rel: 'noopener', title }, text)
+      : h('span', { class: `tag ${kind}${done ? '' : ' off'}`, title }, text));
+    const allTagged = m.rallyCount > 0 && m.tagged === m.rallyCount;
+    const checked = m.rallyCount > 0 && m.check && m.games?.length;
+    return h('div', { class: 'row tags' },
+      tag(m.rallyCount > 0, m.rallyCount && !allTagged ? 'rallies part' : 'rallies', !m.rallyCount ? 'Rallies' : allTagged ? `${m.rallyCount} rallies` : `${m.tagged}/${m.rallyCount} rallies`,
+        !m.rallyCount ? 'No rallies yet' : allTagged ? 'Every rally has a winner' : `${m.rallyCount - m.tagged} rallies have no winner yet`),
+      checked
+        ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result'}`)
+        : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
+      tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
+      tag(Boolean(m.youtubeUrl), 'youtube', m.youtubeUrl ? 'YouTube ↗' : 'YouTube', m.youtubeUrl ?? 'Not on YouTube yet', m.youtubeUrl),
+      m.favourites ? h('span', { class: 'pill', title: 'Favourite rallies' }, `★ ${m.favourites}`) : null);
+  };
+
+  // badminfo's chance before the match, each side's with its names.
+  const shortTeam = (team) => (team.length > 1 ? team.map((n) => n.trim().split(/\s+/).at(-1)).join(' / ') : team[0] ?? '');
+  const chanceCell = (m) => {
+    if (typeof m.people?.chance !== 'number') return h('span', { class: 'muted' }, '—');
+    const [pa, pb] = percents(m.people.chance);
+    return h('div', { class: 'chance-cell small', title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` },
+      h('div', {}, h('span', { class: 'pct' }, pa), ' ', shortTeam(m.teamA)),
+      h('div', {}, h('span', { class: 'pct' }, pb), ' ', shortTeam(m.teamB)),
+      m.people.upset ? h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset') : null);
   };
 
   const gameLabel = (u) => [h('strong', {}, `Game ${u.game}`), u.parent.games[u.game - 1] ? h('span', { class: 'muted' }, ` (${u.parent.games[u.game - 1].join('-')})`) : null];
 
   // Each name links to the player's page and carries their badminfo rating for this event, when known.
+  // Your starred players get a gold mark (by badminfo id, else by name).
+  const starred = (n, id) => data.favourites.some((f) => (id && f.id === id) || namesMatch(f.name, n));
   const named = (m, k) => (k ? m.teamB : m.teamA).map((n, i) => {
     const id = m.people?.ids?.[k]?.[i];
     const st = m.people?.teams?.[k]?.[i];
-    return [i ? ' / ' : '', id ? h('a', { class: 'plain', href: `#/p/${id}` }, n) : n,
+    const name = id ? h('a', { class: 'plain', href: `#/p/${id}` }, n) : n;
+    return [i ? ' / ' : '', starred(n, id) ? h('span', { class: 'fav-name', title: 'One of your players' }, '★ ', name) : name,
       st?.rating ? h('span', { class: 'rating-chip', title: `badminfo rating${st.grade ? `, grade ${st.grade}` : ''}` }, st.rating) : null];
   });
+  // The winners in green with a tick, the losers in red, once the result is in.
+  const side = (m, k) => (!m.winner ? '' : m.winner === k + 1 ? 'team-won' : 'team-lost');
   const teams = (m) => [
-    h('div', { class: m.favs.a.length ? 'team-mine' : '' }, named(m, 0)),
+    h('div', { class: side(m, 0) }, m.winner === 1 ? '✓ ' : '', named(m, 0)),
     h('div', { class: 'muted small' }, 'v'),
-    h('div', { class: m.favs.b.length ? 'team-mine' : '' }, named(m, 1)),
+    h('div', { class: side(m, 1) }, m.winner === 2 ? '✓ ' : '', named(m, 1)),
   ];
 
   const listView = (list) => h('div', { class: 'table-scroll' }, h('table', {},
-    h('thead', {}, h('tr', {}, ['Time', 'Court', 'Event', 'Match', 'Result', 'Video', 'Status'].map((x) => h('th', {}, x)))),
+    h('thead', {}, h('tr', {}, ['Time', 'Court', 'Event', 'Match', 'Result', 'Win chance', 'Video', 'Status'].map((x) => h('th', {}, x)))),
     list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, ...dropOn(m) },
       h('tr', { class: m.mine ? 'mine' : '' },
         h('td', { class: 'nowrap' }, m.time, m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
@@ -611,13 +628,14 @@ async function renderTournament(id, notice = null, who = null) {
         h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round), custom ? custom.actions(m) : null),
         h('td', {}, teams(m)),
         h('td', { class: 'nowrap' }, m.games?.length ? gamesView(m.games) : h('span', { class: 'muted' }, '—')),
+        h('td', {}, chanceCell(m)),
         h('td', {}, videoCell(m)),
         h('td', {}, statusCell(m))),
       // Game by game, unless one video covers the whole match.
       perGame(m) && !m.videoIds.length ? unitsOf(m).map((u) => h('tr', { class: `game-row${m.mine ? ' mine' : ''}`, ...dropOn(u) },
         h('td', {}), h('td', {}), h('td', {}),
         h('td', { class: 'small game-name' }, '↳ ', gameLabel(u)),
-        h('td', {}),
+        h('td', {}), h('td', {}),
         h('td', {}, unitVideoCell(u)),
         h('td', {}, statusCell(u)))) : null))));
 
@@ -639,6 +657,7 @@ async function renderTournament(id, notice = null, who = null) {
         h('div', { class: 'small muted' }, [m.time, m.court, `${m.draw}${m.round ? ` · ${m.round}` : ''}`].filter(Boolean).join(' · ')),
         h('div', { class: 'teams' }, teams(m)),
         h('div', { class: 'small' }, 'Result ', m.games?.length ? h('span', {}, gamesView(m.games)) : '—', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null),
+        typeof m.people?.chance === 'number' ? h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Win chance'), chanceCell(m)) : null,
         statusCell(m),
         custom ? custom.actions(m) : null,
         filmed ? h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `#/m/${m.id}` }, 'Open'), youtubeLink(m),
