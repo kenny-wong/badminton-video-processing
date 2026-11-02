@@ -67,7 +67,11 @@ test('resume offsets from YouTube’s Range header', () => {
 
 test('API errors become sentences people can act on', async () => {
   const quota = await apiError(jsonRes({ error: { code: 403, message: 'x', errors: [{ reason: 'quotaExceeded' }] } }, 403), 'Uploading');
-  assert.match(quota.message, /daily limit/);
+  assert.match(quota.message, /daily limit for this Google project/);
+  const channel = await apiError(jsonRes({ error: { code: 400, message: 'The user has exceeded the number of videos they may upload.', errors: [{ reason: 'uploadLimitExceeded' }] } }, 400), 'Uploading');
+  assert.match(channel.message, /channel has reached its upload limit/); // the channel's cap, not the project's quota
+  const rate = await apiError(jsonRes({ error: { code: 403, errors: [{ reason: 'rateLimitExceeded' }] } }, 403), 'Uploading');
+  assert.match(rate.message, /Too many YouTube requests/);
   const auth = await apiError(jsonRes({ error: { code: 401 } }, 401), 'Uploading');
   assert.equal(auth.code, 'signin');
   const other = await apiError(jsonRes({ error: { code: 400, message: 'Bad title', errors: [{ reason: 'invalidTitle' }] } }, 400), 'Uploading');
