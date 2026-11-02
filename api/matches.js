@@ -13,10 +13,8 @@
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
 // POST /api/matches/:id/detections: finds and follows the people in the video (YOLO, a job). GET: what was found
 //   (404 until then); PUT { swap: { a, b } }: which way round each doubles pair's names go.
-// GET /api/matches/:id/suggestions: a suggested winner for each rally without one, from the sequences of
-//   winners that reach the official result (else, with no result yet, from the tracked shuttle).
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
-// POST /api/matches/:id/analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
+// POST /api/matches/:id/render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
 // GET /api/matches/:id/levels: the sound level along the video (404 until worked out); POST starts working it out (a job).
 // POST /api/matches/:id/clip { rally (0-based), upright }: queues a clip of one rally, upright 9:16 following the shuttle or as filmed.
@@ -30,15 +28,14 @@ import { nowIso } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { findTools } from '../lib/ffmpeg.js';
 import { findJob, jobView, startJob } from '../lib/jobs.js';
-import { analyseMatch, describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
-import { cleanFormat, cleanRallies, cleanStart, defaultServer, startFor } from '../public/shared/score.js';
-import { cleanCorners, courtMapping } from '../public/shared/court.js';
+import { describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
+import { cleanFormat, cleanRallies, cleanStart, defaultServer } from '../public/shared/score.js';
+import { cleanCorners } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { findPeople, peopleFinder, readPeople, saveSwap } from '../lib/people.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
 import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
-import { inferWinners, suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
 import { teamName } from '../public/shared/names.js';
@@ -60,7 +57,7 @@ export function onRequestGet({ params, app }) {
   const sides = favouriteMatcher(app.db, loaded.tournament.id, favourites(app.db));
   const source = sourceFor(loaded);
   const described = { people: matchPeople(app.db, loaded), options: settings.description };
-  const jobs = Object.fromEntries(['analyse', 'render', 'track', 'people'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
+  const jobs = Object.fromEntries(['render', 'track', 'people'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
   return json({
     ...loaded,
     source: { ...source, path: undefined, url: source.ready ? `/media/match/${match.id}` : null },
@@ -256,27 +253,6 @@ export async function trackData({ params, app }) {
   return json({ points: trackPoints(data).map((p) => [r(p.t), r(p.x), r(p.y)]) });
 }
 
-export async function suggestions({ params, app }) {
-  const loaded = load(app, params);
-  if (!loaded) return fail(404, 'notFound', 'No such match');
-  const { match } = loaded;
-  const data = await readTrack(match.trackPath);
-  const points = data ? trackPoints(data) : [];
-  const toCourt = courtMapping(match.corners)?.toCourt ?? null;
-  const common = { rallies: match.rallies, format: matchFormat(match), start: startFor(match) ?? { games: [], points: [0, 0] }, oneGame: match.game > 0 };
-  // The official score of what this video shows: the match, or the games up to this one.
-  const official = match.game ? match.games.slice(0, match.game) : match.games;
-  const result = match.game ? official.length === match.game : official.length > 0 && Boolean(match.winner);
-  if (result) {
-    const list = inferWinners({ ...common, firstServer: match.firstServer ?? 'a', finalGames: official });
-    return json({ suggestions: list, method: 'result', possible: list.every((x) => x.possible !== false), result: official });
-  }
-  if (!data) return fail(400, 'noResult', 'Suggestions need the official result (Update results on the tournament page) or the tracked shuttle');
-  if (!match.nearAtStart) return fail(400, 'noEnds', 'Say which team is at the near end when the video starts');
-  const list = suggestWinners({ ...common, points, toCourt, nearAtStart: match.nearAtStart });
-  return json({ suggestions: list, method: 'shuttle', possible: true, shuttle: true, court: Boolean(match.corners) });
-}
-
 export async function takeTagging({ request, params, app }) {
   const loaded = load(app, params);
   if (!loaded) return fail(404, 'notFound', 'No such match');
@@ -338,18 +314,6 @@ export async function revealPath({ request, app }) {
   if (!path || !path.toLowerCase().startsWith(root) || !existsSync(path)) return fail(404, 'notFound', 'That file isn’t in the output folder any more');
   if (process.platform === 'win32') spawn('explorer.exe', [selectArg(path)], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
   return json({ ok: true, path });
-}
-
-export async function analyse({ request, params, app }) {
-  const loaded = load(app, params);
-  if (!loaded) return fail(404, 'notFound', 'No such match');
-  const { settings, tools: t } = tools(app);
-  if (!t) return noFfmpeg();
-  const body = (await readJson(request)) ?? {};
-  const sensitivity = Number.isFinite(body.sensitivity) && body.sensitivity >= 1 && body.sensitivity <= 10 ? body.sensitivity : settings.sensitivity;
-  const id = loaded.match.id;
-  const job = startJob('analyse', `analyse:${id}`, (j, signal) => analyseMatch(app.db, t, settings, id, { sensitivity, signal, job: j }));
-  return json(jobView(job), 202);
 }
 
 export async function render({ request, params, app }) {

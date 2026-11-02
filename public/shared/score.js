@@ -220,18 +220,3 @@ export function cleanRallies(list, maxCount = 2000) {
     .sort((x, y) => x.start - y.start);
 }
 
-/** Found rallies, each taking the winner (and favourite mark) of the tagged rally it overlaps most. */
-export function mergeWinners(found, tagged) {
-  return found.map((f) => {
-    let best = null;
-    let most = 0;
-    for (const t of tagged) {
-      const overlap = Math.min(f.end, t.end) - Math.max(f.start, t.start);
-      if ((t.winner || t.fav) && overlap > most) {
-        most = overlap;
-        best = t;
-      }
-    }
-    return { start: f.start, end: f.end, winner: best?.winner ?? null, ...(best?.fav ? { fav: true } : {}) };
-  });
-}

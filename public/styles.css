@@ -495,10 +495,6 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .win button.on.a { background: var(--side-a); color: #fff; border-color: var(--side-a); }
 .win button.on.b { background: var(--side-b); color: #fff; border-color: var(--side-b); }
 .win button.on.let { background: var(--let); color: #fff; border-color: var(--let); }
-.win button.guess { border-style: dashed; margin-left: 4px; }
-.win button.guess.a { color: var(--side-a); border-color: var(--side-a); background: var(--side-a-soft); }
-.win button.guess.b { color: var(--side-b); border-color: var(--side-b); background: var(--side-b-soft); }
-.win button.guess.sure { border-style: solid; font-weight: 700; }
 .rallies button.star { border: 0; background: none; padding: 0 4px; min-height: 24px; font-size: var(--fs-md); color: var(--faint); box-shadow: none; }
 .rallies button.star.on { color: var(--focus); }
 

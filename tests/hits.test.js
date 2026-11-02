@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { findHits, frameLevels, groupRallies } from '../lib/hits.js';
+import { findHits, frameLevels } from '../lib/hits.js';
 
 /** Frame levels (dB) for `seconds` of hall noise with loud hits at the given times. */
 function levels(seconds, hits, { noise = 40, hit = 62 } = {}) {
@@ -40,20 +40,6 @@ test('lower sensitivity ignores quieter clicks', () => {
   const soft = levels(10, [3, 4, 5], { hit: 53 });
   assert.equal(findHits(soft, { sensitivity: 8 }).length, 3);
   assert.equal(findHits(soft, { sensitivity: 2 }).length, 0);
-});
-
-test('groupRallies groups close hits into rallies and drops stray clicks', () => {
-  const hits = [10, 11, 12.2, 13.1, /* gap */ 30, 31, 32, /* stray */ 50, /* rally */ 60, 61.5, 62.8, 64];
-  const r = groupRallies(hits, { duration: 70 });
-  assert.equal(r.length, 3);
-  assert.deepEqual(r[0], { start: 8.5, end: 14.6, winner: null, hits: 4 });
-  assert.deepEqual([r[1].start, r[1].end], [28.5, 33.5]);
-  assert.equal(r[2].end, 65.5);
-  // Rallies never run into each other or past the video.
-  const tight = groupRallies([1, 2, 3, 6, 7, 8], { maxGap: 2, duration: 8.5 });
-  assert.ok(tight[0].end <= tight[1].start);
-  assert.equal(tight[0].start, 0);
-  assert.equal(tight[1].end, 8.5);
 });
 
 test('sound levels for the timeline keep the loudest of each tenth of a second', async () => {

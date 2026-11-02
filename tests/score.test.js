@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { checkResult, cleanFormat, cleanRallies, defaultServer, gameOver, gamesText, inferFormat, mergeWinners, replay, scoreAt, serviceCourt } from '../public/shared/score.js';
+import { checkResult, cleanFormat, cleanRallies, defaultServer, gameOver, gamesText, inferFormat, replay, scoreAt, serviceCourt } from '../public/shared/score.js';
 
 /** Rallies one second apart from a string of winners: 'aab' -> a, a, b. */
 const rallies = (winners) => [...winners].map((w, i) => ({ start: i * 10, end: i * 10 + 5, winner: w === 'a' || w === 'b' ? w : w === 'l' ? 'let' : null }));
@@ -90,10 +90,7 @@ test('cleanRallies keeps valid rallies in time order and drops bad winners', () 
   assert.deepEqual(cleanRallies('nope'), []);
 });
 
-test('mergeWinners gives found rallies the winner of the tagged rally they overlap most', () => {
-  const found = [{ start: 0, end: 6 }, { start: 10, end: 16 }, { start: 30, end: 35 }];
-  const tagged = [{ start: 1, end: 5, winner: 'a' }, { start: 9, end: 12, winner: 'b' }, { start: 12, end: 17, winner: 'a' }];
-  assert.deepEqual(mergeWinners(found, tagged).map((r) => r.winner), ['a', 'a', null]);
+test('gamesText writes games as on a score sheet', () => {
   assert.equal(gamesText([[21, 18], [15, 21]]), '21-18 15-21');
 });
 

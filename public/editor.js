@@ -1,11 +1,11 @@
 // The match editor (#/m/<id>): play the match video, tag each rally's start,
-// end and winner from the keyboard (or accept rallies found by sound and just
-// say who won), watch the score build up, and render the edited video.
+// end and winner from the keyboard, watch the score build up, and render the
+// edited video.
 
 import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
-import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, mergeWinners, parseGames, replay, scoreAt, startFor } from './shared/score.js';
+import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, parseGames, replay, scoreAt, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
@@ -68,18 +68,20 @@ const writePad = (pad) => {
 
 // A small court as the camera sees it (near end at the bottom), for the marking tip: corners in
 // CORNER_NAMES order, those before `active` done, `active` the one to click now.
-// Whether to draw the players found in the video (boxes and names), per device.
+// Whether to draw the players found in the video (boxes and names), and the
+// tracked shuttle, on every tab; per device, on unless turned off.
 const PLAYERS_KEY = 'badminton-video:show-players:v1';
-const readShowPlayers = () => {
+const SHUTTLE_KEY = 'badminton-video:show-shuttle:v1';
+const readShow = (key) => {
   try {
-    return localStorage.getItem(PLAYERS_KEY) !== '0';
+    return localStorage.getItem(key) !== '0';
   } catch {
     return true;
   }
 };
-const writeShowPlayers = (on) => {
+const writeShow = (key, on) => {
   try {
-    localStorage.setItem(PLAYERS_KEY, on ? '1' : '0');
+    localStorage.setItem(key, on ? '1' : '0');
   } catch { /* storage blocked */ }
 };
 
@@ -200,16 +202,15 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let corners = match.corners;
   let nearAtStart = match.nearAtStart;
   let shuttle = []; // tracked sightings [t, x, y], once loaded
-  let showShuttle = true;
+  let showShuttle = readShow(SHUTTLE_KEY);
   let showCourt = true;
   let people = null; // GET /api/matches/:id/detections: everyone YOLO found, once looked for
-  let showPlayers = readShowPlayers();
+  let showPlayers = readShow(PLAYERS_KEY);
   let named = null; // the players named in each frame, worked out again when what they depend on changes
   let namedKey = '';
   let marking = null; // corners clicked so far while marking the court
-  let onTracking = false; // court lines, marking, the shuttle and black space show only on the Tracking tab
+  let onTracking = false; // court lines, marking and black space show only on the Tracking tab
   const pad = readPad();
-  const suggested = new Map(); // rally start -> { winner, sure }
   let sel = -1;
   let openStart = null;
   let steps = [];
@@ -527,7 +528,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const board = h('div', { class: 'board' });
   const checkBox = h('div', { class: 'small' });
   const listBox = h('div', { class: 'rallies' });
-  const findBox = h('div');
   const renderBox = h('div');
 
   function tick() {
@@ -678,9 +678,29 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, box.cw, box.ch);
     placeHandles(box);
+    const px = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
     if (showPlayers && people) drawPlayers(g, box);
+    if (showShuttle && shuttle.length) {
+      const t = video.currentTime;
+      const shown = shuttleShown(); // over the court and in play only
+      let i = lowerBound(shown, t - 0.5);
+      const trail = [];
+      for (; i < shown.length && shown[i][0] <= t + 0.02; i++) trail.push(shown[i]);
+      trail.forEach(([pt, x, y], k) => {
+        const [cx, cy] = px([x, y]);
+        const fresh = k === trail.length - 1 && t - pt < 0.1;
+        g.fillStyle = fresh ? '#ff3b30' : `rgba(255, 59, 48, ${0.25 + (0.5 * k) / trail.length})`;
+        g.beginPath();
+        g.arc(cx, cy, fresh ? 6 : 3, 0, Math.PI * 2);
+        g.fill();
+        if (fresh) {
+          g.strokeStyle = '#fff';
+          g.lineWidth = 2;
+          g.stroke();
+        }
+      });
+    }
     if (!onTracking) return;
-    const px =([x, y]) => [box.x + x * box.w, box.y + y * box.h];
     const map = corners && courtMapping(corners);
     if (map && showCourt && !marking) {
       g.strokeStyle = 'rgba(255, 216, 77, 0.8)';
@@ -726,26 +746,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         label(CORNER_NAMES[k], x + 9, y - 8);
       });
       if (hover) label(`${marking.length + 1}. ${CORNER_NAMES[marking.length]}`, hover[0] + 14, hover[1] - 12);
-    }
-    if (showShuttle && shuttle.length) {
-      const t = video.currentTime;
-      const shown = shuttleShown(); // over the court and in play only
-      let i = lowerBound(shown, t - 0.5);
-      const trail = [];
-      for (; i < shown.length && shown[i][0] <= t + 0.02; i++) trail.push(shown[i]);
-      trail.forEach(([pt, x, y], k) => {
-        const [cx, cy] = px([x, y]);
-        const fresh = k === trail.length - 1 && t - pt < 0.1;
-        g.fillStyle = fresh ? '#ff3b30' : `rgba(255, 59, 48, ${0.25 + (0.5 * k) / trail.length})`;
-        g.beginPath();
-        g.arc(cx, cy, fresh ? 6 : 3, 0, Math.PI * 2);
-        g.fill();
-        if (fresh) {
-          g.strokeStyle = '#fff';
-          g.lineWidth = 2;
-          g.stroke();
-        }
-      });
     }
   }
 
@@ -924,19 +924,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     select(i, { seek: false });
     video.currentTime = Math.max(rallies[i].start, rallies[i].end - REVIEW_LEAD_S);
     video.play().catch(() => {});
-    const guess = suggested.get(rallies[i].start);
-    if (guess?.winner) say(`Rally ${i + 1}: suggested ${guess.winner.toUpperCase()}${guess.sure ? '' : ' (unsure)'}`);
-  }
-
-  // A suggestion's tooltip: how likely it is, and why a less likely side may be suggested (the guesses must add up to the result).
-  function guessTitle(g) {
-    const w = g.winner.toUpperCase();
-    if (g.sure) return `Suggested ${w}: it follows from the result and the winners tagged. Click to accept`;
-    if (!g.chance) return `Suggested ${w}. Click to accept`;
-    const pct = Math.round(g.chance * 100);
-    return pct >= 50
-      ? `Suggested ${w}, ${pct}% likely. Click to accept`
-      : `Suggested ${w} so that all the suggestions together add up to the result (on its own ${w === 'A' ? 'B' : 'A'} is ${100 - pct}% likely). Click to accept`;
   }
 
   function drawList() {
@@ -954,19 +941,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         class: `${w}${r.winner === w ? ' on' : ''}`,
         onclick: () => setWinner(i, w),
         title: w === 'let' ? 'Let' : `${w.toUpperCase()} won`,
-      }, w === 'let' ? 'Let' : w.toUpperCase())),
-      !r.winner && suggested.get(r.start)?.winner ? h('button', {
-        class: `guess ${suggested.get(r.start).winner}${suggested.get(r.start).sure ? ' sure' : ''}`,
-        title: guessTitle(suggested.get(r.start)),
-        onclick: () => setWinner(i, suggested.get(r.start).winner),
-      }, `${suggested.get(r.start).winner.toUpperCase()}?`) : null),
+      }, w === 'let' ? 'Let' : w.toUpperCase()))),
       h('td', { class: 'nowrap' }, score),
       h('td', {}, h('button', { class: `star${r.fav ? ' on' : ''}`, title: r.fav ? 'Favourite (H)' : 'Mark as favourite (H)', 'aria-pressed': String(Boolean(r.fav)), onclick: () => toggleFav(i) }, r.fav ? '★' : '☆')),
       h('td', {}, h('button', { class: 'small', title: 'Remove', onclick: () => { remember(); rallies.splice(i, 1); if (sel >= rallies.length) sel = -1; changed(); } }, '✕')));
     });
     fill(listBox, rallies.length
       ? h('table', {}, h('thead', {}, h('tr', {}, ['#', 'Start', 'Len', 'Winner', 'Score', '★', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))
-      : h('p', { class: 'muted small', style: { padding: '8px 12px' } }, 'No rallies yet. Press S when a rally starts and A or B when it ends — or find them by sound below.'));
+      : h('p', { class: 'muted small', style: { padding: '8px 12px' } }, 'No rallies yet. Press S when a rally starts and A or B when it ends.'));
   }
 
   // ---- tagging settings ----
@@ -1043,26 +1025,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     fill(boundsBox, part('Starts', 'start', matchStart), part('Finishes', 'end', matchEnd));
   }
 
-  // ---- find rallies by sound ----
-  const sens = h('input', { type: 'range', min: 1, max: 10, step: 1, value: 5, 'aria-label': 'Sensitivity' });
-  const findBtn = h('button', {
-    onclick: async () => {
-      if (rallies.length && !confirm(`Replace the ${rallies.length} rallies with the ones found? Winners you’ve tagged are kept where rallies overlap.`)) return;
-      findBtn.disabled = true;
-      try {
-        const r = await runJob(findBox, () => api(`/api/matches/${id}/analyse`, { method: 'POST', body: { sensitivity: Number(sens.value) } }));
-        remember();
-        rallies = mergeWinners(r.rallies, rallies);
-        sel = -1;
-        changed();
-        fill(findBox, h('div', { class: 'notice ok' }, `Found ${r.rallies.length} rallies from ${r.hits} hit sounds${r.outside ? ` (${r.outside} more outside the marked match left out)` : ''}. Check them, then press N to go through each and say who won.`));
-      } catch (err) {
-        fill(findBox, errorNotice(err));
-      }
-      findBtn.disabled = false;
-    },
-  }, icon('wave', 16), 'Find rallies by sound');
-
   // ---- tagging stranded on a match with no video (tagged before tagging followed videos) ----
   const strandedBox = h('div');
   if (data.stranded.length) {
@@ -1083,11 +1045,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('div', { class: 'row' }, pickFrom, h('button', { class: 'small primary', onclick: () => bring() }, 'Bring tagging here'))));
   }
 
-  // ---- shuttle tracking: court, ends, TrackNetV3, suggested winners ----
+  // ---- shuttle tracking: court, ends, TrackNetV3 ----
   const trackingBox = h('div', { class: 'stack' });
   const trackJobBox = h('div');
-  const suggestBox = h('div');
-  const rallySuggestBox = h('div'); // the same suggestions, started from the Rallies tab
   let tracked = data.tracking.tracked;
 
   async function saveTrackingSettings() {
@@ -1101,55 +1061,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       drawOverlay();
       if (tab === 'stats') drawStats();
     } catch { /* not tracked yet */ }
-  }
-
-  // Suggest winners works from the official result; without one, from the tracked shuttle.
-  const hasResult = unitGame ? official.length === unitGame : official.length > 0 && Boolean(match.winner);
-  const canSuggest = () => rallies.length > 0 && (hasResult || (tracked && nearAtStart));
-
-  async function suggest(box = suggestBox) {
-    try {
-      clearTimeout(saveTimer);
-      await save();
-      const r = await api(`/api/matches/${id}/suggestions`);
-      suggested.clear();
-      r.suggestions.forEach((x, i) => { if (rallies[i] && !rallies[i].winner && (x.winner === 'a' || x.winner === 'b')) suggested.set(rallies[i].start, x); });
-      const all = [...suggested.values()];
-      const sure = all.filter((x) => x.sure).length;
-      const fillIn = (onlySure) => {
-        remember();
-        rallies.forEach((rl) => {
-          const x = suggested.get(rl.start);
-          if (!rl.winner && x && (x.sure || !onlySure)) rl.winner = x.winner;
-        });
-        changed();
-        say(onlySure ? `Filled in ${sure} sure winners` : `Filled in ${all.length} winners`);
-      };
-      const fromResult = r.method === 'result';
-      const from = fromResult ? `the official result (${gamesText(r.result)})` : 'the tracked shuttle';
-      // Guesses close to a coin flip aren't worth filling in: say so instead.
-      const coinFlips = fromResult && !all.some((x) => x.sure || x.chance >= 0.75);
-      fill(box, !r.possible
-        ? h('div', { class: 'notice warn small' }, `The winners tagged so far can’t add up to the official result (${gamesText(r.result)}): a rally may be missing or extra, or a winner wrong. The scoreboard panel shows where the tagged score and the result part.`)
-        : all.length
-          ? h('div', { class: 'notice info stack small' },
-            h('div', {}, `${all.length} winners suggested from ${from}. They show as A? / B? in the rally list (hover for how likely).`),
-            coinFlips
-              ? h('div', {}, 'They’re close to coin flips, so there’s nothing worth filling in yet. Tag more rallies (N goes to the next untagged one) and suggest again: the more you tag, the more the result decides the rest.')
-              : h('div', {}, fromResult
-                ? (sure ? `${sure} follow from the result and the winners you’ve tagged, so they’re sure. ` : 'None is certain yet. ') + 'The more rallies you tag, the more the rest are decided: when only a few are left, the result settles most of them.'
-                : `${sure} sure${r.court ? '' : ' (mark the court to check landings too)'}.`),
-            coinFlips ? null
-              : h('div', { class: 'row' },
-                sure ? h('button', { class: 'small primary', onclick: () => fillIn(true) }, `Fill in the ${sure} sure ones`) : null,
-                h('button', { class: 'small', onclick: () => fillIn(false) }, 'Fill in all (best guesses)')))
-          : rallies.every((rl) => rl.winner)
-            ? h('div', { class: 'notice info small' }, `All ${rallies.length} rallies already have a winner. Suggestions only fill in rallies without one; your own tags are never changed.`)
-            : h('div', { class: 'notice warn small' }, 'No winners could be worked out. The shuttle may not be visible at serves; check the court marking and the near end.'));
-      drawList();
-    } catch (err) {
-      fill(box, errorNotice(err));
-    }
   }
 
   // Finding the players (YOLO), showing them, and putting a doubles pair's names the right way round.
@@ -1176,7 +1087,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
               const r = await runJob(peopleJobBox, () => api(`/api/matches/${id}/detections`, { method: 'POST' }));
               fill(peopleJobBox, h('div', { class: 'notice ok small' }, `Found people in ${r.frames.toLocaleString('en-GB')} frames.`));
               showPlayers = true;
-              writeShowPlayers(true);
+              writeShow(PLAYERS_KEY, true);
               await loadPeople();
             } catch (err) {
               fill(peopleJobBox, errorNotice(err));
@@ -1184,7 +1095,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
             e.target.disabled = false;
           },
         }, people ? 'Find players again' : 'Find players'),
-        people ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showPlayers, onchange: (e) => { showPlayers = e.target.checked; writeShowPlayers(showPlayers); drawOverlay(); } }), 'Show players and their names') : null,
+        people ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showPlayers, onchange: (e) => { showPlayers = e.target.checked; writeShow(PLAYERS_KEY, showPlayers); drawOverlay(); } }), 'Show players and their names') : null,
         pair('a'), pair('b')),
       people && !corners ? h('div', { class: 'hint' }, 'Mark the court so the players on it can be named; until then everyone found is boxed.') : null,
       people && corners && !nearAtStart ? h('div', { class: 'hint' }, 'Choose who is at the near end when the video starts, or the names may be on the wrong players.') : null,
@@ -1224,12 +1135,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
             e.target.disabled = false;
           },
         }, tracked ? 'Track again' : 'Track the shuttle'),
-        tracked ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showShuttle, onchange: (e) => { showShuttle = e.target.checked; drawOverlay(); } }), 'Show the shuttle on the video') : null),
+        tracked ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showShuttle, onchange: (e) => { showShuttle = e.target.checked; writeShow(SHUTTLE_KEY, showShuttle); drawOverlay(); } }), 'Show the shuttle on the video') : null),
       trackJobBox,
-      playersControls(),
-      tracked || hasResult ? h('div', { class: 'row' }, h('button', { class: 'small primary', disabled: !canSuggest(), onclick: () => suggest(suggestBox) }, 'Suggest winners'),
-        !rallies.length ? h('span', { class: 'hint' }, 'find or tag the rallies first') : !canSuggest() ? h('span', { class: 'hint' }, 'choose the near end first') : null) : null,
-      suggestBox);
+      playersControls());
   }
   drawTrackingPanel();
   if (tracked) loadShuttle();
@@ -1570,7 +1478,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         } else if (sel >= 0) {
           setWinner(sel, w, { advance: true });
         } else {
-          // Inside (or just after) a rally found by sound: say who won it. Otherwise a new
+          // Inside (or just after) a rally without a winner: say who won it. Otherwise a new
           // rally ending now, taken to have started 3 s after the one before.
           const t = now();
           const i = rallies.findIndex((r) => t >= r.start && t <= r.end + 1.5);
@@ -1638,20 +1546,19 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       strandedBox,
       card('Rallies', 'list',
         h('div', { class: 'row spread small' }, h('span', { class: 'muted' }, 'S starts a rally, A / B ends it.'),
-          h('div', { class: 'row tight' },
-            h('button', { class: 'small', onclick: () => goNextUntagged(-1) }, 'Review untagged (N)'),
-            h('button', {
-              class: 'small',
-              title: 'Work out the winners of untagged rallies from the official result',
-              onclick: () => (canSuggest() ? suggest(rallySuggestBox)
-                : fill(rallySuggestBox, h('div', { class: 'notice warn small' }, !rallies.length ? 'Find or tag the rallies first.' : 'Suggestions need the official result (Update results on the tournament page), or the tracked shuttle and the near end on the Tracking tab.'))),
-            }, 'Suggest winners'))),
-        rallySuggestBox,
-        listBox),
-      card('Find rallies by sound', 'wave',
-        h('p', { class: 'hint' }, 'Listens for shuttle hits. Noisy halls with nearby courts may need a lower sensitivity.'),
-        h('div', { class: 'row small' }, 'Sensitivity', sens, findBtn),
-        findBox)),
+          h('button', {
+            class: 'small ghost', title: 'Remove every rally of this video (Ctrl+Z brings them back)',
+            onclick: () => {
+              if (!rallies.length) return say('No rallies to clear');
+              if (!confirm(`Remove all ${rallies.length} rallies? Ctrl+Z brings them back.`)) return;
+              remember();
+              rallies = [];
+              sel = -1;
+              changed();
+              say('All rallies removed');
+            },
+          }, icon('trash', 14), 'Clear all rallies')),
+        listBox)),
     scoring: h('div', {},
       card('Scoring', 'sliders',
         h('div', { class: 'row small' }, pointsSel, h('label', { class: 'row' }, settingBox, 'setting'), capText, bestOfSel),
@@ -1663,12 +1570,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         unitGame ? null : h('p', { class: 'hint' }, 'For videos that start mid-match. “A serves first” then means A serves the first rally in the video.'),
         h('div', { class: 'subhead' }, 'Match in the video'),
         boundsBox,
-        h('p', { class: 'hint' }, 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering and of finding rallies.'))),
+        h('p', { class: 'hint' }, 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering.'))),
     players: h('div', {}, card('Players', 'user', peopleBox)),
     stats: h('div', {}, card('Statistics', 'wave', statsBox)),
     tracking: h('div', {},
-      card('Who won each rally', 'target',
-        h('p', { class: 'hint' }, 'TrackNetV3 follows the shuttle. The winner of a rally serves the next one, so the direction of each serve, checked against where the shuttle landed, suggests who won.'),
+      card('Shuttle and players', 'target',
+        h('p', { class: 'hint' }, 'TrackNetV3 follows the shuttle and YOLO finds the players. Once found, the ticks below show them on the video on every tab.'),
         trackingBox,
         padBox)),
     export: h('div', {},
