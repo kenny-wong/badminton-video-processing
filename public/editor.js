@@ -9,6 +9,7 @@ import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, me
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
+import { shuttleInPlay } from './shared/shuttle.js';
 import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
@@ -581,6 +582,19 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'mark-tip-hint' }, 'Near = nearest the camera · Esc stops')));
   }
 
+  // The shuttle sightings to draw: over the marked court and in play (not lying on the floor), worked out
+  // again when the sightings or the court change. Stats and clips keep using every sighting.
+  let shownShuttle = null;
+  let shownKey = '';
+  function shuttleShown() {
+    const key = `${shuttle.length}|${JSON.stringify(corners)}`;
+    if (!shownShuttle || key !== shownKey) {
+      shownShuttle = shuttleInPlay(shuttle, corners);
+      shownKey = key;
+    }
+    return shownShuttle;
+  }
+
   // ---- the players found in the video, with their names ----
   // Named again only when something they depend on changes: the court, the ends, the score, the name order.
   function namedPlayers() {
@@ -714,9 +728,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     }
     if (showShuttle && shuttle.length) {
       const t = video.currentTime;
-      let i = lowerBound(shuttle, t - 0.5);
+      const shown = shuttleShown(); // over the court and in play only
+      let i = lowerBound(shown, t - 0.5);
       const trail = [];
-      for (; i < shuttle.length && shuttle[i][0] <= t + 0.02; i++) trail.push(shuttle[i]);
+      for (; i < shown.length && shown[i][0] <= t + 0.02; i++) trail.push(shown[i]);
       trail.forEach(([pt, x, y], k) => {
         const [cx, cy] = px([x, y]);
         const fresh = k === trail.length - 1 && t - pt < 0.1;
