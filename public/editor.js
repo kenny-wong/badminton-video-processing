@@ -209,7 +209,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let matchStart = match.matchStart;
   let matchEnd = match.matchEnd;
   let initial = null;
-  // With no manual choice, show the preview only after this video's tagging is complete.
+  // With no manual choice, the preview shows once a rally has a winner (the first one tagged).
   const scoreboardKey = `badminton-video:show-scoreboard:v1:${id}`;
   let scoreboardChoice = readShow(scoreboardKey, null);
   let showScoreboard = false;
@@ -866,7 +866,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   function recompute() {
     const result = replay(rallies, format, firstServer, startFor({ ...match, startScore }), { oneGame: unitGame > 0 });
     ({ steps, initial } = result);
-    showScoreboard = scoreboardChoice ?? Boolean(result.winner && rallies.length && rallies.every((r) => r.winner));
+    showScoreboard = scoreboardChoice ?? rallies.some((r) => r.winner);
     previewBox.checked = showScoreboard;
     lastVideoBoard = '';
   }
