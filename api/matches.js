@@ -10,6 +10,8 @@
 // PUT /api/matches/:id/games/:game/videos { videoIds }: the same for one game of the match,
 //   giving that game its own row (own tagging, render and YouTube link) on first use.
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
+// POST /api/matches/:id/detections: finds and follows the people in the video (YOLO, a job). GET: what was found
+//   (404 until then); PUT { swap: { a, b } }: which way round each doubles pair's names go.
 // GET /api/matches/:id/suggestions: a suggested winner for each rally without one, from the sequences of
 //   winners that reach the official result (else, with no result yet, from the tracked shuttle).
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
@@ -31,6 +33,7 @@ import { analyseMatch, describeOutput, loadMatch, matchFormat, renderMatch, sour
 import { cleanFormat, cleanRallies, cleanStart, defaultServer, startFor } from '../public/shared/score.js';
 import { cleanCorners, courtMapping } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
+import { findPeople, peopleFinder, readPeople, saveSwap } from '../lib/people.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
 import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
@@ -55,12 +58,13 @@ export function onRequestGet({ params, app }) {
   const sides = favouriteMatcher(app.db, loaded.tournament.id, favourites(app.db));
   const source = sourceFor(loaded);
   const described = { people: matchPeople(app.db, loaded), options: settings.description };
-  const jobs = Object.fromEntries(['analyse', 'render', 'track'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
+  const jobs = Object.fromEntries(['analyse', 'render', 'track', 'people'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
   return json({
     ...loaded,
     source: { ...source, path: undefined, url: source.ready ? `/media/match/${match.id}` : null },
     format: matchFormat(match),
     tracking: { ready: tracker().ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
+    findPlayers: { ready: peopleFinder().ready },
     formatChosen: Boolean(match.format),
     mine: { a: sides(match.teamA).length > 0, b: sides(match.teamB).length > 0 },
     nameStyle: settings.nameStyle,
@@ -199,6 +203,31 @@ export function track({ params, app }) {
   const id = loaded.match.id;
   const job = startJob('track', `track:${id}`, (j, signal) => trackMatch(app.db, t, settings, id, { signal, job: j }), { queue: 'gpu', label: `Track the shuttle: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);
+}
+
+export function findPlayers({ params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const { settings, tools: t } = tools(app);
+  if (!t) return noFfmpeg();
+  if (!peopleFinder().ready) return fail(503, 'noFinder', 'Finding players isn’t set up yet: run analysis\\setup.ps1 once (see the README).');
+  const id = loaded.match.id;
+  const job = startJob('people', `people:${id}`, (j, signal) => findPeople(app.db, t, settings, id, { signal, job: j }), { queue: 'gpu', label: `Find players: ${matchLabel(loaded.match)}` });
+  return json(jobView(job), 202);
+}
+
+export async function detections({ params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const data = await readPeople(readSettings(app.db), loaded);
+  return data ? json(data) : fail(404, 'notFound', 'The players haven’t been looked for in this video yet');
+}
+
+export async function setSwap({ request, params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const swap = await saveSwap(readSettings(app.db), loaded, (await readJson(request))?.swap);
+  return swap ? json({ ok: true, swap }) : fail(404, 'notFound', 'The players haven’t been looked for in this video yet');
 }
 
 export async function trackData({ params, app }) {

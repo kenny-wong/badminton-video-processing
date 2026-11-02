@@ -18,6 +18,10 @@ $py = Join-Path $root '.venv\Scripts\python.exe'
 # build as torch, or pip would swap torch for a newer CPU-only one to satisfy Demucs.
 & $py -m pip install torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 & $py -m pip install demucs==4.0.1
+# Ultralytics YOLO (AGPL-3.0, installed here only, not shipped) finds and follows the players
+# (find_people.py). torchvision first, from the same CUDA build as torch, for the same reason.
+& $py -m pip install torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+& $py -m pip install "numpy<2" ultralytics lap
 
 if (-not (Test-Path 'vendor\TrackNetV3')) {
   New-Item -ItemType Directory -Force vendor | Out-Null

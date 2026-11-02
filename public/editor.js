@@ -8,6 +8,7 @@ import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, mergeWinners, parseGames, replay, scoreAt, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
+import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
 import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
@@ -65,6 +66,21 @@ const writePad = (pad) => {
 
 // A small court as the camera sees it (near end at the bottom), for the marking tip: corners in
 // CORNER_NAMES order, those before `active` done, `active` the one to click now.
+// Whether to draw the players found in the video (boxes and names), per device.
+const PLAYERS_KEY = 'badminton-video:show-players:v1';
+const readShowPlayers = () => {
+  try {
+    return localStorage.getItem(PLAYERS_KEY) !== '0';
+  } catch {
+    return true;
+  }
+};
+const writeShowPlayers = (on) => {
+  try {
+    localStorage.setItem(PLAYERS_KEY, on ? '1' : '0');
+  } catch { /* storage blocked */ }
+};
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, attrs) => {
   const el = document.createElementNS(SVG_NS, tag);
@@ -184,6 +200,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let shuttle = []; // tracked sightings [t, x, y], once loaded
   let showShuttle = true;
   let showCourt = true;
+  let people = null; // GET /api/matches/:id/detections: everyone YOLO found, once looked for
+  let showPlayers = readShowPlayers();
+  let named = null; // the players named in each frame, worked out again when what they depend on changes
+  let namedKey = '';
   let marking = null; // corners clicked so far while marking the court
   let onTracking = false; // court lines, marking, the shuttle and black space show only on the Tracking tab
   const pad = readPad();
@@ -561,6 +581,64 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('div', { class: 'mark-tip-hint' }, 'Near = nearest the camera · Esc stops')));
   }
 
+  // ---- the players found in the video, with their names ----
+  // Named again only when something they depend on changes: the court, the ends, the score, the name order.
+  function namedPlayers() {
+    const key = [JSON.stringify(corners), nearAtStart, people.swap?.a, people.swap?.b, JSON.stringify(format),
+      rallies.map((r) => `${Math.round(r.end)}${r.winner?.[0] ?? '-'}`).join('')].join('|');
+    if (named && key === namedKey) return named;
+    const map = corners && courtMapping(corners);
+    const frames = placePeople(people, map?.toCourt ?? null);
+    const timeline = nearTeams({ rallies, steps, initial, rules: cleanFormat(format), nearAtStart: nearAtStart ?? 'a' });
+    named = map ? namePlayers(frames, { timeline, names: { a: match.teamA, b: match.teamB }, swap: people.swap }) : frames.map((f) => ({ t: f.t, players: [], everyone: f.people }));
+    if (map) frames.forEach((f, k) => { named[k].everyone = f.people; });
+    namedKey = key;
+    return named;
+  }
+
+  // Boxes on the players and their names above them (everyone found, unnamed, until the court is marked).
+  function drawPlayers(g, box) {
+    const list = namedPlayers();
+    const k = frameAt(list, video.currentTime);
+    if (k < 0 || video.currentTime - list[k].t > 0.3) return;
+    const at = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
+    g.font = '650 12px "Segoe UI", system-ui, sans-serif';
+    if (!corners) {
+      g.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      g.lineWidth = 1.5;
+      for (const p of list[k].everyone) {
+        const [x1, y1] = at(p.box);
+        const [x2, y2] = at([p.box[2], p.box[3]]);
+        g.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      }
+      return;
+    }
+    for (const p of list[k].players) {
+      const [x1, y1] = at(p.box);
+      const [x2, y2] = at([p.box[2], p.box[3]]);
+      const colour = p.team === 'a' ? '#2a78d6' : '#e8642c';
+      g.strokeStyle = colour;
+      g.lineWidth = 2;
+      g.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      // The name on a tag in the team's colour, above the head.
+      const w = g.measureText(p.name).width + 10;
+      const ty = Math.max(0, y1 - 19);
+      g.fillStyle = colour;
+      g.fillRect(x1, ty, w, 17);
+      g.fillStyle = '#fff';
+      g.fillText(p.name, x1 + 5, ty + 13);
+    }
+  }
+
+  async function loadPeople() {
+    try {
+      people = await api(`/api/matches/${id}/detections`);
+      named = null;
+      drawOverlay();
+      drawTrackingPanel();
+    } catch { /* not looked for yet */ }
+  }
+
   // The corner handles sit on the marked corners while the court shows on the Tracking tab.
   function placeHandles(box) {
     const show = Boolean(onTracking && corners && showCourt && !marking);
@@ -585,6 +663,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, box.cw, box.ch);
     placeHandles(box);
+    if (showPlayers && people) drawPlayers(g, box);
     if (!onTracking) return;
     const px =([x, y]) => [box.x + x * box.w, box.y + y * box.h];
     const map = corners && courtMapping(corners);
@@ -1057,12 +1136,51 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     }
   }
 
+  // Finding the players (YOLO), showing them, and putting a doubles pair's names the right way round.
+  const peopleJobBox = h('div');
+  function playersControls() {
+    if (!data.findPlayers?.ready) return h('p', { class: 'hint' }, 'Finding players isn’t set up on this PC yet: run ', h('kbd', {}, 'analysis\\setup.ps1'), ' again.');
+    const swap = (team) => {
+      people.swap = { ...people.swap, [team]: !people.swap?.[team] };
+      named = null;
+      drawOverlay();
+      api(`/api/matches/${id}/detections`, { method: 'PUT', body: { swap: people.swap } }).catch((err) => fill(peopleJobBox, errorNotice(err)));
+    };
+    const pair = (team) => (people && (team === 'a' ? match.teamA : match.teamB).length > 1
+      ? h('button', { class: 'small', title: 'The partners are told apart by shirt colour: swap if the names are the wrong way round', onclick: () => swap(team) }, `Swap ${team.toUpperCase()}’s names`)
+      : null);
+    return h('div', { class: 'stack' },
+      h('div', { class: 'row small' },
+        h('button', {
+          class: people ? 'small' : 'small primary',
+          title: 'Find and follow everyone in the video with YOLO on the graphics card (a few minutes), then name the players on the court',
+          onclick: async (e) => {
+            e.target.disabled = true;
+            try {
+              const r = await runJob(peopleJobBox, () => api(`/api/matches/${id}/detections`, { method: 'POST' }));
+              fill(peopleJobBox, h('div', { class: 'notice ok small' }, `Found people in ${r.frames.toLocaleString('en-GB')} frames.`));
+              showPlayers = true;
+              writeShowPlayers(true);
+              await loadPeople();
+            } catch (err) {
+              fill(peopleJobBox, errorNotice(err));
+            }
+            e.target.disabled = false;
+          },
+        }, people ? 'Find players again' : 'Find players'),
+        people ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showPlayers, onchange: (e) => { showPlayers = e.target.checked; writeShowPlayers(showPlayers); drawOverlay(); } }), 'Show players and their names') : null,
+        pair('a'), pair('b')),
+      people && !corners ? h('div', { class: 'hint' }, 'Mark the court so the players on it can be named; until then everyone found is boxed.') : null,
+      people && corners && !nearAtStart ? h('div', { class: 'hint' }, 'Choose who is at the near end when the video starts, or the names may be on the wrong players.') : null,
+      peopleJobBox);
+  }
+
   function drawTrackingPanel() {
     if (!data.tracking.ready) {
       fill(trackingBox, h('p', { class: 'hint' }, 'Not set up on this PC yet. Run ', h('kbd', {}, 'analysis\\setup.ps1'), ' once (it installs TrackNetV3 and PyTorch; see the README).'));
       return;
     }
-    const nearSel = h('select', { 'aria-label': 'Team at the near end', onchange: (e) => { nearAtStart = e.target.value || null; saveTrackingSettings(); } },
+    const nearSel = h('select', { 'aria-label': 'Team at the near end', onchange: (e) => { nearAtStart = e.target.value || null; saveTrackingSettings(); drawOverlay(); drawTrackingPanel(); } },
       h('option', { value: '', selected: !nearAtStart }, 'Choose…'),
       h('option', { value: 'a', selected: nearAtStart === 'a' }, `A (${nameA})`),
       h('option', { value: 'b', selected: nearAtStart === 'b' }, `B (${nameB})`));
@@ -1092,12 +1210,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         }, tracked ? 'Track again' : 'Track the shuttle'),
         tracked ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showShuttle, onchange: (e) => { showShuttle = e.target.checked; drawOverlay(); } }), 'Show the shuttle on the video') : null),
       trackJobBox,
+      playersControls(),
       tracked || hasResult ? h('div', { class: 'row' }, h('button', { class: 'small primary', disabled: !canSuggest(), onclick: () => suggest(suggestBox) }, 'Suggest winners'),
         !rallies.length ? h('span', { class: 'hint' }, 'find or tag the rallies first') : !canSuggest() ? h('span', { class: 'hint' }, 'choose the near end first') : null) : null,
       suggestBox);
   }
   drawTrackingPanel();
   if (tracked) loadShuttle();
+  loadPeople();
 
   // Sliders for the black space on each side, applied as they move and remembered.
   const padInputs = PAD_SIDES.map(([k, label, max]) => {

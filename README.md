@@ -90,6 +90,12 @@ In a match: **Mark the court** (click its four outer corners; a tip on the video
 
 Tracking takes about 1½ minutes per minute of video on an RTX 3090 (a 6-minute game: 9 minutes). `analysis\run_tracknet.py` runs TrackNetV3 with a faster frame reader that gives it exactly the same input; `analysis\check_tracknet_reader.py <TrackNetV3 folder> <video>` checks that. Each run's full output is in `tracking.log` in the match's work folder (`<output>\.work\match-<id>\track\`).
 
+## Players on the video
+
+**Find players** (Tracking tab) runs [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) pose with its ByteTrack tracker over the whole video on the GPU (about 3½ minutes for an 8-minute game), so each person is followed from frame to frame. It's installed by `analysis\setup.ps1` along with the shuttle tracker; Ultralytics is AGPL-3.0 and is only installed locally, never part of the app or the installer.
+
+**Show players and their names** then draws a box on each player, with their name in their team's colour, on every tab while the video plays. The players are the people whose feet are on the marked court (at most a team's worth per end); their team comes from who was at the near end when the video started and the score, as ends change after each game and at the deciding game's mid-point. In singles that gives each name; doubles partners are told apart by shirt colour, and **Swap A's names** / **Swap B's names** puts a pair the other way round if they come out wrong. Until the court is marked, everyone found is boxed without names.
+
 ## Removing voices
 
 Optional. [Demucs](https://github.com/facebookresearch/demucs) (MIT licence) takes players' shouts, coaching and talk by the court out of the sound and keeps everything else, shuttle hits included. `analysis\setup.ps1` installs it with the shuttle tracker (run it again if you set tracking up before this was added). Switch it on in Settings → Video size, or per render in the editor's Export tab; reels and clips follow Settings and the Export tab's box.
