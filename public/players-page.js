@@ -169,28 +169,33 @@ export async function renderPlayers(main) {
   const runSearch = async () => {
     const q = query.value.trim();
     if (!q) return fill(results);
-    try {
-      const r = await api(`/api/players/search?q=${encodeURIComponent(q)}`);
-      const byName = h('button', {
-        class: 'small',
-        onclick: async () => {
+    const changed = async () => { await runSearch(); await refreshCards(); };
+    // Onto the Players list without a star (under Other players).
+    const addButton = (p) => (p.listed
+      ? h('span', { class: 'small muted nowrap' }, p.favourite ? 'Favourite' : 'On your list')
+      : h('button', {
+        class: 'small', title: 'Add them to your Players list, under Other players, without a star',
+        onclick: async (e) => {
+          e.currentTarget.disabled = true;
           try {
-            await api('/api/favourites', { method: 'POST', body: { name: q } });
-            again();
+            await api('/api/favourites', { method: 'POST', body: { id: p.id, starred: false } });
+            await changed();
           } catch (err) {
             fill(results, errorNotice(err));
           }
         },
-      }, '☆ Star the name “', q, '”');
+      }, icon('plus', 14), 'Add'));
+    try {
+      const r = await api(`/api/players/search?q=${encodeURIComponent(q)}`);
       fill(results,
         r.players.length
           ? h('div', { class: 'table-scroll' }, h('table', {}, h('tbody', {}, r.players.map((p) => h('tr', {},
-            h('td', {}, starButton({ id: p.id, key: p.favourite, listed: p.listed }, async () => { await runSearch(); await refreshCards(); }, (err) => fill(results, errorNotice(err)))),
+            h('td', {}, starButton({ id: p.id, key: p.favourite, listed: p.listed }, changed, (err) => fill(results, errorNotice(err)))),
             h('td', {}, h('a', { href: `#/p/${p.id}` }, p.name), p.county ? h('div', { class: 'small muted' }, p.county) : null),
             h('td', { class: 'small' }, DISCIPLINES.filter(([k]) => p.ratings[k] || p.grades[k]).map(([k, label]) => h('span', { class: 'rating-chip', title: label }, `${label[0]} ${p.ratings[k] ?? '—'}${p.grades[k] ? ` ${p.grades[k]}` : ''}`))),
-            h('td', { class: 'small muted nowrap' }, `${p.tournaments} tournament${p.tournaments === 1 ? '' : 's'}`))))))
-          : h('p', { class: 'hint' }, 'No one by that name in the imported badminfo tournaments.'),
-        h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Not in a badminfo draw (a Badminton England-only import)?'), byName));
+            h('td', { class: 'small muted nowrap' }, `${p.tournaments} tournament${p.tournaments === 1 ? '' : 's'}`),
+            h('td', {}, addButton(p)))))))
+          : h('p', { class: 'hint' }, 'No one by that name in the imported badminfo tournaments. You can still add them by name under Add a player.'));
     } catch (err) {
       fill(results, errorNotice(err));
     }
