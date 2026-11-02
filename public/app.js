@@ -9,7 +9,7 @@
 //   #/jobs        background jobs (jobs-page.js)
 //   #/settings    folders, cutting, scoreboard, output
 
-import { h, fill, when, day, megabytes, ukDate, gamesView } from './dom.js';
+import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, NAME_STYLES, namesMatch, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
@@ -226,7 +226,7 @@ async function renderHome() {
           h('td', { class: 'small' }, h('a', { href: `#/t/${m.tournamentId}` }, m.tournament), h('div', { class: 'muted' }, [m.draw, m.round].filter(Boolean).join(' · '))),
           h('td', {}, teamName(m.teamA), h('span', { class: 'muted' }, ' v '), teamName(m.teamB)),
           h('td', { class: 'nowrap' }, gamesView(m.games)),
-          h('td', { class: 'nowrap' }, m.videos ? h('a', { class: 'btn small primary', href: `#/m/${m.id}` }, 'Open') : h('span', { class: 'small muted' }, 'no video'),
+          h('td', { class: 'nowrap' }, m.videos ? openButtons(m.units) : h('span', { class: 'small muted' }, 'no video'),
             m.youtubeUrl ? [' ', h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null))))))
         : h('p', { class: 'hint' }, 'No matches found.'));
     } catch (err) {

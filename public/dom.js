@@ -62,3 +62,14 @@ export function gamesView(games) {
   }
   return out;
 }
+
+/**
+ * Buttons to open a match's videos in the editor: "Open" for a video of the
+ * whole match, else one per game filmed on its own ("Game 1", "Game 2").
+ * `units` = [{ id, game }] from the server (filmedUnits).
+ */
+export function openButtons(units, { small = true } = {}) {
+  const cls = `btn primary${small ? ' small' : ''}`;
+  if (!units?.length) return null;
+  return h('span', { class: 'row tight' }, units.map((u) => h('a', { class: cls, href: `#/m/${u.id}`, title: u.game ? `Open game ${u.game}’s video` : 'Open the video' }, u.game ? `Game ${u.game}` : 'Open')));
+}

@@ -69,3 +69,22 @@ test('jobs on a queue run one at a time, in order; a waiting one can be stopped'
   assert.equal(third.status, 'stopped');
   assert.ok(listJobs().indexOf(third) < listJobs().indexOf(first)); // newest first
 });
+
+test('a match’s videos: the match itself, or each game filmed on its own, in game order', async () => {
+  const { openDb } = await import('../lib/db.js');
+  const { filmedUnits } = await import('../lib/overview.js');
+  const db = openDb();
+  db.exec('PRAGMA foreign_keys = OFF');
+  const tid = db.prepare("INSERT INTO tournaments (name, kind) VALUES ('T', 'custom') RETURNING id").get().id;
+  const add = (game, parent) => db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, draw, round, team_a, team_b)
+    VALUES (?, ?, ?, '2026-11-01', '09:00', 'WS', 'R1', '["A"]', '["B"]') RETURNING id`).get(tid, parent, game).id;
+  const whole = add(0, null);
+  const g2 = add(2, whole);
+  const g1 = add(1, whole);
+  const video = (path, matchId) => db.prepare("INSERT INTO videos (path, size, modified_at, match_id) VALUES (?, 1, '2026-11-01T00:00:00Z', ?)").run(path, matchId);
+  assert.deepEqual(filmedUnits(db, whole), []);
+  video('g2.mp4', g2);
+  video('g1.mp4', g1);
+  assert.deepEqual(filmedUnits(db, whole), [{ id: g1, game: 1 }, { id: g2, game: 2 }]);
+  db.close();
+});

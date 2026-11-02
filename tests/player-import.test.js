@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { openDb } from '../lib/db.js';
-import { importPlayerTournaments } from '../lib/player-import.js';
+import { importPlayerTournaments, resultsComplete } from '../lib/player-import.js';
 import { saveTournament } from '../lib/tournaments.js';
 import { parseMatches } from '../lib/schedule.js';
 import { PAGE } from './fixtures/be-pages.js';
@@ -33,7 +33,9 @@ function fakes() {
       const id = link.split('/').pop();
       fetched.push(id);
       if (!BE[id]) throw new Error('badminfo has no Badminton England link for this tournament');
-      return { beId: BE[id], badminfoId: id, name: id === T1 ? 'Example Junior Gold' : 'Example Autumn Gold', start: '2026-10-24', end: '2026-10-24', matches: id === T1 ? parseMatches(PAGE, '20261024') : [] };
+      return id === T1
+        ? { beId: BE[id], badminfoId: id, name: 'Example Junior Gold', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') }
+        : { beId: BE[id], badminfoId: id, name: 'Example Autumn Gold', start: '2026-11-21', end: '2026-11-22', matches: [] }; // upcoming: no draws yet
     },
   };
 }
@@ -57,7 +59,7 @@ test('a player’s badminfo tournaments are imported once: ones already in the a
   assert.deepEqual([again.imported.length, again.already], [0, 2]);
 
   f.fetched.length = 0;
-  const update = await importPlayerTournaments(db, PLAYER, { ...f, update: true });
+  const update = await importPlayerTournaments(db, PLAYER, { ...f, update: true, today: '2026-11-02' });
   assert.deepEqual(f.fetched.sort(), [T1, T2].sort(), 'update reads only the imported ones');
   assert.deepEqual([update.imported.length, update.already], [2, 1]);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM tournaments').get().n, 2);
@@ -65,4 +67,31 @@ test('a player’s badminfo tournaments are imported once: ones already in the a
 
 test('an unknown player is an error, not an empty import', async () => {
   await assert.rejects(importPlayerTournaments(openDb(), '00000000-0000-0000-0000-0000000000bb', fakes()), /no player/);
+});
+
+test('updating leaves out a finished tournament that has every result already', async () => {
+  const db = openDb();
+  const f = fakes();
+  await importPlayerTournaments(db, PLAYER, f);
+  const t1 = db.prepare('SELECT id FROM tournaments WHERE badminfo_id = ?').get(T1).id;
+  assert.equal(resultsComplete(db, T1), false, 'some of its matches have no result yet');
+  // Every match of T1 gets a result: nothing more to fetch for it.
+  db.prepare("UPDATE matches SET games = '[[21,10],[21,12]]', winner = 1 WHERE tournament_id = ?").run(t1);
+  assert.equal(resultsComplete(db, T1, '2026-11-02'), true);
+  assert.equal(resultsComplete(db, T1, '2026-10-24'), false, 'not while it is still on');
+  f.fetched.length = 0;
+  const update = await importPlayerTournaments(db, PLAYER, { ...f, update: true, today: '2026-11-02' });
+  assert.deepEqual(f.fetched, [T2], 'only the tournament with results missing is fetched');
+  assert.deepEqual([update.imported.length, update.complete, update.already], [1, 1, 1]);
+});
+
+test('an event with no matches at all, read after it ended, isn’t read again; one with results missing always is', async () => {
+  const db = openDb();
+  await importPlayerTournaments(db, PLAYER, fakes());
+  db.prepare("UPDATE tournaments SET imported_at = '2026-10-25T08:00:00Z' WHERE badminfo_id = ?").run(T1);
+  assert.equal(resultsComplete(db, T1, '2026-11-02'), false, 'some matches still have no result');
+  db.prepare('DELETE FROM matches WHERE tournament_id = (SELECT id FROM tournaments WHERE badminfo_id = ?)').run(T1); // a camp: no matches
+  assert.equal(resultsComplete(db, T1, '2026-11-02'), true);
+  db.prepare("UPDATE tournaments SET imported_at = '2026-10-24T08:00:00Z' WHERE badminfo_id = ?").run(T1); // read on the day: draws may still come
+  assert.equal(resultsComplete(db, T1, '2026-11-02'), false);
 });

@@ -17,6 +17,7 @@ import { matchPeople, playerFromRow, refreshProfile, refreshProfiles, saveEntran
 import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite, setStarred } from '../lib/favourites.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { importPlayerTournaments } from '../lib/player-import.js';
+import { filmedUnits } from '../lib/overview.js';
 import { jobView, startJob } from '../lib/jobs.js';
 import { disciplineOf, ratingSeries, record, resultWinner } from '../public/shared/players.js';
 
@@ -35,7 +36,7 @@ function matchesOf(db, id) {
     const lower = r.entry_name.toLowerCase();
     const side = m.teamA.some((n) => n.toLowerCase() === lower) ? 'a' : m.teamB.some((n) => n.toLowerCase() === lower) ? 'b' : null;
     if (!side) continue;
-    out.push(view(m, r, side));
+    out.push({ ...view(m, r, side), units: r.filmed ? filmedUnits(db, m.id) : [] });
   }
   return out;
 }

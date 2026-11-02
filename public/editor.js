@@ -2,7 +2,7 @@
 // end and winner from the keyboard (or accept rallies found by sound and just
 // say who won), watch the score build up, and render the edited video.
 
-import { h, fill, day, gamesView } from './dom.js';
+import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, mergeWinners, parseGames, replay, scoreAt, startFor } from './shared/score.js';
@@ -1469,7 +1469,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     ? h('ul', { class: 'match-list' }, list.map((m) => h('li', {},
       h('div', { class: 'row spread' },
         h('span', {}, `${teamName(m.teamA)} v ${teamName(m.teamB)}`),
-        m.filmed ? h('a', { class: 'btn small primary', href: `#/m/${m.id}` }, 'Open') : null),
+        m.filmed ? openButtons(m.units) : null),
       h('div', { class: 'muted' }, [day(m.date), m.tournament, [m.draw, m.round].filter(Boolean).join(' ')].filter(Boolean).join(' · '), ' ', m.games.length ? gamesView(m.games) : '',
         m.youtubeUrl ? [' ', h('a', { href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null))))
     : h('p', { class: 'hint' }, empty));

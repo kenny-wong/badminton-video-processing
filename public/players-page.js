@@ -3,7 +3,7 @@
 // tournaments to star; #/p/<badminfo id> is one player's page, with their
 // rating over time and every match of theirs in imported tournaments.
 
-import { h, fill, day, gamesView } from './dom.js';
+import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
@@ -57,6 +57,7 @@ function importOutcome(r, update) {
       ? `${r.player}: updated ${plural(r.imported.length, 'tournament')}`
       : r.imported.length ? `${r.player}: imported ${plural(r.imported.length, 'new tournament')}` : `${r.player}: no new tournaments`),
     r.imported.length ? h('ul', { class: 'small import-list' }, r.imported.map((t) => h('li', {}, h('a', { href: `#/t/${t.id}` }, t.name), h('span', { class: 'muted' }, ` · ${t.start ?? ''} · ${plural(t.matches, 'match')}${t.matches ? '' : ' (draws not out yet: use Update results later)'}`)))) : null,
+    r.complete ? h('div', { class: 'small muted' }, `${plural(r.complete, 'tournament')} finished with every result already in: not fetched again.`) : null,
     r.already ? h('div', { class: 'small muted' }, update ? `${plural(r.already, 'tournament')} not imported yet, left alone.` : `${plural(r.already, 'tournament')} already in the app, skipped.`) : null,
     r.skipped.length ? h('details', { class: 'small' }, h('summary', {}, `${plural(r.skipped.length, 'tournament')} couldn’t be read`),
       h('ul', {}, r.skipped.map((s) => h('li', {}, `${s.name}: ${s.reason}`)))) : null);
@@ -71,7 +72,7 @@ function importButton(id, update, box, done, small) {
   const btn = h('button', {
     class: small ? 'small' : '',
     title: update
-      ? 'Read every tournament of theirs already in the app again from badminfo and Badminton England: new draws, times and results'
+      ? 'Read their tournaments in the app again from badminfo and Badminton England for new draws, times and results; finished ones with every result in are left alone'
       : 'Import every tournament they have entered on badminfo (upcoming too) that isn’t in the app yet. Ones already imported are skipped.',
     onclick: async () => {
       btn.disabled = true;
@@ -258,7 +259,7 @@ function matchRow(m) {
     h('td', { class: 'small' }, h('a', { href: `#/t/${m.tournamentId}` }, m.tournament), h('div', { class: 'muted' }, [m.draw, m.round].filter(Boolean).join(' · '))),
     h('td', {}, m.partners.length ? h('div', { class: 'small muted' }, `with ${m.partners.join(' / ')}`) : null, h('div', {}, 'v ', teamName(theirs))),
     h('td', { class: 'nowrap' }, m.won === true ? h('span', { class: 'pill ok' }, 'Won') : m.won === false ? h('span', { class: 'pill bad' }, 'Lost') : null, ' ', gamesView(games)),
-    h('td', {}, m.filmed ? h('a', { class: 'btn small primary', href: `#/m/${m.id}` }, 'Open') : h('span', { class: 'small muted' }, 'not filmed'),
+    h('td', {}, m.filmed ? openButtons(m.units) : h('span', { class: 'small muted' }, 'not filmed'),
       m.youtubeUrl ? [' ', h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null));
 }
 
