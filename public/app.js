@@ -268,14 +268,17 @@ async function renderHome() {
     favs.map((f) => h('option', { value: String(f.key) }, `★ ${f.name} (${Object.keys(f.tournaments).length})`))) : null;
   if (playerSel) playerSel.value = ['group', 'all', ...favs.map((f) => String(f.key))].includes(readHomePlayer()) ? readHomePlayer() : 'group';
   // Progress for the card's player (or all favourites): a section not done yet is yellow, a card with one is outlined red.
-  const noProgress = (t) => ({ total: t.matches, matches: 0, filmedMatches: 0, games: 0, filmedGames: 0, videos: 0, rendered: 0, uploaded: 0 });
+  const noProgress = (t) => ({ total: t.matches, matches: 0, filmedMatches: 0, games: 0, filmedGames: 0, taggedGames: 0, videos: 0, rendered: 0, uploaded: 0 });
   const notDone = (n, d) => d > 0 && n < d;
-  const unfinished = (s) => notDone(s.filmedMatches, s.matches) || notDone(s.filmedGames, s.games) || notDone(s.rendered, s.videos) || notDone(s.uploaded, s.rendered);
-  const tile = (n, d, label, tip, check = true) => h('div', { class: `stat${check && notDone(n, d) ? ' todo' : ''}`, title: tip }, h('b', {}, `${n}/${d}`), h('span', {}, label));
+  const unfinished = (s) => notDone(s.filmedMatches, s.matches) || notDone(s.filmedGames, s.games) || notDone(s.taggedGames ?? 0, s.filmedGames)
+    || notDone(s.rendered, s.videos) || notDone(s.uploaded, s.rendered);
+  // `urgent`: work only the user can do (tagging) stands out in red, not the usual yellow.
+  const tile = (n, d, label, tip, check = true, urgent = false) => h('div', { class: `stat${check && notDone(n, d) ? (urgent ? ' todo urgent' : ' todo') : ''}`, title: tip }, h('b', {}, `${n}/${d}`), h('span', {}, label));
   const progressTiles = (s, f, check) => h('div', { class: 'stats card-progress' },
     tile(s.matches, s.total, 'Matches', `${f ? `${f.name}’s` : 'Your favourites’'} matches / all matches here`, false),
     tile(s.filmedMatches, s.matches, 'Filmed matches', 'Their matches where every game has a linked video (one for the whole match, or one per game) / their matches', check),
     tile(s.filmedGames, s.games, 'Filmed games', 'Games with a linked video / games they played (a match not played yet counts as one game)', check),
+    tile(s.taggedGames ?? 0, s.filmedGames, 'Tagged games', 'Filmed games whose rallies are all tagged with a winner / filmed games (each needs tagging)', check, true),
     tile(s.rendered, s.videos, 'Rendered', 'Rendered videos / linked videos (a whole match, or one game, each)', check),
     tile(s.uploaded, s.rendered, 'YouTube', 'Rendered videos on YouTube / rendered videos', check));
   // Marking a tournament complete (some matches were never filmed, say) stops its highlighting.
