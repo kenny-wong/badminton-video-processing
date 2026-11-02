@@ -1393,9 +1393,16 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     }
     loadFiles();
   }
+  let renderJob = null; // the render being followed, while it waits or runs: the button stops it
   const renderBtn = h('button', {
     class: 'primary',
     onclick: async () => {
+      if (renderJob) {
+        if (!confirm('Stop this render? What it has made so far is thrown away; render again to start over.')) return;
+        renderBtn.disabled = true;
+        await api(`/api/jobs/${renderJob.id}/stop`, { method: 'POST' }).catch((err) => say(err.message));
+        return; // the job ends as stopped, and followRender puts the button back
+      }
       clearTimeout(saveTimer);
       await save();
       const untagged = rallies.filter((r) => !r.winner).length;
@@ -1403,23 +1410,36 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       if (overlayBox.checked && untagged && !confirm(`${untagged} rallies have no winner, so the scoreboard will skip them. Render anyway?`)) return;
       followRender(() => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked, replays: replaysBox.checked, removeVoices: voicesBox.checked } }));
     },
-  }, 'Render video');
+  });
+  const drawRenderBtn = () => {
+    renderBtn.className = renderJob ? 'danger' : 'primary';
+    renderBtn.title = renderJob ? 'Stops this render (it can wait in the queue or be part-way through)' : '';
+    fill(renderBtn, icon(renderJob ? 'stop' : 'export', 16), renderJob ? 'Stop rendering' : 'Render video');
+  };
+  drawRenderBtn();
   // Shows a render's progress (one just asked for, or one still queued or running from before
-  // the editor was opened) with the button off until it ends.
+  // the editor was opened); meanwhile the button stops it.
   async function followRender(start) {
     renderBtn.disabled = true;
     const jobBox = h('div');
     renderBox.replaceChildren(jobBox);
     try {
-      const r = await runJob(jobBox, start);
+      const r = await runJob(jobBox, async () => {
+        renderJob = await start();
+        renderBtn.disabled = false;
+        drawRenderBtn();
+        return renderJob;
+      });
       fill(jobBox, h('div', { class: 'notice ok' }, `Done: ${clock(r.seconds)} of ${r.highlights ? 'highlights' : 'video'} in ${r.parts} part${r.parts === 1 ? '' : 's'}.`), h('div', { class: 'small muted' }, r.path));
       if (r.highlights) showHighlights(true);
       else showOutput(r, true);
       loadFiles();
     } catch (err) {
-      fill(jobBox, errorNotice(err));
+      fill(jobBox, err.code === 'stopped' ? h('div', { class: 'notice small' }, 'Render stopped.') : errorNotice(err));
     }
+    renderJob = null;
     renderBtn.disabled = false;
+    drawRenderBtn();
   }
   if (stillRunning(data.jobs?.render)) followRender(async () => data.jobs.render);
 
@@ -1721,7 +1741,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
   showTab(tab);
   fill(headRight, saveState);
-  renderBtn.prepend(icon('export', 16));
 
   fill(main,
     header,

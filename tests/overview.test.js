@@ -68,6 +68,7 @@ test('jobs on a queue run one at a time, in order; a waiting one can be stopped'
   assert.equal(second.result, 2);
   assert.equal(first.message, 'Finished'); // not its last step's "Joining"
   assert.equal(third.status, 'stopped');
+  assert.equal(third.message, 'Stopped');
   assert.ok(listJobs().indexOf(third) < listJobs().indexOf(first)); // newest first
 });
 
