@@ -17,6 +17,10 @@ test('routes match methods and fill in ids', () => {
   assert.deepEqual(route('GET', '/api/matches/12').params, { id: '12' });
   assert.equal(route('DELETE', '/api/matches/12'), null);
   assert.equal(route('GET', '/api/nothing'), null);
+  assert.deepEqual(route('GET', '/api/videos/7/keyframes').params, { id: '7' });
+  assert.ok(route('POST', '/api/tools/merge'));
+  assert.ok(route('POST', '/api/tools/split'));
+  assert.ok(route('POST', '/api/videos/7/reveal'));
 });
 
 test('only this PC’s own pages may call the API', () => {

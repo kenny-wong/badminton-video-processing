@@ -5,6 +5,7 @@
 //   #/players     favourite players (★) and a search of everyone (players-page.js)
 //   #/p/<id>      one player, by badminfo id
 //   #/videos      every video found
+//   #/tools       merge videos, split one (tools-page.js)
 //   #/jobs        background jobs (jobs-page.js)
 //   #/settings    folders, cutting, scoreboard, output
 
@@ -23,6 +24,7 @@ import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
 import { percents } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
+import { renderTools } from './tools-page.js';
 import { versionAdvice } from './shared/version.js';
 
 const main = document.getElementById('app');
@@ -127,7 +129,7 @@ function setTab(name) {
 }
 
 // Icons in the header's section links.
-for (const [tab, name] of [['home', 'court'], ['players', 'user'], ['videos', 'match-video'], ['settings', 'settings']]) {
+for (const [tab, name] of [['home', 'court'], ['players', 'user'], ['videos', 'match-video'], ['tools', 'scissors'], ['settings', 'settings']]) {
   document.querySelector(`.tabs a[data-tab="${tab}"]`)?.prepend(icon(name, 17));
 }
 
@@ -143,7 +145,7 @@ function progressBar(job) {
   return h('div', { class: 'stack' },
     h('div', { class: `progress${waiting ? ' waiting' : ''}` }, h('span', { style: { width: `${Math.round((job?.progress ?? 0) * 100)}%` } })),
     h('div', { class: 'small muted' }, waiting
-      ? [`Waiting: ${job.ahead || 'a'} job${job.ahead === 1 || !job.ahead ? '' : 's'} on the graphics card first. `, h('a', { href: '#/jobs' }, 'See jobs')]
+      ? [`Waiting: ${job.ahead || 'a'} job${job.ahead === 1 || !job.ahead ? '' : 's'}${job.queue === 'gpu' ? ' on the graphics card' : ''} first. `, h('a', { href: '#/jobs' }, 'See jobs')]
       : job?.message || 'Working…'));
 }
 
@@ -788,6 +790,13 @@ async function renderTournament(id, notice = null, who = null) {
 
 // ---------- Videos ----------
 
+/** " · merged from 3 videos", " · part 2 of 20261101_121214.mp4" for a video made on the Tools page. */
+function madeFromText(made) {
+  if (made?.kind === 'merge') return ` · merged from ${made.from.length} videos`;
+  if (made?.kind === 'split') return ` · part ${made.part} of ${made.from[0]?.name ?? 'a video'}`;
+  return '';
+}
+
 async function renderVideos() {
   setTab('videos');
   document.title = 'Videos · Badminton Video';
@@ -799,16 +808,25 @@ async function renderVideos() {
       h('thead', {}, h('tr', {}, ['Recorded', 'File', 'Length', 'Picture', 'Match', ''].map((x) => h('th', {}, x)))),
       h('tbody', {}, videos.map((v) => h('tr', {},
         h('td', { class: 'nowrap' }, when(v.recordedAt), h('div', { class: 'small muted' }, SOURCE[v.recordedSource] ?? '')),
-        h('td', {}, v.name, v.missing ? [' ', h('span', { class: 'pill bad' }, 'missing')] : null, h('div', { class: 'small muted' }, megabytes(v.size))),
+        h('td', {}, v.name, v.missing ? [' ', h('span', { class: 'pill bad' }, 'missing')] : null,
+          v.setAside ? [' ', h('span', { class: 'pill', title: 'Left out of matching (merged or split, or set aside by hand)' }, 'set aside')] : null,
+          h('div', { class: 'small muted' }, megabytes(v.size), madeFromText(v.madeFrom))),
         h('td', { class: 'nowrap' }, clock(v.duration ?? 0)),
         h('td', { class: 'small' }, `${v.width}×${v.height}`, h('div', { class: 'muted' }, `${Math.round(v.fps ?? 0)} fps · ${v.codec ?? '?'}${v.hdr ? ' · HDR' : ''}`)),
         h('td', { class: 'small' }, v.match
           ? [h('a', { href: `#/m/${v.match.id}` }, `${teamName(v.match.teamA)} v ${teamName(v.match.teamB)}`), h('div', { class: 'muted' }, `${v.match.tournament} · ${v.match.draw}${v.part > 1 ? ` · part ${v.part}` : ''}`)]
           : h('span', { class: 'muted' }, 'not linked')),
-        h('td', {}, v.match ? h('button', {
-          class: 'small',
-          onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { matchId: null } }); renderVideos(); },
-        }, 'Unlink') : null)))))) : illustratedEmpty('Your video library starts here.', 'Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the ', h('a', { href: '#/' }, 'Tournaments page'), ' to find your match footage.'));
+        h('td', {}, h('div', { class: 'row tight' },
+          v.match ? h('button', {
+            class: 'small',
+            onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { matchId: null } }); renderVideos(); },
+          }, 'Unlink') : null,
+          v.missing ? null : h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: 'Cut this video into parts on the Tools page' }, icon('scissors', 14), 'Split'),
+          h('button', {
+            class: 'small ghost',
+            title: v.setAside ? 'Let matching suggest this video again' : 'Leave this video out of matching (it stays here and on disk)',
+            onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { setAside: !v.setAside } }); renderVideos(); },
+          }, v.setAside ? 'Use again' : 'Set aside')))))))) : illustratedEmpty('Your video library starts here.', 'Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the ', h('a', { href: '#/' }, 'Tournaments page'), ' to find your match footage.'));
 }
 
 // ---------- Settings ----------
@@ -1092,6 +1110,10 @@ async function router() {
       setTab('jobs');
       leaving = await renderJobs(main);
     } else if (section === 'videos') await renderVideos();
+    else if (section === 'tools') {
+      setTab('tools');
+      leaving = await renderTools(main, { runJob, query: new URLSearchParams(query ?? '') });
+    }
     else if (section === 'settings') await renderSettings();
     else await renderHome();
   } catch (err) {

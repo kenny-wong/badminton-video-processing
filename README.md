@@ -55,6 +55,15 @@ The desktop version (`electron/main.js`) runs the same server inside Electron's 
 - The header shows this window's version; hovering it shows the server's. When they differ (after an update) a bar says the server version doesn't match and the server needs restarting, with a **Restart server** button (it asks first if jobs are running; they would stop) (or, if the server is the newer one, that the window needs reloading).
 - In the editor, **?** shows every keyboard shortcut. The header's theme button switches between light, dark and Windows' own setting.
 
+## Merging and splitting videos
+
+The **Tools** tab joins phone videos end to end or cuts one into parts, without re-encoding: the picture and sound are copied as they are, and the originals are never changed. The new files go next to the original and straight into the library.
+
+- **Merge videos**: add videos from the library, put them in order (drag, or ↑ ↓; **Sort by recording time** puts them back in filming order) and merge. They must have the same kind of picture and sound. The result, `<first video's name> merged.mp4`, carries the first video's details and start time and the last one's end time, and every frame of every video is checked to be in it.
+- **Split a video**: choose a video (or **Split** on the Videos page), play or scrub it and mark up to three parts: **1 / 2 / 3** chooses the part, **I** / **O** set where it starts and ends (or type the times), Space plays, ← / → move 2 s (Shift: 10 s), , / . one frame, and the mouse wheel over the picture or the bar moves 1 s a notch (Shift: one frame). A lossless cut can only start on a key frame (phones write one about every second), so each part starts at the last one before your start; the page shows where. Each part is named and timed from where it starts: `20261101_121214.mp4` cut 95 s in becomes `20261101_121349 part 2.mp4`.
+- Timestamps: the file's created, modified and accessed times and the video's own creation time each mark the start or the end of recording in the original (Samsung phones stamp the end), and keep marking it in the new file. The phone's own metadata (camera model, lens, location, recording mode, iPhone creation date) is copied over byte for byte.
+- **Set the originals aside** (on by default) keeps the originals out of match suggestions so they aren't linked alongside the new file; they stay on disk and in Videos, where **Use again** brings one back (and **Set aside** works on any video).
+
 ## Statistics
 
 The editor's **Stats** tab works out, from the tagged rallies: points won on each side's serve and on receive, the longest run of points, average and longest rallies (and shots per rally, counted from the hit sounds), and for each game its length, biggest leads, best runs and comebacks. A momentum chart shows who led after every rally, game by game, and can be saved as a picture. Once the court is marked and the shuttle tracked, a court map shows where each rally ended. Settings can add the longest rally and best run to the end card, and a banner after rallies of many shots.
@@ -104,6 +113,7 @@ The server writes `logs\app.log` in its data folder (`data\` for `npm start`): s
 - `lib/`: server logic. `badminfo.js` and `schedule.js` read the tournament sources. `media.js` reads recording times, `matching.js` suggests links, `hits.js` and `analyse.js` find rallies by sound, `overlay.js` writes the ASS scoreboard (laid out by `public/shared/board.js`, which the Settings preview also draws), `render.js` plans cuts, chapters and FFmpeg commands, `pipeline.js` runs them, and `db.js` holds the SQLite database (`node:sqlite`) with `migrations/`.
 - `public/`: the page (plain HTML, CSS and ES modules). `public/shared/` holds the scoring rules and name helpers, used by both the page and the server.
 - Rendering cuts each kept part with the scoreboard drawn by FFmpeg's `ass` filter, several parts at once, then joins them without re-encoding. iPhone HDR footage is tone-mapped to standard video.
+- Merging and splitting (`lib/video-tools.js`) copy streams with FFmpeg, then `lib/mp4.js` puts the original's `moov/udta` and `moov/meta` boxes back in place of FFmpeg's (safe because FFmpeg writes `moov` after the media), and `lib/filetimes.js` sets the file times (the created time through PowerShell). Names, parts and time shifts are in `public/shared/video-files.js`.
 
 ## Not yet
 

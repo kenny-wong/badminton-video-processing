@@ -28,6 +28,7 @@ import * as players from './api/players.js';
 import * as overview from './api/overview.js';
 import * as reels from './api/reels.js';
 import * as youtube from './api/youtube.js';
+import * as videoTools from './api/tools.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
@@ -94,6 +95,10 @@ const ROUTES = [
   ['GET', '/api/videos', videos.onRequestGet],
   ['POST', '/api/videos/scan', videos.scan],
   ['PUT', '/api/videos/:id', videos.onRequestPut],
+  ['GET', '/api/videos/:id/keyframes', videoTools.keyframesRoute],
+  ['POST', '/api/videos/:id/reveal', videoTools.reveal],
+  ['POST', '/api/tools/merge', videoTools.merge],
+  ['POST', '/api/tools/split', videoTools.split],
   ['GET', '/api/jobs', jobs.list],
   ['GET', '/api/jobs/:id', jobs.onRequestGet],
   ['POST', '/api/jobs/:id/stop', jobs.stop],
@@ -223,6 +228,17 @@ export function createApp(app) {
           return;
         }
         sendVideo(req, res, source.path);
+        return;
+      }
+      // One video of the library, for the Tools page's splitter.
+      const libraryVideo = /^\/media\/video\/(\d+)$/.exec(url.pathname);
+      if (libraryVideo && (req.method === 'GET' || req.method === 'HEAD')) {
+        const row = app.db.prepare('SELECT path FROM videos WHERE id = ?').get(idParam(libraryVideo[1]));
+        if (!row || !existsSync(row.path)) {
+          res.writeHead(404).end();
+          return;
+        }
+        sendVideo(req, res, row.path);
         return;
       }
       // A finished file of the match (whole video, highlights or a rally clip), for the editor's player.
