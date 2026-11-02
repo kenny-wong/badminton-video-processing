@@ -1197,6 +1197,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         corners && !marking ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showCourt, onchange: (e) => { showCourt = e.target.checked; drawOverlay(); drawTrackingPanel(); } }), 'Show court lines') : null),
       corners && !marking && showCourt ? h('div', { class: 'hint' }, 'Drag a yellow corner on the video to move it; the court lines follow. A focused corner moves with the arrow keys (Shift: 10 px).') : null,
       h('div', { class: 'row small' }, 'At the near end when the video starts:', nearSel),
+      unitGame && match.games.length > 1 ? h('div', { class: 'hint' }, 'The match’s other game videos follow: players change ends after each game.') : null,
       h('div', { class: 'row small' },
         h('button', {
           class: tracked ? 'small' : 'small primary',

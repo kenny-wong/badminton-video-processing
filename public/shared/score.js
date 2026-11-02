@@ -33,13 +33,14 @@ export const midPoint = (points) => Math.ceil(points / 2);
  * Which end ('near' or 'far') `team` is at for a rally starting at `state`
  * ({ games, points }): from `nearAtStart` (the team at the near end when the
  * video starts at `start`), changing after each game since then and at the
- * mid-point of a deciding game.
+ * mid-point of a deciding game. `state` may also come before `start` (an
+ * earlier game's video of the same match).
  */
 export function endOf(team, state, start, nearAtStart, rules) {
   const flip = (end) => (end === 'near' ? 'far' : 'near');
   const deciding = (s) => rules.bestOf !== 1 && s.games.length === 2;
   const past = (s) => deciding(s) && Math.max(...s.points) >= midPoint(rules.points);
-  const swaps = (state.games.length - start.games.length) + (past(state) ? 1 : 0) - (past(start) && state.games.length === start.games.length ? 1 : 0);
+  const swaps = (state.games.length - start.games.length) + (past(state) ? 1 : 0) - (past(start) ? 1 : 0);
   const aEnd = (nearAtStart === 'a' ? 'near' : 'far');
   const end = swaps % 2 ? flip(aEnd) : aEnd;
   return team === 'a' ? end : flip(end);

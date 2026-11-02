@@ -70,6 +70,50 @@ test('an untagged game row has the winner of the game before serving first, foll
   assert.deepEqual(servers(), ['a', 'b']);
 });
 
+test('setting the near end on one game’s video sets the other games’ (ends change each game)', async () => {
+  const app = { db: openDb(), port: 0 };
+  const server = createApp(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  app.port = server.address().port;
+  const base = `http://127.0.0.1:${app.port}`;
+  const call = async (path, method = 'GET', body) => {
+    const res = await fetch(base + path, { method, headers: { Origin: base }, body: body && JSON.stringify(body) });
+    assert.equal(res.status, 200, `${method} ${path}`);
+    return res.json();
+  };
+  try {
+    saveTournament(app.db, fetched());
+    const m = app.db.prepare("SELECT id FROM matches WHERE draw = 'OS U15 - Group B'").get().id; // three games
+    app.db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at, duration) VALUES ('C:/v/1.mp4', 1, 'x', '2026-10-24T08:05:00Z', 600),
+      ('C:/v/2.mp4', 1, 'x', '2026-10-24T08:20:00Z', 600), ('C:/v/3.mp4', 1, 'x', '2026-10-24T08:35:00Z', 600)`).run();
+    await call(`/api/matches/${m}/games/1/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${m}/games/2/videos`, 'PUT', { videoIds: [2] });
+    const near = () => app.db.prepare('SELECT near_at_start AS n FROM matches WHERE parent_id = ? ORDER BY game').all(m).map((r) => r.n);
+    assert.deepEqual(near(), [null, null]);
+    const [g1, g2] = app.db.prepare('SELECT id FROM matches WHERE parent_id = ? ORDER BY game').all(m).map((r) => r.id);
+    await call(`/api/matches/${g2}`, 'PUT', { nearAtStart: 'a' });
+    assert.deepEqual(near(), ['b', 'a']);
+    // A game linked later takes it too; changing game 1 moves the others.
+    await call(`/api/matches/${m}/games/3/videos`, 'PUT', { videoIds: [3] });
+    assert.deepEqual(near(), ['b', 'a', 'b']);
+    await call(`/api/matches/${g1}`, 'PUT', { nearAtStart: 'a' });
+    assert.deepEqual(near(), ['a', 'b', 'a']);
+    // A game 3 video starting after the change of ends at 11: that game began with the ends the other way.
+    const g3 = app.db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = 3').get(m).id;
+    await call(`/api/matches/${g3}`, 'PUT', { startScore: { points: [11, 6] } });
+    await call(`/api/matches/${g3}`, 'PUT', { nearAtStart: 'b' });
+    assert.deepEqual(near(), ['a', 'b', 'b']);
+    await call(`/api/matches/${g3}`, 'PUT', { nearAtStart: 'a' });
+    assert.deepEqual(near(), ['b', 'a', 'a']);
+    // Saving again without a change (the editor's autosave) moves nothing.
+    app.db.prepare('UPDATE matches SET near_at_start = ? WHERE id = ?').run('a', g1);
+    await call(`/api/matches/${g3}`, 'PUT', { nearAtStart: 'a', rallies: [] });
+    assert.deepEqual(near(), ['a', 'a', 'a']);
+  } finally {
+    server.close();
+  }
+});
+
 test('linking a video to one game gives that game its own row and status', async () => {
   const app = { db: openDb(), port: 0 };
   const server = createApp(app);

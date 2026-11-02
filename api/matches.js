@@ -37,7 +37,7 @@ import { cachedLevels, matchLevels } from '../lib/levels.js';
 import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
-import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
+import { applyCarried, detachVideo, endsFromOtherGames, followEnds, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
 import { teamName } from '../public/shared/names.js';
 import { cleanComment } from '../lib/naming.js';
 import { favouriteMatcher, favourites } from '../lib/favourites.js';
@@ -145,6 +145,8 @@ export async function onRequestPut({ request, params, app }) {
       youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, board_style = ?, updated_at = ? WHERE id = ?`)
     .run(JSON.stringify(rallies), format ? JSON.stringify(format) : null, firstServer, startScore ? JSON.stringify(startScore) : null,
       matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, boardStyle ? JSON.stringify(boardStyle) : null, nowIso(), match.id);
+  // The match's other game videos change ends with it.
+  if (nearAtStart && nearAtStart !== match.nearAtStart) followEnds(app.db, { ...match, format, startScore, nearAtStart });
   // The comment (at the end of its videos' YouTube descriptions) on its own: only when sent.
   const comment = typeof body.comment === 'string' ? cleanComment(body.comment) : match.comment;
   if (typeof body.comment === 'string') app.db.prepare('UPDATE matches SET comment = ?, updated_at = ? WHERE id = ?').run(comment || null, nowIso(), match.id);
@@ -198,7 +200,9 @@ export function gameRow(db, parentId, game) {
   db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, first_server)
     SELECT tournament_id, id, ?, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, ? FROM matches WHERE id = ? AND game = 0`)
     .run(game, defaultServer(game, games), parentId);
-  return db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game)?.id ?? null;
+  const id = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game)?.id ?? null;
+  if (id) endsFromOtherGames(db, id);
+  return id;
 }
 
 export async function linkGameVideos({ request, params, app }) {
