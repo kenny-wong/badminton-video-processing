@@ -1328,6 +1328,7 @@ async function renderSettings() {
   const pre = h('input', { type: 'number', id: 'pre', min: 0, max: 10, step: 0.5, value: s.pre });
   const rallyGap = h('input', { type: 'number', id: 'rally-gap', min: 0, max: 30, step: 0.5, value: s.rallyGap });
   const post = h('input', { type: 'number', id: 'post', min: 0, max: 10, step: 0.5, value: s.post });
+  const intervalPad = h('input', { type: 'number', id: 'interval-pad', min: 0, max: 30, step: 0.5, value: s.intervalPad });
   const msg = h('div');
   const styleSel = (kind) => h('select', { id: `names-${kind}`, 'aria-label': `${kind} names` },
     Object.entries(NAME_STYLES).map(([k, label]) => h('option', { value: k, selected: s.nameStyle[kind] === k }, label)));
@@ -1519,7 +1520,7 @@ async function renderSettings() {
         try {
           const saved = await api('/api/settings', {
             method: 'PUT',
-            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value), rallyGap: Number(rallyGap.value),
+            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value), intervalPad: Number(intervalPad.value), rallyGap: Number(rallyGap.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
               logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value), stats: cardStats.checked },
               description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
@@ -1584,7 +1585,9 @@ async function renderSettings() {
         h('p', { class: 'hint' }, 'Only use music you’re allowed to: YouTube may block or mute videos with copyrighted tracks.'),
         musicMsg),
       section('Cutting', 'How much of the play around each rally to keep when the gaps are cut.',
-        h('div', { class: 'row' }, h('label', { for: 'pre' }, 'Keep'), pre, h('label', { for: 'post' }, 'seconds before each rally, and'), post, h('span', {}, 'after.'))),
+        h('div', { class: 'row' }, h('label', { for: 'pre' }, 'Keep'), pre, h('label', { for: 'post' }, 'seconds before each rally, and'), post, h('span', {}, 'after.')),
+        h('div', { class: 'row' }, h('label', { for: 'interval-pad' }, 'At the interval, keep'), intervalPad, h('span', {}, 'seconds after the rally that reaches it, and before the next rally.')),
+        h('p', { class: 'hint' }, 'The interval is the break in the middle of a game (when the leader reaches 11 in a game to 21). Highlights and clips keep the usual seconds.')),
       section('Tagging', 'Pressing A or B without S first ends a rally whose start wasn’t marked.',
         h('div', { class: 'row' }, h('label', { for: 'rally-gap' }, 'Such a rally starts'), rallyGap, h('span', {}, 'seconds after the previous rally ended.')),
         h('p', { class: 'hint' }, 'The first rally starts at the match start (M), or 10 seconds before A / B. Press S at a serve to mark a start exactly; Q moves a selected rally’s start to now.')),

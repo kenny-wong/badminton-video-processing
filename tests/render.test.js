@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { chapterLines, chapterMetadata, chapters, concatLine, DEFAULT_CUT, joinArgs, outputFps, outputLength, partArgs, plan, toOutput } from '../lib/render.js';
+import { chapterLines, chapterMetadata, chapters, concatLine, DEFAULT_CUT, INTERVAL_PAD, joinArgs, outputFps, outputLength, partArgs, plan, toOutput, withBreaks } from '../lib/render.js';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { replay } from '../public/shared/score.js';
@@ -105,4 +105,24 @@ test('cutting keeps 1.5 s before and after each rally by default, and saved sett
   db.exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT); INSERT INTO settings VALUES ('pre', '2.5'), ('post', '2.5'), ('rallyGap', '5')");
   db.exec(readFileSync(new URL('../migrations/0024_cut_1_5.sql', import.meta.url), 'utf8'));
   assert.deepEqual(db.prepare('SELECT key, value FROM settings ORDER BY key').all().map((r) => [r.key, r.value]), [['post', '1.5'], ['pre', '1.5'], ['rallyGap', '5']]);
+});
+
+test('the interval’s break: 4 s kept after the rally reaching it and before the next, the others as set', () => {
+  assert.equal(INTERVAL_PAD, 4);
+  // A to 11 in a game to 21: rally 11 (index 10) reaches the interval.
+  const rallies = Array.from({ length: 13 }, (_, i) => ({ start: i * 20 + (i > 10 ? 60 : 0), end: i * 20 + 10 + (i > 10 ? 60 : 0), winner: 'a' }));
+  const { steps } = replay(rallies, { points: 21, cap: 30, bestOf: 3 }, 'a');
+  assert.equal(steps[10].event, 'interval');
+  const padded = withBreaks(rallies, steps, 4);
+  assert.deepEqual([padded[10].post, padded[11].pre, padded[9].post, padded[12].pre], [4, 4, undefined, undefined]);
+  assert.equal(rallies[10].post, undefined); // the rallies themselves untouched
+  const parts = plan(padded, 1000, { pre: 1.5, post: 1.5, mergeGap: 4 });
+  const reaching = parts.find((p) => p.start <= 200 && p.end >= 210);
+  const next = parts.find((p) => p.start <= 280 && p.end >= 290);
+  assert.equal(reaching.end, 214); // rally 11 ends at 210
+  assert.equal(next.start, 276); // rally 12 starts at 280
+  assert.equal(parts.at(-1).start, 298.5); // rally 13: the usual 1.5 s
+  // Never less than the usual seconds, and 0 turns it off.
+  assert.equal(plan(withBreaks(rallies, steps, 1), 1000, { pre: 2, post: 2 }).find((p) => p.start <= 200 && p.end >= 210).end, 212);
+  assert.equal(withBreaks(rallies, steps, 0), rallies);
 });
