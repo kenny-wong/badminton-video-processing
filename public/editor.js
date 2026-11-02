@@ -63,6 +63,26 @@ const writePad = (pad) => {
   } catch { /* storage blocked */ }
 };
 
+// A small court as the camera sees it (near end at the bottom), for the marking tip: corners in
+// CORNER_NAMES order, those before `active` done, `active` the one to click now.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const svgEl = (tag, attrs) => {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+};
+const DIAGRAM = [[8, 56], [92, 56], [74, 8], [26, 8]];
+function cornerDiagram(active) {
+  const s = svgEl('svg', { viewBox: '0 0 100 72', class: 'corner-diagram', 'aria-hidden': 'true' });
+  s.append(svgEl('polygon', { points: DIAGRAM.map((p) => p.join(',')).join(' '), class: 'court' }));
+  s.append(svgEl('line', { x1: 17, y1: 32, x2: 83, y2: 32, class: 'net' }));
+  const camera = svgEl('text', { x: 50, y: 70, 'text-anchor': 'middle' });
+  camera.textContent = '▲ camera';
+  s.append(camera);
+  DIAGRAM.forEach(([x, y], k) => s.append(svgEl('circle', { cx: x, cy: y, r: k === active ? 6.5 : 4, class: k < active ? 'done' : k === active ? 'now' : 'todo' })));
+  return s;
+}
+
 // Chrome plays from 1/16× to 16×, but mutes the sound below 0.25× and above 4×.
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16];
 const SAVE_DELAY_MS = 800;
@@ -181,7 +201,13 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const flash = h('div', { class: 'flash', hidden: true });
   const openBadge = h('div', { class: 'open-rally', hidden: true }, '● Rally running');
   const overlay = h('canvas', { class: 'overlay' });
-  const player = h('div', { class: 'player' }, video, overlay, flash, openBadge);
+  const markTip = h('div', { class: 'mark-tip', hidden: true, role: 'status' });
+  // The marked corners, to drag (or nudge with the arrow keys) on the Tracking tab.
+  const cornerHandles = CORNER_NAMES.map((name) => h('button', {
+    class: 'corner-handle', type: 'button', hidden: true,
+    'aria-label': `Move the ${name} corner`, title: `${name} corner: drag to move it (arrow keys nudge it, Shift for 10 px)`,
+  }, h('span', {}, name)));
+  const player = h('div', { class: 'player' }, video, overlay, ...cornerHandles, markTip, flash, openBadge);
   // Which video the player shows: the original (for tagging) or one of the finished files.
   let files = []; // GET /api/matches/:id/rendered
   let showing = ''; // '' = the original, else a finished file's key
@@ -330,14 +356,20 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (timeline.hasPointerCapture(e.pointerId)) seekTo(e);
   });
 
-  overlay.addEventListener('pointerdown', (e) => {
-    if (!marking) return;
+  // Where a pointer is, as a fraction of the picture (corners may lie in the black space around it).
+  const pictureAt = (e) => {
     const box = pictureBox();
     const r = overlay.getBoundingClientRect();
-    const x = (e.clientX - r.left - box.x) / box.w;
-    const y = (e.clientY - r.top - box.y) / box.h;
+    return [(e.clientX - r.left - box.x) / box.w, (e.clientY - r.top - box.y) / box.h];
+  };
+  const roundCorner = (n) => Math.round(Math.min(1.5, Math.max(-0.5, n)) * 10000) / 10000;
+
+  let hover = null; // the pointer while marking, in canvas px, for the name of the corner being marked
+  overlay.addEventListener('pointerdown', (e) => {
+    if (!marking) return;
+    const [x, y] = pictureAt(e);
     if (x < -0.5 || x > 1.5 || y < -0.5 || y > 1.5) return;
-    marking.push([Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]);
+    marking.push([roundCorner(x), roundCorner(y)]);
     if (marking.length === 4) {
       const done = marking;
       stopMarking();
@@ -345,14 +377,79 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         say('Those corners don’t make a court; try again');
       } else {
         corners = done;
-        say('Court marked');
+        say('Court marked: drag a corner to adjust it');
         saveTrackingSettings();
       }
       drawTrackingPanel();
     } else {
       say(`Now the ${CORNER_NAMES[marking.length]} corner`);
+      drawMarkTip();
     }
     drawOverlay();
+  });
+  overlay.addEventListener('pointermove', (e) => {
+    if (!marking) return;
+    const r = overlay.getBoundingClientRect();
+    hover = [e.clientX - r.left, e.clientY - r.top];
+    // The tip keeps out of the way: to the other side when the pointer comes over its half.
+    markTip.classList.toggle('right', hover[0] < r.width / 2);
+    drawOverlay();
+  });
+  overlay.addEventListener('pointerleave', () => {
+    hover = null;
+    drawOverlay();
+  });
+
+  // Dragging a marked corner moves the court with it; it is saved when let go, if it still makes a court.
+  let dragging = null; // { k, before }
+  let nudgeTimer = null;
+  function moveCorner(k, [x, y]) {
+    corners = corners.map((c, i) => (i === k ? [roundCorner(x), roundCorner(y)] : c));
+    drawOverlay();
+  }
+  function cornerMoved(before, k) {
+    if (!courtMapping(corners)) {
+      corners = before;
+      drawOverlay();
+      say('That doesn’t make a court: the corner went back');
+      return false;
+    }
+    say(`${CORNER_NAMES[k][0].toUpperCase()}${CORNER_NAMES[k].slice(1)} corner moved`);
+    return true;
+  }
+  cornerHandles.forEach((el, k) => {
+    el.addEventListener('pointerdown', (e) => {
+      if (!corners) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      dragging = { k, before: corners.map((c) => [...c]) };
+      el.classList.add('dragging');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (dragging?.k === k) moveCorner(k, pictureAt(e));
+    });
+    const drop = () => {
+      if (dragging?.k !== k) return;
+      const { before } = dragging;
+      dragging = null;
+      el.classList.remove('dragging');
+      if (cornerMoved(before, k)) saveTrackingSettings();
+    };
+    el.addEventListener('pointerup', drop);
+    el.addEventListener('pointercancel', drop);
+    el.addEventListener('keydown', (e) => {
+      const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (!step || !corners) return;
+      e.preventDefault();
+      e.stopPropagation(); // not the editor's keys (seeking, rallies)
+      const box = pictureBox();
+      const n = e.shiftKey ? 10 : 1;
+      const before = corners.map((c) => [...c]);
+      moveCorner(k, [corners[k][0] + (step[0] * n) / box.w, corners[k][1] + (step[1] * n) / box.h]);
+      if (!cornerMoved(before, k)) return;
+      clearTimeout(nudgeTimer);
+      nudgeTimer = setTimeout(saveTrackingSettings, 600);
+    });
   });
 
   let flashTimer = null;
@@ -441,12 +538,38 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     overlay.classList.add('marking');
     padPlayer();
     say(`Click the ${CORNER_NAMES[0]} corner of the court`);
+    drawMarkTip();
     drawTrackingPanel();
   }
 
   function stopMarking() {
     marking = null;
+    hover = null;
     overlay.classList.remove('marking');
+    drawMarkTip();
+  }
+
+  // Which corner to click now, in words and on a small court, while marking.
+  function drawMarkTip() {
+    markTip.hidden = !marking;
+    if (!marking) return;
+    const k = marking.length;
+    fill(markTip, cornerDiagram(k),
+      h('div', { class: 'stack' },
+        h('div', {}, `Corner ${k + 1} of 4`),
+        h('div', { class: 'mark-tip-name' }, CORNER_NAMES[k]),
+        h('div', { class: 'mark-tip-hint' }, 'Near = nearest the camera · Esc stops')));
+  }
+
+  // The corner handles sit on the marked corners while the court shows on the Tracking tab.
+  function placeHandles(box) {
+    const show = Boolean(onTracking && corners && showCourt && !marking);
+    cornerHandles.forEach((el, k) => {
+      el.hidden = !show;
+      if (!show) return;
+      el.style.left = `${box.x + corners[k][0] * box.w}px`;
+      el.style.top = `${box.y + corners[k][1] * box.h}px`;
+    });
   }
 
   function drawOverlay() {
@@ -461,6 +584,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const g = overlay.getContext('2d');
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, box.cw, box.ch);
+    placeHandles(box);
     if (!onTracking) return;
     const px =([x, y]) => [box.x + x * box.w, box.y + y * box.h];
     const map = corners && courtMapping(corners);
@@ -479,16 +603,35 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       g.stroke();
     }
     if (marking) {
-      g.fillStyle = '#ffd84d';
-      g.strokeStyle = '#000';
-      marking.forEach((c, k) => {
-        const [x, y] = px(c);
+      // The corners so far, joined in order (and on to the pointer), each with its name.
+      const points = marking.map(px);
+      g.strokeStyle = 'rgba(255, 216, 77, 0.9)';
+      g.lineWidth = 1.5;
+      g.setLineDash([6, 4]);
+      g.beginPath();
+      [...points, ...(hover ? [hover] : [])].forEach((p, k) => (k ? g.lineTo(...p) : g.moveTo(...p)));
+      if (hover && points.length === 3) g.lineTo(...points[0]);
+      g.stroke();
+      g.setLineDash([]);
+      g.font = '650 12px "Segoe UI", system-ui, sans-serif';
+      const label = (text, x, y) => {
+        g.lineWidth = 3;
+        g.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+        g.strokeText(text, x, y);
+        g.fillStyle = '#ffd84d';
+        g.fillText(text, x, y);
+      };
+      points.forEach(([x, y], k) => {
+        g.fillStyle = '#ffd84d';
+        g.strokeStyle = '#000';
+        g.lineWidth = 1.5;
         g.beginPath();
         g.arc(x, y, 6, 0, Math.PI * 2);
         g.fill();
         g.stroke();
-        g.fillText(CORNER_NAMES[k], x + 9, y - 6);
+        label(CORNER_NAMES[k], x + 9, y - 8);
       });
+      if (hover) label(`${marking.length + 1}. ${CORNER_NAMES[marking.length]}`, hover[0] + 14, hover[1] - 12);
     }
     if (showShuttle && shuttle.length) {
       const t = video.currentTime;
@@ -898,8 +1041,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     fill(trackingBox,
       h('div', { class: 'row small' },
         h('button', { class: 'small', onclick: startMarking }, corners ? 'Mark the court again' : 'Mark the court'),
-        marking ? h('span', { class: 'muted' }, `Click the 4 outer corners: ${CORNER_NAMES.join(', ')} (near = nearest the camera).`) : null,
-        corners && !marking ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showCourt, onchange: (e) => { showCourt = e.target.checked; drawOverlay(); } }), 'Show court lines') : null),
+        marking ? h('span', { class: 'muted' }, `Click the 4 outer corners: ${CORNER_NAMES.join(', ')} (near = nearest the camera). Esc stops.`) : null,
+        corners && !marking ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showCourt, onchange: (e) => { showCourt = e.target.checked; drawOverlay(); drawTrackingPanel(); } }), 'Show court lines') : null),
+      corners && !marking && showCourt ? h('div', { class: 'hint' }, 'Drag a yellow corner on the video to move it; the court lines follow. A focused corner moves with the arrow keys (Shift: 10 px).') : null,
       h('div', { class: 'row small' }, 'At the near end when the video starts:', nearSel),
       h('div', { class: 'row small' },
         h('button', {
@@ -1213,7 +1357,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         say(`Rally starts ${clock(openStart)}`);
         break;
       case 'Escape':
-        if (openStart !== null) { openStart = null; openBadge.hidden = true; say('Rally cancelled'); } else select(-1, { seek: false });
+        if (marking) {
+          stopMarking();
+          say(corners ? 'Marking stopped: the court is as it was' : 'Marking stopped');
+          drawTrackingPanel();
+          drawOverlay();
+        } else if (openStart !== null) { openStart = null; openBadge.hidden = true; say('Rally cancelled'); } else select(-1, { seek: false });
         break;
       case 'a': case 'b': case 'l': {
         const w = key === 'l' ? 'let' : key;

@@ -652,3 +652,28 @@ table.parts .part-pick { white-space: nowrap; }
 .tool-check { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-sm); }
 .tool-check input { margin-top: 2px; flex: none; }
 .video-pick { flex: 1 1 260px; min-width: 0; max-width: 100%; }
+
+/* Court marking: which corner to click, and the marked corners to drag */
+.player .mark-tip { position: absolute; left: 12px; top: 12px; z-index: 3; display: flex; gap: 12px; align-items: center; max-width: min(420px, calc(100% - 24px));
+  padding: 8px 12px; border-radius: 12px; background: rgb(0 0 0 / 78%); color: #fff; font-size: var(--fs-sm); line-height: 1.35; pointer-events: none; backdrop-filter: blur(4px); }
+.player .mark-tip .stack > * + * { margin-top: 2px; }
+.mark-tip-name { color: #ffd84d; font-weight: 750; font-size: var(--fs-lg); text-transform: uppercase; letter-spacing: 0.04em; }
+.mark-tip-hint { color: rgb(255 255 255 / 75%); font-size: var(--fs-xs); }
+.corner-diagram { width: 76px; height: 56px; flex: none; }
+.corner-diagram .court { fill: rgb(47 109 79 / 85%); stroke: #fff; stroke-width: 1.5; }
+.corner-diagram .net { stroke: rgb(255 255 255 / 80%); stroke-width: 1; stroke-dasharray: 3 2; }
+.corner-diagram text { fill: rgb(255 255 255 / 70%); font: 600 9px "Segoe UI", system-ui, sans-serif; }
+.corner-diagram circle.done { fill: #ffd84d; stroke: #000; stroke-width: 1; }
+.corner-diagram circle.todo { fill: rgb(0 0 0 / 50%); stroke: rgb(255 255 255 / 70%); stroke-width: 1; }
+.corner-diagram circle.now { fill: #ff3b30; stroke: #fff; stroke-width: 2; animation: corner-pulse 1s ease-in-out infinite; }
+@keyframes corner-pulse { 50% { stroke-width: 4; opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .corner-diagram circle.now { animation: none; } }
+.player .corner-handle { position: absolute; z-index: 2; width: 18px; height: 18px; min-height: 0; margin: -9px 0 0 -9px; padding: 0; border-radius: 50%;
+  background: #ffd84d; border: 2px solid #000; box-shadow: 0 0 0 2px rgb(255 255 255 / 55%); cursor: grab; touch-action: none; }
+.player .corner-handle:hover { background: #ffe680; }
+.player .corner-handle:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.player .corner-handle.dragging { cursor: grabbing; transform: scale(1.25); }
+.player .corner-handle span { position: absolute; left: 16px; bottom: 14px; white-space: nowrap; color: #ffd84d; font: 650 12px/1.2 "Segoe UI", system-ui, sans-serif;
+  text-shadow: 0 0 3px #000, 0 1px 2px #000; pointer-events: none; }
+.player .mark-tip.right { left: auto; right: 12px; }
+.player .mark-tip.right ~ .flash { top: auto; bottom: 14px; }
