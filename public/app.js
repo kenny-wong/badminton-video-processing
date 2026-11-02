@@ -320,30 +320,36 @@ async function renderHome() {
     h('div', { class: 'year-title' }, y, h('span', { class: 'muted' }, ` · ${list.length}`)),
     h('div', { class: 'tournament-list' }, list.map((t) => tournamentCard(t, f)))));
   const libraryEmpty = () => illustratedEmpty('Your match library starts here.', 'Paste a badminfo or Badminton England link above to bring in the matches, or make your own tournament, then link your footage.');
+  // Finding a tournament by name among many: every word typed must be in its name.
+  const nameFilter = h('input', { type: 'search', class: 'tournament-find', placeholder: 'Find a tournament by name', 'aria-label': 'Find a tournament by name', oninput: () => drawList() });
+  const noneNamed = () => h('p', { class: 'hint' }, `No tournament’s name has “${nameFilter.value.trim()}”.`);
   const drawList = () => {
     const choice = playerSel?.value ?? 'all';
+    const words = nameFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const pool = tournaments.filter((t) => words.every((w) => t.name.toLowerCase().includes(w)));
+    const of = words.length ? ` of ${tournaments.length}` : '';
     if (choice === 'group') {
       // A tournament with two favourites shows under both; tournaments with none come last.
-      const groups = favs.map((f) => ({ f, list: tournaments.filter((t) => Object.hasOwn(f.tournaments, t.id)) })).filter((g) => g.list.length);
+      const groups = favs.map((f) => ({ f, list: pool.filter((t) => Object.hasOwn(f.tournaments, t.id)) })).filter((g) => g.list.length);
       const placed = new Set(groups.flatMap((g) => g.list.map((t) => t.id)));
-      const rest = tournaments.filter((t) => !placed.has(t.id));
-      fill(listTitle, icon('trophy', 15), `Tournaments by player (${tournaments.length})`);
-      fill(list, !tournaments.length ? libraryEmpty() : [
+      const rest = pool.filter((t) => !placed.has(t.id));
+      fill(listTitle, icon('trophy', 15), `Tournaments by player (${pool.length}${of})`);
+      fill(list, !tournaments.length ? libraryEmpty() : !pool.length ? noneNamed() : [
         groups.map(({ f, list: ts }) => h('section', { class: 'player-group' },
           h('h3', { class: 'group-title' }, h('a', { class: 'plain', href: f.id ? `#/p/${f.id}` : '#/players' }, `★ ${f.name}`), h('span', { class: 'muted small' }, ` ${ts.length} tournament${ts.length === 1 ? '' : 's'}`)),
           yearCards(ts, f))),
         rest.length ? h('section', { class: 'player-group' },
-          h('h3', { class: 'group-title' }, groups.length ? 'Other tournaments' : 'Tournaments', h('span', { class: 'muted small' }, groups.length ? ' none of your favourites in them' : ' none of your favourites in them yet')),
+          h('h3', { class: 'group-title' }, favs.length ? 'Other tournaments' : 'Tournaments', h('span', { class: 'muted small' }, favs.length ? ' none of your favourites in them' : ' none of your favourites in them yet')),
           yearCards(rest)) : null,
       ]);
       return;
     }
     const f = favs.find((x) => String(x.key) === choice);
-    const shown = f ? tournaments.filter((t) => Object.hasOwn(f.tournaments, t.id)) : tournaments;
-    fill(listTitle, icon('trophy', 15), f ? `${f.name}’s tournaments (${shown.length} of ${tournaments.length})` : `Tournaments (${tournaments.length})`);
+    const shown = f ? pool.filter((t) => Object.hasOwn(f.tournaments, t.id)) : pool;
+    fill(listTitle, icon('trophy', 15), f ? `${f.name}’s tournaments (${shown.length} of ${tournaments.length})` : `Tournaments (${shown.length}${of})`);
     fill(list, shown.length
       ? yearCards(shown, f)
-      : f ? illustratedEmpty(`No tournaments for ${f.name} yet.`, 'Import a tournament they have entered, or add them to a custom tournament, to see it here.') : libraryEmpty());
+      : words.length ? noneNamed() : f ? illustratedEmpty(`No tournaments for ${f.name} yet.`, 'Import a tournament they have entered, or add them to a custom tournament, to see it here.') : libraryEmpty());
   };
   drawList();
   fill(main,
@@ -371,7 +377,7 @@ async function renderHome() {
         scanBox)),
     h('div', { class: 'card stack' }, h('div', { class: 'row' }, query, only), results),
     todoBox,
-    h('div', { class: 'row spread' }, listTitle, playerSel),
+    h('div', { class: 'row spread' }, listTitle, h('div', { class: 'row' }, tournaments.length ? nameFilter : null, playerSel)),
     list);
 }
 

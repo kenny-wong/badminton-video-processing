@@ -40,6 +40,9 @@ function fakes() {
   };
 }
 
+// The tests' "today" is fixed, so they say when the app last read each tournament: on its first day.
+const readOnTheDay = (db) => db.prepare("UPDATE tournaments SET imported_at = start_date || 'T08:00:00Z'").run();
+
 test('a player’s badminfo tournaments are imported once: ones already in the app are skipped, failures reported', async () => {
   const db = openDb();
   const f = fakes();
@@ -59,6 +62,7 @@ test('a player’s badminfo tournaments are imported once: ones already in the a
   assert.deepEqual([again.imported.length, again.already], [0, 2]);
 
   f.fetched.length = 0;
+  readOnTheDay(db);
   const update = await importPlayerTournaments(db, PLAYER, { ...f, update: true, today: '2026-11-02' });
   assert.deepEqual(f.fetched.sort(), [T1, T2].sort(), 'update reads only the imported ones');
   assert.deepEqual([update.imported.length, update.already], [2, 1]);
@@ -73,6 +77,7 @@ test('updating leaves out a finished tournament that has every result already', 
   const db = openDb();
   const f = fakes();
   await importPlayerTournaments(db, PLAYER, f);
+  readOnTheDay(db);
   const t1 = db.prepare('SELECT id FROM tournaments WHERE badminfo_id = ?').get(T1).id;
   assert.equal(resultsComplete(db, T1), false, 'some of its matches have no result yet');
   // Every match of T1 gets a result: nothing more to fetch for it.
@@ -85,11 +90,15 @@ test('updating leaves out a finished tournament that has every result already', 
   assert.deepEqual([update.imported.length, update.complete, update.already], [1, 1, 1]);
 });
 
-test('an event with no matches at all, read after it ended, isn’t read again; one with results missing always is', async () => {
+test('an event with no matches at all, read after it ended, isn’t read again; one with results missing is until 3 days after it ended', async () => {
   const db = openDb();
   await importPlayerTournaments(db, PLAYER, fakes());
   db.prepare("UPDATE tournaments SET imported_at = '2026-10-25T08:00:00Z' WHERE badminfo_id = ?").run(T1);
   assert.equal(resultsComplete(db, T1, '2026-11-02'), false, 'some matches still have no result');
+  // Read again 3 days after it ended: a match still without a result was never played (a walkover).
+  db.prepare("UPDATE tournaments SET imported_at = '2026-10-27T08:00:00Z' WHERE badminfo_id = ?").run(T1);
+  assert.equal(resultsComplete(db, T1, '2026-11-02'), true);
+  db.prepare("UPDATE tournaments SET imported_at = '2026-10-25T08:00:00Z' WHERE badminfo_id = ?").run(T1);
   db.prepare('DELETE FROM matches WHERE tournament_id = (SELECT id FROM tournaments WHERE badminfo_id = ?)').run(T1); // a camp: no matches
   assert.equal(resultsComplete(db, T1, '2026-11-02'), true);
   db.prepare("UPDATE tournaments SET imported_at = '2026-10-24T08:00:00Z' WHERE badminfo_id = ?").run(T1); // read on the day: draws may still come

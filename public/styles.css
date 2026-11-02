@@ -727,3 +727,6 @@ table.player-matches .star-cell { width: 28px; padding-right: 0; }
 .match-star { border: 0; background: transparent; box-shadow: none; padding: 0 2px; min-height: 0; font-size: 1.15rem; line-height: 1; color: var(--faint); cursor: pointer; }
 .match-star:hover { background: transparent; color: var(--focus); }
 .match-star.on { color: var(--focus); }
+
+/* Tournaments page: the name box beside "whose tournaments" */
+input[type="search"].tournament-find { flex: 0 1 240px; width: 240px; }

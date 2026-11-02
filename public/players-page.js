@@ -53,13 +53,13 @@ const BADMINFO_PLAYER = /badminfo\.com\/player\/|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-
 
 /** What an import of a player's tournaments did, for the page. */
 function importOutcome(r, update) {
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const plural = (n, word) => `${n} ${n === 1 ? word : word.endsWith('ch') ? `${word}es` : `${word}s`}`;
   return h('div', { class: 'notice ok stack' },
     h('div', { class: 'notice-msg' }, update
       ? `${r.player}: updated ${plural(r.imported.length, 'tournament')}`
       : r.imported.length ? `${r.player}: imported ${plural(r.imported.length, 'new tournament')}` : `${r.player}: no new tournaments`),
     r.imported.length ? h('ul', { class: 'small import-list' }, r.imported.map((t) => h('li', {}, h('a', { href: `#/t/${t.id}` }, t.name), h('span', { class: 'muted' }, ` · ${t.start ?? ''} · ${plural(t.matches, 'match')}${t.matches ? '' : ' (draws not out yet: use Update results later)'}`)))) : null,
-    r.complete ? h('div', { class: 'small muted' }, `${plural(r.complete, 'tournament')} finished with every result already in: not fetched again.`) : null,
+    r.complete ? h('div', { class: 'small muted' }, `${plural(r.complete, 'tournament')} finished and already up to date (every result in, or read again since they ended): not fetched again.`) : null,
     r.already ? h('div', { class: 'small muted' }, update ? `${plural(r.already, 'tournament')} not imported yet, left alone.` : `${plural(r.already, 'tournament')} already in the app, skipped.`) : null,
     r.skipped.length ? h('details', { class: 'small' }, h('summary', {}, `${plural(r.skipped.length, 'tournament')} couldn’t be read`),
       h('ul', {}, r.skipped.map((s) => h('li', {}, `${s.name}: ${s.reason}`)))) : null);
