@@ -44,7 +44,7 @@
   .top .brand { order: 0; }
   .top .top-extra { order: 1; }
   .top .server-version { order: 2; }
-  .top .tabs { order: 3; flex: 1 0 100%; justify-content: space-between; }
+  .top .tabs { order: 3; flex: 1 0 100%; min-width: 0; max-width: 100%; overflow-x: auto; justify-content: space-between; }
   .tabs a { justify-content: center; padding: 7px 9px; font-size: 0.8rem; gap: 5px; }
   .home-hero-copy { padding: 22px 25px; }
   .home-hero::after { background: linear-gradient(90deg, rgb(4 32 23 / 94%), rgb(4 32 23 / 45%)); }

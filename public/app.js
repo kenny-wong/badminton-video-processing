@@ -404,6 +404,8 @@ function videoLabel(v) {
 
 // The tournament page's list/grid choice and filters, per device.
 const PREFS_KEY = 'badminton-video:tournament-view:v1';
+// Keep the current search and expanded games when a link or result update redraws the page.
+const tournamentViews = new Map();
 function readPrefs() {
   try {
     return JSON.parse(localStorage.getItem(PREFS_KEY)) ?? {};
@@ -416,10 +418,6 @@ function writePrefs(prefs) {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   } catch { /* storage blocked: the choice lasts until the page closes */ }
 }
-
-/** "▶ YouTube" link for an uploaded match, with the short address. */
-const youtubeLink = (m) => m.youtubeUrl && h('a', { class: 'yt-link small', href: m.youtubeUrl, target: '_blank', rel: 'noopener', title: 'Watch on YouTube' },
-  '▶ YouTube ', h('span', { class: 'muted' }, m.youtubeUrl.replace(/^https:\/\//, '')));
 
 async function renderTournament(id, notice = null, who = null) {
   setTab('home');
@@ -438,6 +436,8 @@ async function renderTournament(id, notice = null, who = null) {
   const free = videos.filter((v) => !v.matchId);
   const anyMine = matches.some((m) => m.mine);
   const saved = readPrefs();
+  if (!tournamentViews.has(String(id))) tournamentViews.set(String(id), { search: '', progress: '', expandedGames: new Set() });
+  const viewState = tournamentViews.get(String(id));
   // whose matches: '' everyone's, 'fav' the favourites', or one favourite's key (onlyMine was the old checkbox)
   const prefs = { view: 'list', hideNoVideo: false, ...saved, who: saved.who ?? (saved.onlyMine === false ? '' : 'fav') };
   if (who !== null) {
@@ -447,7 +447,8 @@ async function renderTournament(id, notice = null, who = null) {
   if (!['', 'fav'].includes(prefs.who) && !data.favourites.some((f) => String(f.key) === prefs.who)) prefs.who = 'fav';
   const hasFav = (m, key) => m.favs.a.includes(key) || m.favs.b.includes(key);
   const msg = h('div');
-  const table = h('div');
+  const table = h('div', { class: 'tournament-matches' });
+  const expandedGames = viewState.expandedGames;
 
   // A "unit" is what a video is linked to: a whole match, or one game of it
   // (its own row once used; `parent` + `game` while it has none yet).
@@ -474,6 +475,7 @@ async function renderTournament(id, notice = null, who = null) {
   const VIDEO_TYPE = 'application/x-badminton-video';
   const dropped = async (e, u) => {
     e.preventDefault();
+    e.stopPropagation();
     e.currentTarget.classList.remove('drop-on');
     let ids = [];
     const chip = Number(e.dataTransfer.getData(VIDEO_TYPE));
@@ -504,6 +506,7 @@ async function renderTournament(id, notice = null, who = null) {
     ondragover: (e) => {
       if (![...e.dataTransfer.types].some((t) => t === VIDEO_TYPE || t === 'Files')) return;
       e.preventDefault();
+      e.stopPropagation();
       e.currentTarget.classList.add('drop-on');
     },
     ondragleave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drop-on'); },
@@ -519,6 +522,7 @@ async function renderTournament(id, notice = null, who = null) {
     const choices = sameDay.length ? sameDay : free;
     if (!choices.length) return h('span', { class: 'muted small' }, 'No video yet');
     return h('select', {
+      class: 'video-chooser',
       'aria-label': `Choose a video for the ${unitName(u)}`,
       onchange: (e) => e.target.value && link(u, [Number(e.target.value)]),
     }, h('option', { value: '' }, 'Choose video…'), choices.map((v) => h('option', { value: v.id }, videoLabel(v))));
@@ -526,36 +530,41 @@ async function renderTournament(id, notice = null, who = null) {
 
   const linkedCell = (u) => {
     const v = byId.get(u.videoIds[0]);
-    return h('div', { class: 'stack' },
-      h('div', {}, h('a', { class: 'btn primary', href: `#/m/${u.id}` }, 'Open'), ' ',
-        h('span', { class: 'small' }, v ? `${v.name} · ${clock(v.duration ?? 0)}` : '')),
-      youtubeLink(u),
-      h('button', { class: 'small', onclick: () => link(u, []) }, 'Unlink'));
+    return h('div', { class: 'video-link stack' },
+      v ? h('div', { class: 'video-file small', title: v.name }, icon('film', 14), h('span', {}, v.name)) : null,
+      h('div', { class: 'row video-actions' },
+        h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
+        v ? h('span', { class: 'small muted' }, clock(v.duration ?? 0)) : null,
+        h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')));
   };
 
-  const perGame = (m) => m.units.length >= 2;
+  const perGame = (m) => m.units.length >= 2 || m.units.some((u) => u.videoIds.length);
   const gamesLinked = (m) => m.units.some((u) => u.videoIds.length);
   const unitsOf = (m) => m.units.map((u) => ({ ...u, parent: m }));
   const hasVideo = (m) => m.videoIds.length > 0 || gamesLinked(m);
+  const filmedUnits = (m) => m.videoIds.length ? [m] : m.units.filter((u) => u.videoIds.length);
+  const unitStage = (u) => u.youtubeUrl ? 'done' : u.outputPath ? 'upload' : u.rallyCount && u.tagged === u.rallyCount ? 'render' : 'tag';
 
   // A suggested video with its Link button.
   const suggestedCell = (u, s) => {
     const v = byId.get(s.ids[0]);
-    return h('div', { class: 'stack' },
-      h('div', { class: 'small' }, h('span', { class: 'pill warn' }, 'Suggested'), ' ',
-        v?.name ?? '', h('span', { class: 'muted' }, ` · recorded ${when(v?.recordedAt, { date: false })}${s.lateMin && !s.game ? `, ${s.lateMin > 0 ? `${s.lateMin} min after` : `${-s.lateMin} min before`} due` : ''}`)),
-      h('button', { class: 'small primary', onclick: () => link(u, s.ids) }, 'Link'));
+    return h('div', { class: 'video-suggestion stack' },
+      h('div', { class: 'row small' }, h('span', { class: 'pill warn' }, 'Suggested video'),
+        h('span', { class: 'muted' }, when(v?.recordedAt, { date: false }))),
+      h('div', { class: 'video-file small', title: v?.name }, v?.name ?? 'Video'),
+      s.lateMin && !s.game ? h('span', { class: 'small muted' }, `${Math.abs(s.lateMin)} min ${s.lateMin > 0 ? 'after' : 'before'} scheduled`) : null,
+      h('button', { class: 'small primary', onclick: () => link(u, s.ids) }, icon('link', 13), 'Link video'));
   };
 
   const videoCell = (m) => {
     if (m.videoIds.length) return linkedCell(m);
-    if (gamesLinked(m)) return h('span', { class: 'small muted' }, 'Filmed game by game ↓');
+    if (gamesLinked(m)) return h('div', { class: 'game-video-summary small' }, icon('film', 15), `${filmedUnits(m).length} of ${m.units.length} games filmed`);
     const s = suggestionOf(m);
     if (s) return suggestedCell(m, s);
     const games = gameSuggestions(m);
     if (games.length) {
       return h('div', { class: 'stack' },
-        h('span', { class: 'small' }, h('span', { class: 'pill warn' }, 'Suggested'), ` ${games.length} videos, one per game ↓`),
+        h('span', { class: 'small' }, h('span', { class: 'pill warn' }, 'Suggested'), ` ${games.length} game videos`),
         h('button', {
           class: 'small primary',
           onclick: async () => {
@@ -568,7 +577,7 @@ async function renderTournament(id, notice = null, who = null) {
           },
         }, `Link ${games.length === 2 ? 'both' : `all ${games.length}`}`));
     }
-    return h('div', { class: 'stack' }, chooser(m, m.date), perGame(m) ? h('div', { class: 'hint' }, 'whole match, or per game below') : null);
+    return h('div', { class: 'stack' }, chooser(m, m.date), perGame(m) ? h('div', { class: 'hint' }, 'Whole match, or open Game videos below.') : null);
   };
 
   const unitVideoCell = (u) => {
@@ -592,6 +601,20 @@ async function renderTournament(id, notice = null, who = null) {
     const tag = (done, kind, text, title, href = null) => (done && href
       ? h('a', { class: `tag ${kind}`, href, target: '_blank', rel: 'noopener', title }, text)
       : h('span', { class: `tag ${kind}${done ? '' : ' off'}`, title }, text));
+    if (m.units && !m.videoIds.length && gamesLinked(m)) {
+      const units = filmedUnits(m);
+      const total = m.units.length;
+      const tagged = units.filter((u) => u.rallyCount && u.tagged === u.rallyCount).length;
+      const rendered = units.filter((u) => u.outputPath).length;
+      const checks = units.filter((u) => u.rallyCount && u.check && u.games?.length);
+      const bad = checks.some((u) => !u.check.ok);
+      const scoreOk = checks.length === total && !bad;
+      return h('div', { class: 'row tags' },
+        tag(tagged > 0, tagged < total ? 'rallies part' : 'rallies', `${tagged}/${total} tagged games`, 'Games with every rally tagged'),
+        tag(bad || scoreOk, bad ? 'score-bad' : scoreOk ? 'score-ok' : 'score', bad ? 'Score ≠' : scoreOk ? 'Score ✓' : 'Score', bad ? 'A game’s tagged score differs from the result' : 'Tagged game scores checked against the result'),
+        tag(rendered > 0, 'render', `${rendered}/${total} rendered`, 'Rendered game videos'),
+        youtubeTag(m, tag));
+    }
     const allTagged = m.rallyCount > 0 && m.tagged === m.rallyCount;
     const checked = m.rallyCount > 0 && m.check && m.games?.length;
     return h('div', { class: 'row tags' },
@@ -608,11 +631,12 @@ async function renderTournament(id, notice = null, who = null) {
   // badminfo's chance before the match, each side's with its names.
   const shortTeam = (team) => (team.length > 1 ? team.map((n) => n.trim().split(/\s+/).at(-1)).join(' / ') : team[0] ?? '');
   const chanceCell = (m) => {
-    if (typeof m.people?.chance !== 'number') return h('span', { class: 'muted' }, '—');
+    if (typeof m.people?.chance !== 'number') return h('span', { class: 'small muted' }, 'Not available');
     const [pa, pb] = percents(m.people.chance);
     return h('div', { class: 'chance-cell small', title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` },
       h('div', {}, h('span', { class: 'pct' }, pa), ' ', shortTeam(m.teamA)),
       h('div', {}, h('span', { class: 'pct' }, pb), ' ', shortTeam(m.teamB)),
+      h('div', { class: 'chance-meter', 'aria-hidden': 'true' }, h('span', { style: { width: pa } })),
       m.people.upset ? h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset') : null);
   };
 
@@ -630,31 +654,44 @@ async function renderTournament(id, notice = null, who = null) {
   });
   // The winners in green with a tick, the losers in red, once the result is in.
   const side = (m, k) => (!m.winner ? '' : m.winner === k + 1 ? 'team-won' : 'team-lost');
-  const teams = (m) => [
-    h('div', { class: side(m, 0) }, m.winner === 1 ? '✓ ' : '', named(m, 0)),
-    h('div', { class: 'muted small' }, 'v'),
-    h('div', { class: side(m, 1) }, m.winner === 2 ? '✓ ' : '', named(m, 1)),
-  ];
+  const teams = (m) => h('div', { class: 'matchup' }, [0, 1].map((k) =>
+    h('div', { class: `team-line ${side(m, k)}` },
+      h('div', { class: 'team-name' }, h('span', { class: 'team-result', title: m.winner === k + 1 ? 'Winner' : '' }, m.winner === k + 1 ? '✓' : ''), h('span', {}, named(m, k))),
+      m.games?.length ? h('div', { class: 'team-scores' }, m.games.map((g, j) =>
+        h('span', { class: `game-point${g[k] > g[1 - k] ? ' win' : g[k] < g[1 - k] ? ' lose' : ''}`, title: `Game ${j + 1}: ${teamName(k ? m.teamB : m.teamA)} ${g[k]}`, 'aria-label': `Game ${j + 1}: ${g[k]}` }, g[k]))) : null)));
 
-  const listView = (list) => h('div', { class: 'table-scroll' }, h('table', {},
-    h('thead', {}, h('tr', {}, ['Time', 'Court', 'Event', 'Match', 'Result', 'Win chance', 'Video', 'Status'].map((x) => h('th', {}, x)))),
+  const eventLine = (m) => h('div', { class: 'match-event small' },
+    h('span', { class: 'event-label' }, m.draw || 'Match'), h('span', { class: 'muted' }, m.round),
+    !m.games?.length ? h('span', { class: 'muted result-pending' }, 'Awaiting result') : null);
+
+  const gameDetails = (m, grid = false) => {
+    const linked = filmedUnits(m).length;
+    const suggested = gameSuggestions(m).length;
+    return h('details', { class: `match-games${grid ? ' in-grid' : ''}`, open: expandedGames.has(m.id), ontoggle: (e) => {
+      if (e.target.open) expandedGames.add(m.id);
+      else expandedGames.delete(m.id);
+    } },
+    h('summary', {}, h('span', {}, 'Game videos'), h('span', { class: 'small muted' }, linked ? `${linked}/${m.units.length} filmed` : suggested ? `${suggested} suggested` : `${m.units.length} games`)),
+    h('div', { class: 'game-video-list' }, unitsOf(m).map((u) => h('div', { class: 'game-video-row', ...dropOn(u) },
+      h('div', { class: 'game-video-heading' }, h('div', { class: 'small game-name' }, gameLabel(u)), statusCell(u)),
+      grid && u.videoIds.length ? thumbOf(u, lengthOf(u), false) : null,
+      h('div', { class: 'game-video-controls' }, unitVideoCell(u))))));
+  };
+
+  const listView = (list) => h('div', { class: 'table-scroll tournament-table' }, h('table', {},
+    h('thead', {}, h('tr', {}, ['Time / court', 'Match & result', 'Win chance', 'Video', 'Progress'].map((x) => h('th', { scope: 'col' }, x)))),
     list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, ...dropOn(m) },
-      h('tr', { class: m.mine ? 'mine' : '' },
-        h('td', { class: 'nowrap' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), ' ', m.time, m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
-        h('td', { class: 'small' }, m.court),
-        h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round), custom ? custom.actions(m) : null),
-        h('td', {}, teams(m)),
-        h('td', { class: 'nowrap' }, m.games?.length ? gamesView(m.games) : h('span', { class: 'muted' }, '—')),
-        h('td', {}, chanceCell(m)),
-        h('td', {}, videoCell(m)),
-        h('td', {}, statusCell(m))),
+      h('tr', { class: `match-main${m.mine ? ' mine' : ''}` },
+        h('td', { class: 'match-schedule' },
+          h('div', { class: 'row tight' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), h('strong', {}, m.time)),
+          m.court ? h('div', { class: 'small' }, m.court) : null,
+          m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
+        h('td', { class: 'match-details' }, eventLine(m), teams(m), custom ? custom.actions(m) : null),
+        h('td', { class: 'match-chance', 'data-label': 'Win chance' }, chanceCell(m)),
+        h('td', { class: 'match-video', 'data-label': 'Video' }, videoCell(m)),
+        h('td', { class: 'match-progress', 'data-label': 'Progress' }, statusCell(m))),
       // Game by game, unless one video covers the whole match.
-      perGame(m) && !m.videoIds.length ? unitsOf(m).map((u) => h('tr', { class: `game-row${m.mine ? ' mine' : ''}`, ...dropOn(u) },
-        h('td', {}), h('td', {}), h('td', {}),
-        h('td', { class: 'small game-name' }, '↳ ', gameLabel(u)),
-        h('td', {}), h('td', {}),
-        h('td', {}, unitVideoCell(u)),
-        h('td', {}, statusCell(u)))) : null))));
+      perGame(m) && !m.videoIds.length ? h('tr', { class: 'match-games-row' }, h('td', { colspan: 5 }, gameDetails(m))) : null))));
 
   const thumbOf = (u, total, big = true) => h('a', { class: big ? 'thumb' : 'thumb small-thumb', href: `#/m/${u.id}`, title: 'Open' },
     h('img', { src: u.thumb, alt: '', loading: 'lazy', onerror: (e) => { e.target.remove(); } }),
@@ -665,40 +702,63 @@ async function renderTournament(id, notice = null, who = null) {
   const gridView = (list) => h('div', { class: 'match-grid' }, list.map((m) => {
     const filmed = m.videoIds.length > 0;
     const games = perGame(m) && !filmed;
-    return h('div', { class: `match-card${m.mine ? ' mine' : ''}`, ...dropOn(m) },
+    return h('article', { class: `match-card${m.mine ? ' mine' : ''}`, ...dropOn(m) },
       filmed
         ? thumbOf(m, lengthOf(m))
-        : games && gamesLinked(m) ? null
-          : h('div', { class: 'thumb empty' }, suggestionOf(m) || gameSuggestions(m).length ? 'Video suggested' : 'No video'),
-      h('div', { class: 'match-body stack' },
-        h('div', { class: 'row spread small muted' }, h('span', {}, [m.time, m.court, `${m.draw}${m.round ? ` · ${m.round}` : ''}`].filter(Boolean).join(' · ')), matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } })),
-        h('div', { class: 'teams' }, teams(m)),
-        h('div', { class: 'small' }, 'Result ', m.games?.length ? h('span', {}, gamesView(m.games)) : '—', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null),
-        typeof m.people?.chance === 'number' ? h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Win chance'), chanceCell(m)) : null,
+        : null,
+      h('div', { class: 'match-body' },
+        h('div', { class: 'row spread small match-card-schedule' }, h('span', {}, h('strong', {}, m.time), m.court ? ` · ${m.court}` : '', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null), matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } })),
+        eventLine(m),
+        teams(m),
+        typeof m.people?.chance === 'number' ? h('details', { class: 'match-chance-fold' }, h('summary', { class: 'small muted' }, 'Win chance', m.people.upset ? h('span', { class: 'pill upset' }, 'Upset') : null), chanceCell(m)) : null,
         statusCell(m),
         custom ? custom.actions(m) : null,
-        filmed ? h('div', { class: 'row' }, h('a', { class: 'btn primary', href: `#/m/${m.id}` }, 'Open'), youtubeLink(m),
-          h('button', { class: 'small', onclick: () => link(m, []) }, 'Unlink'))
-          : gamesLinked(m) ? null : videoCell(m),
-        games ? h('div', { class: 'game-tiles' }, unitsOf(m).map((u) => h('div', { class: 'game-tile', ...dropOn(u) },
-          u.videoIds.length ? thumbOf(u, lengthOf(u), false) : null,
-          h('div', { class: 'stack small' },
-            h('div', {}, gameLabel(u)),
-            statusCell(u),
-            u.videoIds.length
-              ? h('div', { class: 'row' }, h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, 'Open'), youtubeLink(u),
-                h('button', { class: 'small', onclick: () => link(u, []) }, 'Unlink'))
-              : unitVideoCell(u))))) : null));
+        h('div', { class: 'match-card-video' }, videoCell(m)),
+        games ? gameDetails(m, true) : null));
   }));
+
+  const search = h('input', { type: 'search', value: viewState.search, placeholder: 'Find a player, event, round or court…', 'aria-label': 'Find a match in this tournament', oninput: () => { viewState.search = search.value; drawTable(); } });
+  const progressFilter = h('select', { 'aria-label': 'Filter by progress', onchange: () => { viewState.progress = progressFilter.value; drawTable(); } },
+    [['', 'All progress'], ['unlinked', 'Needs a video'], ['tag', 'Needs tagging'], ['render', 'Ready to render'], ['upload', 'Ready for YouTube'], ['done', 'On YouTube']].map(([value, label]) => h('option', { value }, label)));
+  progressFilter.value = viewState.progress;
+  const matchCount = h('span', { class: 'small muted match-count', role: 'status', 'aria-live': 'polite' });
+  const hideNoVideo = h('input', { type: 'checkbox', checked: prefs.hideNoVideo, onchange: (e) => setPref('hideNoVideo', e.target.checked) });
+  const clearFilters = () => {
+    search.value = '';
+    progressFilter.value = '';
+    whoSel.value = '';
+    hideNoVideo.checked = false;
+    Object.assign(prefs, { who: '', hideNoVideo: false });
+    Object.assign(viewState, { search: '', progress: '' });
+    writePrefs(prefs);
+    drawTable();
+  };
+  const clearFilterBtn = h('button', { class: 'small ghost', onclick: clearFilters }, 'Clear filters');
 
   const drawTable = () => {
     // One favourite: only their matches. All favourites: theirs, and any other match with a video.
     const picked = (m) => (!anyMine || !prefs.who ? true : prefs.who === 'fav' ? m.mine || hasVideo(m) : hasFav(m, Number(prefs.who)));
-    const shown = matches.filter((m) => picked(m) && (!prefs.hideNoVideo || hasVideo(m)));
+    const words = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const shown = matches.filter((m) => {
+      if (!picked(m) || (prefs.hideNoVideo && !hasVideo(m))) return false;
+      const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.court, m.time, m.date].join(' ').toLowerCase();
+      if (!words.every((word) => text.includes(word))) return false;
+      if (!progressFilter.value) return true;
+      if (progressFilter.value === 'unlinked') return !m.videoIds.length && (!m.units.length || m.units.some((u) => !u.videoIds.length));
+      return filmedUnits(m).some((u) => unitStage(u) === progressFilter.value);
+    });
     const days = [...new Set(shown.map((m) => m.date))];
     const view = prefs.view === 'grid' ? gridView : listView;
-    fill(table, days.map((d) => [h('div', { class: 'day-title' }, day(d)), view(shown.filter((m) => m.date === d))]));
-    if (!shown.length) fill(table, emptyState('film', prefs.hideNoVideo ? 'No matches with a video yet.' : custom && !matches.length ? 'No matches yet: add the first one above.' : 'No matches to show.'));
+    matchCount.textContent = `${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
+    clearFilterBtn.hidden = !search.value && !progressFilter.value && !prefs.hideNoVideo && (!anyMine || !prefs.who);
+    fill(table, days.map((d) => {
+      const onDay = shown.filter((m) => m.date === d);
+      return h('section', { class: 'match-day', 'aria-label': day(d) },
+        h('h2', { class: 'day-title' }, day(d), h('span', { class: 'small muted' }, `${onDay.length} match${onDay.length === 1 ? '' : 'es'} · ${onDay.filter(hasVideo).length} with video`)), view(onDay));
+    }));
+    if (!shown.length) fill(table, h('div', { class: 'match-empty' },
+      emptyState('film', custom && !matches.length ? 'No matches yet: add the first one above.' : 'No matches fit these filters.'),
+      matches.length ? h('button', { class: 'small', onclick: clearFilters }, 'Clear filters') : null));
   };
 
   const setPref = (k, v) => {
@@ -715,11 +775,19 @@ async function renderTournament(id, notice = null, who = null) {
   const drawViewButtons = () => fill(viewButtons, [['list', 'List'], ['grid', 'Grid']].map(([v, label]) =>
     h('button', { class: 'small', 'aria-pressed': String(prefs.view === v), onclick: () => setPref('view', v) }, icon(v, 15), label)));
   drawViewButtons();
-  const toolbar = h('div', { class: 'row spread toolbar' },
-    h('div', { class: 'row' },
-      anyMine ? whoSel : null,
-      h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: prefs.hideNoVideo, onchange: (e) => setPref('hideNoVideo', e.target.checked) }), 'Hide matches without a video')),
-    viewButtons);
+  const toolbar = h('div', { class: 'tournament-toolbar' },
+    h('div', { class: 'row spread' }, h('h2', {}, 'Matches'), h('div', { class: 'row' }, matchCount, viewButtons)),
+    h('div', { class: 'match-filters' }, search, anyMine ? whoSel : null, progressFilter,
+      h('label', { class: 'row small' }, hideNoVideo, 'With video only'), clearFilterBtn));
+
+  const filmed = matches.flatMap(filmedUnits);
+  const overview = h('div', { class: 'tournament-overview' },
+    [['Matches', matches.length, 'in this tournament'],
+      ['With video', matches.filter(hasVideo).length, `of ${matches.length} matches`],
+      ['Tagged', filmed.filter((u) => u.rallyCount && u.tagged === u.rallyCount).length, `of ${filmed.length} linked videos`],
+      ['Rendered', filmed.filter((u) => u.outputPath).length, `of ${filmed.length} linked videos`],
+      ['YouTube', filmed.filter((u) => u.youtubeUrl).length, `of ${filmed.length} linked videos`]].map(([label, value, detail]) =>
+      h('div', { class: 'tournament-metric' }, h('span', { class: 'metric-label' }, label), h('strong', {}, value), h('span', { class: 'small muted' }, detail))));
 
   const linkAll = suggestions.length ? h('button', {
     class: 'primary',
@@ -847,26 +915,28 @@ async function renderTournament(id, notice = null, who = null) {
           }
         },
       }, icon(tournament.completedAt ? 'refresh' : 'check', 16), tournament.completedAt ? 'Reopen' : 'Mark complete'),
-      reelBtn,
       renderAllBtn,
       custom ? null : refreshBtn,
-      unlinkAllBtn,
-      h('button', {
-        class: 'danger',
-        onclick: async () => {
-          if (!confirm(`Forget ${tournament.name}? Its tagging is lost; your video files are not touched.`)) return;
-          await api(`/api/tournaments/${id}`, { method: 'DELETE' });
-          location.hash = '#/';
-        },
-      }, icon('trash', 16), 'Remove')),
+      h('details', { class: 'tournament-menu', onclick: (e) => { if (e.target.closest('button')) e.currentTarget.open = false; }, onkeydown: (e) => { if (e.key === 'Escape') { e.currentTarget.open = false; e.currentTarget.querySelector('summary').focus(); } } },
+        h('summary', { class: 'btn' }, 'More actions', h('span', { 'aria-hidden': 'true' }, '⌄')),
+        h('div', { class: 'tournament-menu-items' }, reelBtn, unlinkAllBtn, h('button', {
+          class: 'danger',
+          onclick: async () => {
+            if (!confirm(`Forget ${tournament.name}? Its tagging is lost; your video files are not touched.`)) return;
+            await api(`/api/tournaments/${id}`, { method: 'DELETE' });
+            location.hash = '#/';
+          },
+        }, icon('trash', 16), 'Remove tournament')))),
     msg,
     notice,
     custom?.el,
+    overview,
     suggestions.length ? h('div', { class: 'notice info row spread' },
       h('span', {}, `${suggestions.length === 1 ? 'One video has a suggested match' : `${suggestions.length} videos have suggested matches`}, going by when they were recorded (one video per match, or per game when a match was filmed game by game). Check, then link.`), linkAll) : null,
     !videos.length ? h('div', { class: 'notice warn' }, 'No videos from these dates yet. ', h('a', { href: '#/' }, 'Scan your video folders'), ' after copying them from your phone.') : null,
-    unmatched.length ? h('div', { class: 'stack small' },
-      h('div', { class: 'muted' }, `${unmatched.length} video${unmatched.length === 1 ? '' : 's'} from these dates aren’t linked or suggested: drag one onto its match, or choose it in the Video column. A video file can also be dragged straight from Explorer.`),
+    unmatched.length ? h('details', { class: 'unlinked-videos stack small' },
+      h('summary', {}, icon('film', 15), `${unmatched.length} unlinked video${unmatched.length === 1 ? '' : 's'}`, h('span', { class: 'muted' }, ' · drag onto a match or game')),
+      h('p', { class: 'hint' }, 'Drag a video onto its match or game, or use Choose video. You can also drop a scanned video from Explorer.'),
       h('div', { class: 'video-tray' }, unmatched.map(videoChip))) : null,
     anyMine ? null : h('p', { class: 'hint' }, 'Star your players on the ', h('a', { href: '#/players' }, 'Players'), ' page (★) to pick out their matches.'),
     toolbar,
