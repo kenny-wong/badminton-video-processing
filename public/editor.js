@@ -127,6 +127,7 @@ const KEYS = [
   ['Space', 'play / pause'],
   ['S', 'rally starts now'],
   ['A / B', 'rally ends now, won by A / B (no S: it began 3 s after the last one)'],
+  ['Shift+A / Shift+B', 'mark the winner and ★ favourite together'],
   ['L', 'let (replayed, no point)'],
   ['↑ / ↓', 'previous / next rally'],
   ['← / →', 'back / on 2 s (Shift: 10 s)'],
@@ -134,7 +135,7 @@ const KEYS = [
   ['[ / ]', 'slower / faster'],
   ['Q / E', 'move selected start / end to now'],
   ['M / F', 'match starts / finishes here'],
-  ['H', '★ favourite (selected rally, or the one just played)'],
+  ['H', 'toggle ★ favourite while a rally is running, or for the selected / just-played rally'],
   ['Delete', 'remove selected rally'],
   ['Ctrl+Z', 'undo'],
   ['+ / − / 0', 'zoom the timeline in / out / to the whole video (or the mouse wheel; Shift+wheel moves along)'],
@@ -216,6 +217,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const pad = readPad();
   let sel = -1;
   let openStart = null;
+  let openFavourite = false;
   let steps = [];
   const undo = [];
   let saveTimer = null;
@@ -267,6 +269,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const speedSel = h('select', { 'aria-label': 'Speed', onchange: (e) => { video.playbackRate = Number(e.target.value); } },
     SPEEDS.map((s) => h('option', { value: s, selected: s === 1 }, `${s}×`)));
   const muteBtn = h('button', { class: 'ghost icon-only', onclick: () => { video.muted = !video.muted; fill(muteBtn, icon(video.muted ? 'mute' : 'volume')); }, 'aria-label': 'Mute', title: 'Mute' }, icon('volume'));
+  const favouriteBtn = h('button', { class: 'small favourite-rally', onclick: () => toggleFavouriteHere() });
   const timeline = h('div', { class: 'timeline', title: 'Click or drag to move through the video' });
   const playhead = h('div', { class: 'head' });
   const scoreStrip = h('div', { class: 'score-strip' });
@@ -799,6 +802,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   function showTime() {
     drawOverlay();
+    drawFavouriteControl();
     const t = video.currentTime;
     timeText.textContent = `${clockTenths(t)} / ${clock(duration())}`;
     // While playing, the zoomed timeline turns the page when the playhead runs off its end.
@@ -923,12 +927,13 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     favCount.textContent = favs ? `(${favs})` : '(none marked yet)';
   }
 
-  function setWinner(i, w) {
+  function setWinner(i, w, { favourite = false } = {}) {
     remember();
-    rallies[i].winner = rallies[i].winner === w ? null : w;
+    rallies[i].winner = favourite ? w : rallies[i].winner === w ? null : w;
+    if (favourite) rallies[i].fav = true;
     changed();
     const after = steps[i]?.after;
-    say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}`);
+    say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}${favourite ? ' · ★ favourite' : ''}`);
   }
 
   function toggleFav(i) {
@@ -940,10 +945,42 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     say(`Rally ${i + 1}: ${rallies[i].fav ? '★ favourite' : 'not a favourite'}`);
   }
 
+  function favouriteIndex() {
+    return sel >= 0 ? sel : rallyAtOrBefore(video.currentTime);
+  }
+
+  function drawFavouriteControl() {
+    const i = favouriteIndex();
+    const running = openStart !== null;
+    const fav = running ? openFavourite : Boolean(rallies[i]?.fav);
+    const target = running ? 'This rally' : i >= 0 ? `Rally ${i + 1}` : 'Favourite rally';
+    const label = `${fav ? '★' : '☆'} ${target} (H)`;
+    if (favouriteBtn.textContent !== label) favouriteBtn.textContent = label;
+    favouriteBtn.disabled = !onTimeline || (!running && i < 0);
+    favouriteBtn.classList.toggle('on', fav);
+    favouriteBtn.setAttribute('aria-pressed', String(fav));
+    favouriteBtn.title = `${fav ? 'Remove favourite from' : 'Mark as favourite:'} ${target.toLowerCase()} (H). Shift+A / Shift+B marks the winner and favourite together.`;
+    openBadge.textContent = openFavourite ? '★ Rally running' : '● Rally running';
+  }
+
+  function toggleFavouriteHere() {
+    if (!onTimeline) return;
+    if (openStart !== null) {
+      openFavourite = !openFavourite;
+      drawFavouriteControl();
+      say(openFavourite ? 'This rally will be a ★ favourite when it ends' : 'This rally is no longer a favourite');
+      return;
+    }
+    const i = favouriteIndex();
+    if (i >= 0) toggleFav(i);
+    else say('No rally here to mark');
+  }
+
   function select(i, { seek = true, lead = 1 } = {}) {
     sel = i;
     drawTimeline();
     drawList();
+    drawFavouriteControl();
     if (tab === 'export') showClipTarget();
     if (seek && rallies[i] && !onTimeline) showVideo('', Math.max(0, rallies[i].start - lead));
     else if (seek && rallies[i]) video.currentTime = Math.max(0, rallies[i].start - lead);
@@ -1469,7 +1506,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       }
       case 's':
         openStart = now();
+        openFavourite = false;
         openBadge.hidden = false;
+        drawFavouriteControl();
         say(`Rally starts ${clock(openStart)}`);
         break;
       case 'Escape':
@@ -1478,48 +1517,45 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
           say(corners ? 'Marking stopped: the court is as it was' : 'Marking stopped');
           drawTrackingPanel();
           drawOverlay();
-        } else if (openStart !== null) { openStart = null; openBadge.hidden = true; say('Rally cancelled'); } else select(-1, { seek: false });
+        } else if (openStart !== null) { openStart = null; openFavourite = false; openBadge.hidden = true; drawFavouriteControl(); say('Rally cancelled'); } else select(-1, { seek: false });
         break;
       case 'a': case 'b': case 'l': {
         const w = key === 'l' ? 'let' : key;
+        const favourite = e.shiftKey && key !== 'l';
         if (openStart !== null) {
           const end = Math.max(now(), openStart + 0.5);
           remember();
-          const r = { start: openStart, end, winner: w };
+          const r = { start: openStart, end, winner: w, ...(favourite || openFavourite ? { fav: true } : {}) };
           rallies.push(r);
           const i = sortKeep(r);
           openStart = null;
+          openFavourite = false;
           openBadge.hidden = true;
           sel = -1;
           changed();
           const after = steps[i]?.after;
-          say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}`);
+          say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}${r.fav ? ' · ★ favourite' : ''}`);
         } else if (sel >= 0) {
-          setWinner(sel, w);
+          setWinner(sel, w, { favourite });
         } else {
           // Inside (or just after) a rally without a winner: say who won it. Otherwise a new
           // rally ending now, taken to have started 3 s after the one before.
           const t = now();
           const i = rallies.findIndex((r) => t >= r.start && t <= r.end + 1.5);
-          if (i >= 0) setWinner(i, w);
+          if (i >= 0) setWinner(i, w, { favourite });
           else {
             remember();
-            const r = { start: assumedStart(rallies, t, { matchStart }), end: Math.max(t, 1), winner: w };
+            const r = { start: assumedStart(rallies, t, { matchStart }), end: Math.max(t, 1), winner: w, ...(favourite ? { fav: true } : {}) };
             rallies.push(r);
             const k = sortKeep(r);
             changed();
             const after = steps[k]?.after;
-            say(`Rally ${k + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}`);
+            say(`Rally ${k + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}${r.fav ? ' · ★ favourite' : ''}`);
           }
         }
         break;
       }
-      case 'h': {
-        const i = sel >= 0 ? sel : rallyAtOrBefore(video.currentTime);
-        if (i >= 0) toggleFav(i);
-        else say('No rally here to mark');
-        break;
-      }
+      case 'h': toggleFavouriteHere(); break;
       case 'm': setBound('start', now()); break;
       case 'f': setBound('end', now()); break;
       case '+': case '=': zoomBy(0.5); break;
@@ -1576,6 +1612,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
               say('All rallies removed');
             },
           }, icon('trash', 14), 'Clear all rallies')),
+        h('p', { class: 'hint' }, 'Shift+A / Shift+B marks the winner and ★ favourite together. H toggles the star during or after a rally.'),
         listBox)),
     scoring: h('div', {},
       card('Scoring', 'sliders',
@@ -1663,7 +1700,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         player,
         videoError,
         showNote,
-        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, showSel, deleteBtn,
+        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, favouriteBtn, showSel, deleteBtn,
           h('span', { class: 'zoom' }, h('button', { class: 'ghost icon-only', title: 'Zoom out (−)', onclick: () => zoomBy(2) }, '−'), zoomText,
             h('button', { class: 'ghost icon-only', title: 'Zoom in (+)', onclick: () => zoomBy(0.5) }, '+'),
             h('button', { class: 'small', title: 'Whole video (0)', onclick: () => setView(0, duration()) }, 'Fit'))),

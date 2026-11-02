@@ -410,6 +410,7 @@ tr.mine.game-row td { background: color-mix(in srgb, var(--focus) 5%, transparen
 .transport .play-btn:hover { background: var(--accent-hover); }
 .transport .time { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 140px; }
 .transport select { min-height: 30px; padding: 2px 8px; }
+.transport .favourite-rally.on { color: var(--focus); border-color: var(--focus); background: var(--fav-bg); }
 .timeline {
   position: relative; height: 36px; background: var(--surface-2); border-radius: var(--radius-sm); cursor: pointer;
   border: 1px solid var(--border); margin: 8px 0 4px; overflow: hidden; touch-action: none; user-select: none;
