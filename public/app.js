@@ -581,7 +581,7 @@ async function renderTournament(id, notice = null, who = null) {
           },
         }, `Link ${games.length === 2 ? 'both' : `all ${games.length}`}`));
     }
-    return h('div', { class: 'stack' }, chooser(m, m.date), perGame(m) ? h('div', { class: 'hint' }, 'Whole match, or open Game videos below.') : null);
+    return chooser(m, m.date);
   };
 
   const unitVideoCell = (u) => {
@@ -602,6 +602,7 @@ async function renderTournament(id, notice = null, who = null) {
 
   // What's done for a match (or game), as a row of labels: each in its own colour when done, greyed when not.
   const statusCell = (m) => {
+    if (!m.videoIds?.length && !(m.units && gamesLinked(m))) return m.units ? h('span', { class: 'small muted' }, 'Not filmed') : null;
     const tag = (done, kind, text, title, href = null) => (done && href
       ? h('a', { class: `tag ${kind}`, href, target: '_blank', rel: 'noopener', title }, text)
       : h('span', { class: `tag ${kind}${done ? '' : ' off'}`, title }, text));
@@ -638,8 +639,8 @@ async function renderTournament(id, notice = null, who = null) {
     if (typeof m.people?.chance !== 'number') return h('span', { class: 'small muted' }, 'Not available');
     const [pa, pb] = percents(m.people.chance);
     return h('div', { class: 'chance-cell small', title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` },
-      h('div', {}, h('span', { class: 'pct' }, pa), ' ', shortTeam(m.teamA)),
-      h('div', {}, h('span', { class: 'pct' }, pb), ' ', shortTeam(m.teamB)),
+      h('div', {}, h('span', { class: 'pct' }, pa), m.teamA.length > 1 ? [' ', shortTeam(m.teamA)] : null),
+      h('div', {}, h('span', { class: 'pct' }, pb), m.teamB.length > 1 ? [' ', shortTeam(m.teamB)] : null),
       h('div', { class: 'chance-meter', 'aria-hidden': 'true' }, h('span', { style: { width: pa } })),
       m.people.upset ? h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset') : null);
   };
@@ -666,7 +667,7 @@ async function renderTournament(id, notice = null, who = null) {
 
   const eventLine = (m) => h('div', { class: 'match-event small' },
     h('span', { class: 'event-label' }, m.draw || 'Match'), h('span', { class: 'muted' }, m.round),
-    !m.games?.length ? h('span', { class: 'muted result-pending' }, 'Awaiting result') : null);
+    !m.games?.length ? h('span', { class: 'muted result-pending', title: 'No result is recorded: not played yet, or played but its result isn’t in yet (Update results)' }, 'No result yet') : null);
 
   // One game: its thumbnail when filmed, its name and score, progress, and its video (Open, a suggestion or the chooser).
   const gameRow = (u) => h('div', { class: 'game-video-row', ...dropOn(u) },
@@ -725,7 +726,7 @@ async function renderTournament(id, notice = null, who = null) {
           courtOf(m) ? h('span', { title: m.court }, `· ${courtOf(m)}`) : null, m.duration ? h('span', { class: 'muted' }, `· ${m.duration} min`) : null),
         eventLine(m),
         teams(m),
-        typeof m.people?.chance === 'number' ? h('div', { class: 'match-card-chance' }, chanceCell(m)) : null,
+        typeof m.people?.chance === 'number' ? h('div', { class: 'match-card-chance' }, h('div', { class: 'small muted' }, 'Win chance'), chanceCell(m)) : null,
         statusCell(m),
         custom ? custom.actions(m) : null,
         h('div', { class: 'match-card-video' }, videoCell(m)),
@@ -764,12 +765,12 @@ async function renderTournament(id, notice = null, who = null) {
     });
     const days = [...new Set(shown.map((m) => m.date))];
     const view = prefs.view === 'grid' ? gridView : listView;
-    matchCount.textContent = `${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
+    matchCount.textContent = `Showing ${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
     clearFilterBtn.hidden = !search.value && !progressFilter.value && !prefs.hideNoVideo && (!anyMine || !prefs.who);
     fill(table, days.map((d) => {
       const onDay = shown.filter((m) => m.date === d);
       return h('section', { class: 'match-day', 'aria-label': day(d) },
-        h('h2', { class: 'day-title' }, day(d), h('span', { class: 'small muted' }, `${onDay.length} match${onDay.length === 1 ? '' : 'es'} · ${onDay.filter(hasVideo).length} with video`)), view(onDay));
+        h('h2', { class: 'day-title' }, day(d), h('span', { class: 'small muted' }, `${onDay.length} match${onDay.length === 1 ? '' : 'es'} · ${onDay.filter(hasVideo).length} filmed`)), view(onDay));
     }));
     if (!shown.length) fill(table, h('div', { class: 'match-empty' },
       emptyState('film', custom && !matches.length ? 'No matches yet: add the first one above.' : 'No matches fit these filters.'),
@@ -793,15 +794,19 @@ async function renderTournament(id, notice = null, who = null) {
   const toolbar = h('div', { class: 'tournament-toolbar' },
     h('div', { class: 'row spread' }, h('h2', {}, 'Matches'), h('div', { class: 'row' }, matchCount, viewButtons)),
     h('div', { class: 'match-filters' }, search, anyMine ? whoSel : null, progressFilter,
-      h('label', { class: 'row small' }, hideNoVideo, 'With video only'), clearFilterBtn));
+      h('label', { class: 'row small' }, hideNoVideo, 'With video only'), clearFilterBtn),
+    matches.some((m) => perGame(m) && !hasVideo(m)) ? h('p', { class: 'hint' }, 'A match takes one video for the whole match, or one per game under Game videos.') : null);
 
   const filmed = matches.flatMap(filmedUnits);
-  const overview = h('div', { class: 'tournament-overview' },
-    [['Matches', matches.length, 'in this tournament'],
-      ['With video', matches.filter(hasVideo).length, `of ${matches.length} matches`],
-      ['Tagged', filmed.filter((u) => u.rallyCount && u.tagged === u.rallyCount).length, `of ${filmed.length} linked videos`],
-      ['Rendered', filmed.filter((u) => u.outputPath).length, `of ${filmed.length} linked videos`],
-      ['YouTube', filmed.filter((u) => u.youtubeUrl).length, `of ${filmed.length} linked videos`]].map(([label, value, detail]) =>
+  // The whole tournament's totals, whatever the filters: matches, then videos (a match filmed game by game has one per game).
+  const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const videosOf = () => `of ${plural(filmed.length, 'video')}`;
+  const overview = h('div', { class: 'tournament-overview', 'aria-label': 'This tournament’s totals' },
+    [['Matches', matches.length, `${matches.filter(hasVideo).length} filmed`],
+      ['Videos', filmed.length, 'linked to a match or game'],
+      ['Tagged', filmed.filter((u) => u.rallyCount && u.tagged === u.rallyCount).length, videosOf()],
+      ['Rendered', filmed.filter((u) => u.outputPath).length, videosOf()],
+      ['On YouTube', filmed.filter((u) => u.youtubeUrl).length, videosOf()]].map(([label, value, detail]) =>
       h('div', { class: 'tournament-metric' }, h('span', { class: 'metric-label' }, label), h('strong', {}, value), h('span', { class: 'small muted' }, detail))));
 
   const linkAll = suggestions.length ? h('button', {
