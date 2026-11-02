@@ -243,7 +243,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let onTimeline = true; // false while a cut, slowed or card-framed render plays: its times aren't the original's
   let originalAt = 0; // where the original was when a render took over
   const showSel = h('select', {
-    'aria-label': 'Video shown', hidden: true, onchange: () => showVideo(showSel.value),
+    'aria-label': 'Video shown', hidden: true, onchange: () => showVideo(showSel.value, null, { play: true }),
     title: 'Switch between the original video (for tagging) and the rendered ones. A render as long as the original keeps the rally timeline and scores; a cut one, highlights or a clip plays on its own.',
   });
   const showNote = h('div', { class: 'notice info small', hidden: true });
@@ -494,12 +494,19 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (video.paused) video.play().catch(() => {});
     else video.pause();
   }
-  video.addEventListener('play', () => { fill(playBtn, icon('pause', 18)); tick(); });
-  video.addEventListener('pause', () => { fill(playBtn, icon('play', 18)); showTime(); });
+  // The button shows what the player is doing. Loading another file cancels the "pause" event of the one
+  // before (when switching videos while playing), so it also follows a new file being loaded.
+  const showPlaying = () => fill(playBtn, icon(video.paused ? 'play' : 'pause', 18));
+  video.addEventListener('play', () => { showPlaying(); tick(); });
+  video.addEventListener('pause', () => { showPlaying(); showTime(); });
+  for (const name of ['emptied', 'loadstart', 'ended']) video.addEventListener(name, showPlaying);
   video.addEventListener('loadedmetadata', () => { drawTimeline(); showTime(); });
 
-  /** Plays the original ('') or a finished file; the timeline stays only when the file is as long as the original. */
-  function showVideo(key, seekTo = null) {
+  /**
+   * Shows the original ('') or a finished file, playing it with `play`; the timeline stays only when the
+   * file is as long as the original.
+   */
+  function showVideo(key, seekTo = null, { play = false } = {}) {
     const file = files.find((f) => f.key === key) ?? null;
     if (!showing) originalAt = video.currentTime;
     const at = seekTo ?? (onTimeline ? video.currentTime : originalAt);
@@ -518,6 +525,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         : `Playing the ${file.label.toLowerCase()}: ${file.kind === 'video' ? 'it’s cut, slowed or has cards, so' : 'it plays on its own, so'} the rally timeline and scores are hidden. Choose Original to tag.`);
       drawTimeline();
       showTime();
+      if (play) video.play().catch(() => {});
     }, { once: true });
     video.src = file ? file.url : data.source.url;
   }
