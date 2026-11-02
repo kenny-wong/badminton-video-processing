@@ -440,7 +440,7 @@ async function renderTournament(id, notice = null, who = null) {
   const free = videos.filter((v) => !v.matchId);
   const anyMine = matches.some((m) => m.mine);
   const saved = readPrefs();
-  if (!tournamentViews.has(String(id))) tournamentViews.set(String(id), { search: '', progress: '', expandedGames: new Set() });
+  if (!tournamentViews.has(String(id))) tournamentViews.set(String(id), { search: '', progress: '', expandedGames: new Set(), notFilmedOpen: new Set() });
   const viewState = tournamentViews.get(String(id));
   // whose matches: '' everyone's, 'fav' the favourites', or one favourite's key (onlyMine was the old checkbox)
   const prefs = { view: 'list', hideNoVideo: false, ...saved, who: saved.who ?? (saved.onlyMine === false ? '' : 'fav') };
@@ -767,10 +767,29 @@ async function renderTournament(id, notice = null, who = null) {
     const view = prefs.view === 'grid' ? gridView : listView;
     matchCount.textContent = `Showing ${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
     clearFilterBtn.hidden = !search.value && !progressFilter.value && !prefs.hideNoVideo && (!anyMine || !prefs.who);
+    // Each day: its filmed matches first, then the rest folded under "Not filmed (n)", both in time order.
+    // Nothing folds while the tournament has nothing filmed (there's nothing else to see yet). A search or
+    // Needs a video opens the folds with results; the folds the user opened or shut come back after.
+    const folding = matches.some(hasVideo);
+    const findingVideos = Boolean(words.length || progressFilter.value === 'unlinked');
+    const notFilmedOpen = viewState.notFilmedOpen;
     fill(table, days.map((d) => {
       const onDay = shown.filter((m) => m.date === d);
+      const filmedOnDay = onDay.filter(hasVideo);
+      const rest = onDay.filter((m) => !hasVideo(m));
       return h('section', { class: 'match-day', 'aria-label': day(d) },
-        h('h2', { class: 'day-title' }, day(d), h('span', { class: 'small muted' }, `${onDay.length} match${onDay.length === 1 ? '' : 'es'} · ${onDay.filter(hasVideo).length} filmed`)), view(onDay));
+        h('h2', { class: 'day-title' }, day(d), h('span', { class: 'small muted' }, `${onDay.length} match${onDay.length === 1 ? '' : 'es'} · ${filmedOnDay.length} filmed`)),
+        !folding ? view(onDay) : [
+          filmedOnDay.length ? view(filmedOnDay) : null,
+          rest.length ? h('details', {
+            class: 'not-filmed',
+            open: findingVideos || notFilmedOpen.has(d),
+            ontoggle: (e) => {
+              if (findingVideos) return; // opened for the search: not the user's own choice
+              if (e.target.open) notFilmedOpen.add(d);
+              else notFilmedOpen.delete(d);
+            },
+          }, h('summary', {}, `Not filmed (${rest.length})`), view(rest)) : null]);
     }));
     if (!shown.length) fill(table, h('div', { class: 'match-empty' },
       emptyState('film', custom && !matches.length ? 'No matches yet: add the first one above.' : 'No matches fit these filters.'),

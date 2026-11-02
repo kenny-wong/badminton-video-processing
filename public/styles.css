@@ -348,6 +348,14 @@ a.pill:hover { filter: brightness(0.95); }
 .match-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 .tournament-toolbar > .hint { margin: 10px 0 0; }
 .match-court { white-space: nowrap; }
+/* A day's unfilmed matches, folded under its filmed ones */
+.not-filmed { margin-top: 14px; }
+.not-filmed > summary { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; list-style: none; }
+.not-filmed > summary::-webkit-details-marker { display: none; }
+.not-filmed > summary::before { content: '▸'; }
+.not-filmed[open] > summary::before { content: '▾'; }
+.not-filmed > summary:hover { color: var(--text); background: var(--surface-2); }
+.not-filmed[open] > summary { margin-bottom: 12px; }
 .match-filters input[type="search"] { flex: 1 1 260px; }
 .match-filters select { max-width: 100%; flex: 0 1 auto; }
 .match-filters label { margin-left: auto; white-space: nowrap; }
