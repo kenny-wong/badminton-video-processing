@@ -70,6 +70,7 @@ export function onRequestGet({ params, app }) {
     formatChosen: Boolean(match.format),
     mine: { a: sides(match.teamA).length > 0, b: sides(match.teamB).length > 0 },
     nameStyle: settings.nameStyle,
+    rallyGap: settings.rallyGap,
     board: matchBoard(app.db, settings.board, match, loaded.tournament),
     // The flags its players' nations give (the editor's "From the Players list"), whatever this match chose.
     playerCountries: matchCountries(app.db, match, loaded.tournament),

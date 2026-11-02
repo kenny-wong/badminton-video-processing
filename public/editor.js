@@ -127,7 +127,7 @@ function writeFold(key, open) {
 const KEYS = [
   ['Space', 'play / pause'],
   ['S', 'rally starts now'],
-  ['A / B', 'rally ends now, won by A / B (no S: it began 3 s after the last one)'],
+  ['A / B', 'rally ends now, won by A / B (no S: it began the Settings gap after the last one)'],
   ['Shift+A / Shift+B', 'mark the winner and ★ favourite together'],
   ['L', 'let (replayed, no point)'],
   ['↑ / ↓', 'previous / next rally'],
@@ -142,6 +142,8 @@ const KEYS = [
   ['+ / − / 0', 'zoom the timeline in / out / to the whole video (or the mouse wheel; Shift+wheel moves along)'],
   ['?', 'this list of keys'],
 ];
+/** The keys as shown, with the gap from Settings filled in. */
+const keyList = (gap = 3) => KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t.replace('the Settings gap', `${gap} s`)));
 
 export async function renderEditor(main, id, { runJob, errorNotice, progressBar, canGoBack = false }) {
   let data = await api(`/api/matches/${id}`);
@@ -1585,7 +1587,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
   // Every key in a box over the editor (? opens it, Esc or ? closes it).
   const keysDialog = h('dialog', { class: 'keys-dialog', 'aria-label': 'Keyboard shortcuts' },
     h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('keyboard'), 'Keyboard shortcuts'), h('button', { class: 'small', onclick: () => keysDialog.close() }, 'Close')),
-    h('div', { class: 'keys' }, KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t))));
+    h('div', { class: 'keys' }, keyList(data.rallyGap)));
   keysDialog.addEventListener('click', (e) => { if (e.target === keysDialog) keysDialog.close(); });
   document.body.append(keysDialog);
 
@@ -1658,13 +1660,13 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
           setWinner(sel, w, { favourite });
         } else {
           // Inside (or just after) a rally without a winner: say who won it. Otherwise a new
-          // rally ending now, taken to have started 3 s after the one before.
+          // rally ending now, taken to have started the Settings gap (rallyGap, 3 s by default) after the one before.
           const t = now();
           const i = rallies.findIndex((r) => t >= r.start && t <= r.end + 1.5);
           if (i >= 0) setWinner(i, w, { favourite });
           else {
             remember();
-            const r = { start: assumedStart(rallies, t, { matchStart }), end: Math.max(t, 1), winner: w, ...(favourite ? { fav: true } : {}) };
+            const r = { start: assumedStart(rallies, t, { matchStart, gap: data.rallyGap }), end: Math.max(t, 1), winner: w, ...(favourite ? { fav: true } : {}) };
             rallies.push(r);
             const k = sortKeep(r);
             changed();
@@ -1833,7 +1835,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
           h('span', {}, h('i', { class: 'a' }), 'A won'), h('span', {}, h('i', { class: 'b' }), 'B won'), h('span', {}, h('i', { class: 'let' }), 'let'),
           h('span', {}, h('i', { class: 'none' }), 'no winner yet'), h('span', {}, '★ favourite')),
         data.source.hdr ? h('div', { class: 'notice info small' }, data.hdrPlayback ? 'Filmed in HDR: shown here as the render will look (brightness: Settings → HDR phone videos).' : 'Filmed in HDR: colours are converted to standard video when rendering.') : null,
-        h('details', { class: 'keys-box', open: readKeysOpen(), ontoggle: (e) => writeKeysOpen(e.target.open) }, h('summary', {}, icon('keyboard', 16), 'Keyboard shortcuts'), h('div', { class: 'keys' }, KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t))))),
+        h('details', { class: 'keys-box', open: readKeysOpen(), ontoggle: (e) => writeKeysOpen(e.target.open) }, h('summary', {}, icon('keyboard', 16), 'Keyboard shortcuts'), h('div', { class: 'keys' }, keyList(data.rallyGap)))),
       h('div', {},
         h('div', { class: 'card scorecard' },
           h('div', { class: 'row spread small scoreboard-controls' }, h('span', {}, 'Scoreboard'),

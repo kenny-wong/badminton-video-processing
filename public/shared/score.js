@@ -224,12 +224,15 @@ export function parseGames(text) {
   return games.every(Boolean) ? games : null;
 }
 
+/** Seconds between a rally's end and the next one's start, when only the next one's end is tagged (Settings: rallyGap). */
+export const RALLY_GAP = 3;
+
 /**
  * Where a rally tagged with only its end (A or B pressed without S) began:
  * `gap` seconds after the rally before it ended (or the match start, or `back`
  * seconds before the end when there is neither), and at least 1 s before its end.
  */
-export function assumedStart(rallies, end, { matchStart = null, gap = 3, back = 10 } = {}) {
+export function assumedStart(rallies, end, { matchStart = null, gap = RALLY_GAP, back = 10 } = {}) {
   const before = rallies.filter((r) => r.end <= end).reduce((t, r) => Math.max(t, r.end), -Infinity);
   const from = Number.isFinite(before) ? before + gap : matchStart ?? end - back;
   return Math.round(Math.max(0, Math.min(from, end - 1)) * 100) / 100;

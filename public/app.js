@@ -1197,6 +1197,7 @@ async function renderSettings() {
   const output = h('input', { type: 'text', id: 'output', class: 'grow', value: s.outputFolder });
   const ffmpeg = h('input', { type: 'text', id: 'ffmpeg', class: 'grow', value: s.ffmpegFolder, placeholder: 'Found by itself' });
   const pre = h('input', { type: 'number', id: 'pre', min: 0, max: 10, step: 0.5, value: s.pre });
+  const rallyGap = h('input', { type: 'number', id: 'rally-gap', min: 0, max: 30, step: 0.5, value: s.rallyGap });
   const post = h('input', { type: 'number', id: 'post', min: 0, max: 10, step: 0.5, value: s.post });
   const msg = h('div');
   const styleSel = (kind) => h('select', { id: `names-${kind}`, 'aria-label': `${kind} names` },
@@ -1389,7 +1390,7 @@ async function renderSettings() {
         try {
           const saved = await api('/api/settings', {
             method: 'PUT',
-            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value),
+            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value), rallyGap: Number(rallyGap.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
               logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value), stats: cardStats.checked },
               description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
@@ -1455,6 +1456,9 @@ async function renderSettings() {
         musicMsg),
       section('Cutting', 'How much of the play around each rally to keep when the gaps are cut.',
         h('div', { class: 'row' }, h('label', { for: 'pre' }, 'Keep'), pre, h('label', { for: 'post' }, 'seconds before each rally, and'), post, h('span', {}, 'after.'))),
+      section('Tagging', 'Pressing A or B without S first ends a rally whose start wasn’t marked.',
+        h('div', { class: 'row' }, h('label', { for: 'rally-gap' }, 'Such a rally starts'), rallyGap, h('span', {}, 'seconds after the previous rally ended.')),
+        h('p', { class: 'hint' }, 'The first rally starts at the match start (M), or 10 seconds before A / B. Press S at a serve to mark a start exactly; Q moves a selected rally’s start to now.')),
       h('div', { class: 'label last' }, h('h3', {}, 'FFmpeg'), h('p', {}, 'Optional: its bin folder, if it isn’t found by itself.')),
       h('div', { class: 'fields last' }, h('div', { class: 'row' }, ffmpeg))),
     h('div', { class: 'row', style: { marginTop: '8px' } }, saveBtn),

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { assumedStart, cleanStart, parseGames, replay, scoreAt } from '../public/shared/score.js';
+import { assumedStart, cleanStart, parseGames, RALLY_GAP, replay, scoreAt } from '../public/shared/score.js';
+import { cleanSettings } from '../lib/settings.js';
 import { chapters, plan } from '../lib/render.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { scoreSpans } from '../lib/overlay.js';
@@ -44,6 +45,17 @@ test('a rally tagged without S starts 3 s after the last one ended', () => {
   assert.equal(assumedStart([], 30), 20); // nothing before: 10 s back
   assert.equal(assumedStart([], 30, { matchStart: 12 }), 12); // or from the match start
   assert.equal(assumedStart([], 4), 0);
+});
+
+test('the gap before a rally tagged without S is a setting: 3 s unless changed, 0 to 30 s', () => {
+  const rallies = [{ start: 10, end: 20 }, { start: 40, end: 52 }];
+  assert.equal(RALLY_GAP, 3);
+  assert.equal(assumedStart(rallies, 70, { gap: 6 }), 58);
+  assert.equal(assumedStart(rallies, 70, { gap: 0 }), 52);
+  assert.equal(cleanSettings({}).rallyGap, 3);
+  assert.equal(cleanSettings({ rallyGap: 4.5 }).rallyGap, 4.5);
+  assert.equal(cleanSettings({ rallyGap: 31 }).rallyGap, 3); // out of range: kept as it was
+  assert.equal(cleanSettings({ rallyGap: 'soon' }, { ...cleanSettings({}), rallyGap: 5 }).rallyGap, 5);
 });
 
 test('plan keeps only the marked match', () => {
