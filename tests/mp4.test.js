@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { appleDate, box, boxes, carryMetadata, carryMetadataFile, metaKeys, shiftMetaDate, writeAppleDate } from '../lib/mp4.js';
+import { appleDate, box, boxes, carryMetadata, carryMetadataFile, fitHeader, metaKeys, shiftMetaDate, writeAppleDate } from '../lib/mp4.js';
 
 const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
 const raw = (typeBytes, ...payload) => { const body = Buffer.concat(payload); return Buffer.concat([u32(body.length + 8), typeBytes, body]); };
@@ -65,22 +65,35 @@ test('without phone boxes in the source, FFmpeg’s are kept', () => {
   assert.deepEqual(moov, ffmpegMoov);
 });
 
+test('the phone’s ftyp fits in FFmpeg’s room, padded with a free box, or not at all', () => {
+  const ftyp = box('ftyp', Buffer.from('mp42'), u32(0), Buffer.from('isommp42'));
+  assert.deepEqual(fitHeader(ftyp, 24), ftyp);
+  const padded = fitHeader(ftyp, 36);
+  assert.equal(padded.length, 36);
+  assert.deepEqual(boxes(padded).map((b) => [b.type, b.size]), [['ftyp', 24], ['free', 12]]);
+  assert.equal(fitHeader(ftyp, 30), null); // 6 bytes left: too small for a box
+  assert.equal(fitHeader(ftyp, 20), null);
+});
+
 test('the boxes are put back into a file whose moov comes last, and only then', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'bv-mp4-'));
   try {
     const src = join(dir, 'src.mp4');
     const out = join(dir, 'out.mp4');
-    const ftyp = box('ftyp', Buffer.from('mp42'), u32(0), Buffer.from('isommp42'));
+    const ftyp = box('ftyp', Buffer.from('mp42'), u32(0), Buffer.from('isommp42')); // the phone's: 24 bytes
+    const ffmpegHead = Buffer.concat([box('ftyp', Buffer.from('mp42'), u32(512), Buffer.from('mp42iso2mp41')), box('free')]); // FFmpeg's: 28 + 8
     const mdat = box('mdat', Buffer.alloc(5000, 7));
     writeFileSync(src, Buffer.concat([ftyp, mdat, sourceMoov]));
-    writeFileSync(out, Buffer.concat([ftyp, mdat, ffmpegMoov]));
+    writeFileSync(out, Buffer.concat([ffmpegHead, mdat, ffmpegMoov]));
     const r = await carryMetadataFile(src, out, { shiftDate: (t) => t + 60_000 });
-    assert.deepEqual(r, { carried: ['udta', 'meta'], skipped: null });
+    assert.deepEqual(r, { carried: ['ftyp', 'udta', 'meta'], skipped: null });
     const file = readFileSync(out);
     const top = boxes(file);
-    assert.deepEqual(top.map((b) => b.type), ['ftyp', 'mdat', 'moov']);
-    assert.deepEqual(file.subarray(top[1].start, top[1].start + top[1].size), mdat); // picture and sound untouched
-    const moov = file.subarray(top[2].start);
+    assert.deepEqual(top.map((b) => b.type), ['ftyp', 'free', 'mdat', 'moov']);
+    assert.deepEqual(file.subarray(0, 24), ftyp); // the phone's brands and version
+    assert.equal(top[2].start, ffmpegHead.length); // the media hasn't moved
+    assert.deepEqual(file.subarray(top[2].start, top[2].start + top[2].size), mdat); // picture and sound untouched
+    const moov = file.subarray(top[3].start);
     const meta = boxes(moov, 8).find((b) => b.type === 'meta');
     assert.equal(metaKeys(moov.subarray(meta.start, meta.start + meta.size))[0].text, '2026-10-24T09:13:33+0100');
 

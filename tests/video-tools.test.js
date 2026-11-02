@@ -61,7 +61,7 @@ test('a video is split losslessly into parts with their own names and times, and
       const t = await fileTimes(p.path);
       assert.ok(Math.abs(t.modified - splitTime(before.modified, when)) < 5, `part ${p.n} modified time`);
       assert.ok(Math.abs(t.accessed - splitTime(before.accessed, when)) < 5, `part ${p.n} accessed time`);
-      if (process.platform === 'win32') assert.ok(Math.abs(t.created - splitTime(before.created, when)) < 5, `part ${p.n} created time`);
+      if (process.platform === 'win32') assert.ok(Math.abs(t.created - splitTime(before.created, when)) < 0.01, `part ${p.n} created time`);
       const ct = Date.parse((await probe(tools, p.path)).format.tags.creation_time);
       assert.ok(Math.abs(ct - splitTime(END, when)) < 1000, `part ${p.n} creation_time`); // whole seconds in the file
       assert.deepEqual(udtaOf(p.path), ['auth', 'smta']);
@@ -78,6 +78,8 @@ test('a video is split losslessly into parts with their own names and times, and
     assert.deepEqual(merged.packets, counts[0].map((n, i) => n + counts[1][i])); // every frame and piece of sound copied
     assert.deepEqual(merged.notes, []);
     assert.deepEqual(udtaOf(merged.path), ['auth', 'smta']);
+    const head = (path) => { const f = readFileSync(path); return f.subarray(0, f.readUInt32BE(0)); };
+    assert.deepEqual(head(merged.path), head(p1.path)); // the first video's ftyp
     const mt = await fileTimes(merged.path);
     assert.ok(Math.abs(mt.modified - (await fileTimes(p2.path)).modified) < 5); // ends when the last one ended
     assert.ok(Math.abs(Date.parse((await probe(tools, merged.path)).format.tags.creation_time) - END) < 1000);
