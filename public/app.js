@@ -26,6 +26,7 @@ import { percents } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
 import { renderTools } from './tools-page.js';
 import { matchStar } from './match-star.js';
+import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
 
 const main = document.getElementById('app');
@@ -427,6 +428,9 @@ async function renderTournament(id, notice = null, who = null) {
   // A custom tournament (made by hand): its details, players and matches are edited here.
   const custom = tournament.kind === 'custom' ? customTournamentPanel({ id, data, rerender: (n) => renderTournament(id, n ?? null), errorNotice }) : null;
   const byId = new Map(videos.map((v) => [v.id, v]));
+  // Courts shortened for showing ("Court 3"), the venue named once in the head; the full name in a tooltip.
+  const courts = courtDisplay(matches.map((m) => m.court));
+  const courtOf = (m) => courts.label(m.court);
   // One video per match (game 0) or per game: back-to-back videos of one match are suggested game by game.
   const suggestionFor = new Map(suggestions.map((s) => [`${s.matchId}:${s.game}`, s]));
   const suggestionOf = (m, game = 0) => suggestionFor.get(`${m.id}:${game}`);
@@ -694,7 +698,7 @@ async function renderTournament(id, notice = null, who = null) {
       h('tr', { class: `match-main${m.mine ? ' mine' : ''}` },
         h('td', { class: 'match-schedule' },
           h('div', { class: 'row tight' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), h('strong', {}, m.time)),
-          m.court ? h('div', { class: 'small' }, m.court) : null,
+          courtOf(m) ? h('div', { class: 'small match-court', title: m.court }, courtOf(m)) : null,
           m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
         h('td', { class: 'match-details' }, eventLine(m), teams(m), custom ? custom.actions(m) : null),
         h('td', { class: 'match-chance', 'data-label': 'Win chance' }, chanceCell(m)),
@@ -717,7 +721,8 @@ async function renderTournament(id, notice = null, who = null) {
         ? thumbOf(m, lengthOf(m))
         : null,
       h('div', { class: 'match-body' },
-        h('div', { class: 'row spread small match-card-schedule' }, h('span', {}, h('strong', {}, m.time), m.court ? ` · ${m.court}` : '', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null), matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } })),
+        h('div', { class: 'row tight small match-card-schedule' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), h('strong', {}, m.time),
+          courtOf(m) ? h('span', { title: m.court }, `· ${courtOf(m)}`) : null, m.duration ? h('span', { class: 'muted' }, `· ${m.duration} min`) : null),
         eventLine(m),
         teams(m),
         typeof m.people?.chance === 'number' ? h('div', { class: 'match-card-chance' }, chanceCell(m)) : null,
@@ -751,7 +756,7 @@ async function renderTournament(id, notice = null, who = null) {
     const words = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
     const shown = matches.filter((m) => {
       if (!picked(m) || (prefs.hideNoVideo && !hasVideo(m))) return false;
-      const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.court, m.time, m.date].join(' ').toLowerCase();
+      const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.court, courtOf(m), m.time, m.date].join(' ').toLowerCase();
       if (!words.every((word) => text.includes(word))) return false;
       if (!progressFilter.value) return true;
       if (progressFilter.value === 'unlinked') return !m.videoIds.length && (!m.units.length || m.units.some((u) => !u.videoIds.length));
@@ -909,6 +914,7 @@ async function renderTournament(id, notice = null, who = null) {
     h('a', { class: 'crumb', href: '#/' }, icon('back', 15), 'Tournaments'),
     pageHead(tournament.name,
       [tournament.start === tournament.end ? day(tournament.start) : `${day(tournament.start)} – ${day(tournament.end)}`, ' · ',
+        !custom && courts.venues.length && courts.venues.length <= 3 ? [courts.venues.join(' · '), ' · '] : null,
         custom
           ? [h('span', { class: 'pill' }, 'Custom tournament'), tournament.venue ? ` · ${tournament.venue}` : null]
           : h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
