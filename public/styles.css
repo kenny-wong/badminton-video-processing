@@ -491,8 +491,16 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 :is(.match-card, .tournament-table) .thumb.small-thumb .play { width: 30px; height: 30px; font-size: 12px; }
 
 /* ---------- Match editor ---------- */
-.editor-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; }
+/* The match's head stays under the app bar while scrolling: tournament, players, event, result and games. */
+.editor-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-end;
+  position: sticky; top: var(--head-h); z-index: 15; margin: -12px 0 16px; padding: 12px 0 12px; background: var(--bg);
+  box-shadow: 0 10px 12px -12px rgb(0 0 0 / 35%); }
 .editor-head h1 { font-size: var(--fs-xl); }
+.editor-crumbs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.editor-crumbs .crumb { margin: 0; font-size: var(--fs-lg); font-weight: 650; color: var(--text); }
+.editor-crumbs .crumb:hover { color: var(--accent); }
+/* On a phone the head would take most of the screen, so it scrolls away there. */
+@media (max-width: 700px) { .editor-head { position: static; margin-top: 0; padding-top: 0; box-shadow: none; } }
 .vs { color: var(--faint); font-weight: 500; margin: 0 6px; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .meta span { font-size: var(--fs-xs); padding: 2px 9px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
@@ -508,7 +516,7 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 
 .editor { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .editor { grid-template-columns: 1fr; } }
-@media (min-width: 1101px) { .editor > .video-col { position: sticky; top: calc(var(--head-h) + 12px); } }
+@media (min-width: 1101px) { .editor > .video-col { position: sticky; top: calc(var(--head-h) + var(--editor-head-h, 0px) + 12px); } }
 .player { background: #000; border-radius: var(--radius); overflow: hidden; position: relative; box-shadow: var(--shadow-lg); }
 .player video { display: block; width: 100%; max-height: 58vh; background: #000; }
 .player .flash {

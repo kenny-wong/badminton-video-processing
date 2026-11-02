@@ -1464,7 +1464,9 @@ async function renderSettings() {
 // ---------- Router ----------
 
 let lastSection = null;
+let pagesShown = 0; // pages shown in this window, so the editor's Back button knows there's one to go back to
 async function router() {
+  pagesShown += 1;
   leaving?.();
   leaving = null;
   main.classList.remove('wide');
@@ -1477,7 +1479,7 @@ async function router() {
     else if (section === 'm' && id) {
       setTab('home');
       main.classList.add('wide');
-      leaving = await renderEditor(main, Number(id), { runJob, errorNotice, progressBar });
+      leaving = await renderEditor(main, Number(id), { runJob, errorNotice, progressBar, canGoBack: pagesShown > 1 });
     } else if (section === 'players') {
       setTab('players');
       await renderPlayers(main);

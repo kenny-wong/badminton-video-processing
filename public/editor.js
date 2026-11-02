@@ -143,7 +143,7 @@ const KEYS = [
   ['?', 'this list of keys'],
 ];
 
-export async function renderEditor(main, id, { runJob, errorNotice, progressBar }) {
+export async function renderEditor(main, id, { runJob, errorNotice, progressBar, canGoBack = false }) {
   let data = await api(`/api/matches/${id}`);
   const { match, tournament } = data;
   const [nameA, nameB] = boardNames([match.teamA, match.teamB], data.nameStyle);
@@ -152,9 +152,17 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   document.title = `${nameA} v ${nameB} · Badminton Video`;
 
   const headRight = h('div', { class: 'row' });
+  // Back to wherever the editor was opened from (a tournament comes back to this match's place), else the tournament.
+  const goBack = () => {
+    if (canGoBack) history.back();
+    else location.hash = `#/t/${tournament.id}`;
+  };
+  // The head stays on screen while scrolling (styles.css .editor-head); its height places the video column under it.
   const header = h('div', { class: 'editor-head' },
     h('div', {},
-      h('a', { class: 'crumb', href: `#/t/${tournament.id}` }, icon('back', 15), tournament.name),
+      h('div', { class: 'editor-crumbs' },
+        h('button', { type: 'button', class: 'small', title: 'Back to the previous page', onclick: goBack }, icon('back', 15), 'Back'),
+        h('a', { class: 'crumb', href: `#/t/${tournament.id}`, title: 'Open the tournament' }, tournament.name)),
       h('h1', {}, matchStar(match.id, data.starredMatch), ' ', h('span', { class: 'side-a' }, teamName(match.teamA)), h('span', { class: 'vs' }, 'v'), h('span', { class: 'side-b' }, teamName(match.teamB))),
       h('div', { class: 'meta' },
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
@@ -1846,7 +1854,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     }
   });
 
+  const headHeight = () => document.documentElement.style.setProperty('--editor-head-h', `${header.offsetHeight}px`);
+  const resizedHead = new ResizeObserver(headHeight);
+  resizedHead.observe(header);
+  headHeight();
+
   return () => {
+    resizedHead.disconnect();
+    document.documentElement.style.removeProperty('--editor-head-h');
     if (commentTimer) saveComment(); // a comment typed just before leaving is still saved
     window.removeEventListener('keydown', onKey);
     keysDialog.remove();
