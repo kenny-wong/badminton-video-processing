@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 
 import { cardScript, cleanCards, DEFAULT_CARDS, endLines, titleLines } from '../lib/cards.js';
 import { cardArgs, logoFilter, logoPosition, partArgs } from '../lib/render.js';
-import { cleanLogo, cleanSettings, DEFAULTS } from '../lib/settings.js';
+import { cleanLogo, cleanSettings, DEFAULTS, readSettings } from '../lib/settings.js';
+import { migrate, openDb } from '../lib/db.js';
 import { imageKind } from '../api/settings.js';
 import { DEFAULT_BOARD } from '../public/shared/board.js';
 
@@ -12,7 +15,19 @@ const match = { date: '2026-10-24', draw: 'WS U15', round: 'Final', game: 0, tea
 
 test('cleanCards keeps on/off and a sensible length', () => {
   assert.deepEqual(cleanCards(null), DEFAULT_CARDS);
-  assert.deepEqual(cleanCards({ title: true, end: 'yes', seconds: 30, stats: true }), { title: true, end: false, seconds: 8, stats: true });
+  assert.deepEqual(cleanCards({ title: false, end: 'yes', seconds: 30, stats: true }), { title: false, end: true, seconds: 8, stats: true });
+});
+
+test('title and end cards are on by default, and saved settings that had them off are turned on once', () => {
+  assert.deepEqual([DEFAULT_CARDS.title, DEFAULT_CARDS.end], [true, true]);
+  assert.deepEqual([readSettings(openDb()).cards.title, readSettings(openDb()).cards.end], [true, true]);
+  const db = new DatabaseSync(':memory:');
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const f of readdirSync(dir).filter((x) => x < '0019').sort()) db.exec(readFileSync(new URL(f, dir), 'utf8'));
+  db.exec('PRAGMA user_version = 18');
+  db.prepare("INSERT INTO settings (key, value) VALUES ('cards', ?)").run(JSON.stringify({ title: false, end: false, seconds: 5, stats: true }));
+  migrate(db);
+  assert.deepEqual(JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'cards'").get().value), { title: true, end: true, seconds: 5, stats: true });
 });
 
 test('the title card names the event and both sides', () => {
