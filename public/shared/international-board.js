@@ -16,12 +16,12 @@ export function internationalBoard({ width, height, names, state, style: s, flag
   const available = width - mx * 2;
   const maxWidth = width < height ? available : Math.min(available, width * 0.46);
   const columns = finished ? finished.length : 1;
-  const fs = Math.max(6, Math.min(height / 38.5 * s.scale / 80, maxWidth / (6.6 + (withFlags ? 1.82 : 0) + columns * 1.3)));
+  const fs = Math.max(6, Math.min(height / 38.5 * s.scale / 80, maxWidth / (6.6 + (withFlags ? 1.82 : 0) + columns * 1.55)));
   const rowH = Math.round(fs * 1.5);
   const pad = Math.max(2, Math.round(fs * 0.24));
   const frame = Math.max(1, Math.round(fs * 0.1));
   const cellW = Math.round(fs * 1.55);
-  const gameW = Math.round(fs * 1.3);
+  const gameW = cellW;
   const flagW = withFlags ? Math.round(fs * 1.82) : 0;
   const shuttleW = Math.round(fs * 0.82);
   const stretch = 78;
@@ -70,8 +70,11 @@ export function internationalBoard({ width, height, names, state, style: s, flag
     }
     if(finished) finished.forEach((g,i)=>{
       const gx=xGames+i*gameW;
+      // Earlier games have a pale tile, the same size and lettering as the current brown tile.
+      rect(gx,y,gameW,rowH-1,'#e9e3dd');
+      rect(gx,y,gameW,(rowH-1)/2,'#ffffff',0.18);
       rect(gx,y,1,rowH,'#b5aaa2',0.45);
-      text(gx+gameW/2,mid,g[row],fs*1.15,s.text,{anchor:'middle',stretch:65,key:`game${i}-${row}`,flip:true});
+      text(gx+gameW/2,mid,g[row],fs*1.4,s.text,{anchor:'middle',stretch:65,key:`game${i}-${row}`,flip:false});
     });
     else text(xGames+gameW/2,mid,state.won[row],fs*1.15,s.text,{anchor:'middle',stretch:65,key:`won${row}`,flip:true});
     text(cell.x+cell.w/2,mid,state.points[row],fs*1.4,s.pointsText,{anchor:'middle',stretch:65,key:`points${row}`,flip:true,cell});

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { cleanBoard, cleanBoardOverride, resolveBoard, boardLayout } from '../public/shared/board.js';
 import { COUNTRIES, cleanCountries, flagShapes } from '../public/shared/flags.js';
 import { assScript } from '../lib/overlay.js';
+import { boardAt, replayMatch, startFor } from '../public/shared/score.js';
 
 const style = resolveBoard(null, { preset: 'international', countries: ['DEN', 'ENG'] });
 const state = { games: [], points: [0,0], won: [0,0], server: 'a' };
@@ -69,4 +70,39 @@ test('international score changes slide inside their own tile, beginning at the 
   assert.match(ass,/\\1c&H2411CE&/); // England's red, independently chosen.
   const stopped=assScript({width:1920,height:1080,teams:[['Amy Lee'],['Cat Ho']],style,spans:[spans[0],{...spans[1],from:2.5}]});
   assert.doesNotMatch(stopped,/\\move\(/);
+});
+
+test('game two shows the first game in pale tiles beside equally sized current scores', () => {
+  const match = { game:2, games:[[21,14],[15,21]], startScore:{points:[15,16]}, firstServer:'b', rallies:[{start:1,end:3,winner:'b'}] };
+  const {steps,initial} = replayMatch(match);
+  assert.deepEqual(startFor(match).games, [[21,14]]);
+  const shown = boardAt(match.rallies, steps, 4, initial);
+  const layout = boardLayout({width:1920,height:1080,names,state:shown,style});
+  const number = (key) => layout.items.find(it=>it.key===key);
+  assert.deepEqual(['game0-0','points0','game0-1','points1'].map(key=>number(key).text), ['21','15','14','17']);
+  for(const row of [0,1]) {
+    const previous = number(`game0-${row}`), current = number(`points${row}`);
+    assert.equal(previous.size, current.size);
+    assert.equal(previous.stretch, current.stretch);
+    assert.equal(previous.colour, style.text);
+    assert.equal(current.colour, style.pointsText);
+    assert.equal(previous.y, current.y);
+    assert.equal(current.x - previous.x, current.cell.w);
+    assert.equal(previous.flip, false);
+    assert.ok(layout.items.some(it=>it.type==='rect' && it.colour==='#e9e3dd' && it.w===current.cell.w && it.x+it.w===current.cell.x));
+  }
+  assert.equal(shown.server,'b');
+  const span = {from:0,to:5,state:shown};
+  const ass = assScript({width:1920,height:1080,teams:[['Amy Lee'],['Cat Ho']],style,spans:[span]});
+  assert.match(ass,/\\1c&HDDE3E9&/);
+});
+
+test('the final score of a game-two video keeps the earlier game once and the final game in brown', () => {
+  const match = {game:2,games:[[21,14],[15,21]],startScore:{points:[15,20]},firstServer:'b',rallies:[{start:1,end:2,winner:'b'}]};
+  const {steps,initial} = replayMatch(match);
+  const shown = boardAt(match.rallies,steps,3,initial);
+  assert.equal(shown.final,true);
+  const items=boardLayout({width:1920,height:1080,names,state:shown,style}).items;
+  assert.deepEqual(items.filter(it=>it.key?.startsWith('game')).map(it=>it.text), ['21','14']);
+  assert.deepEqual(items.filter(it=>it.cell).map(it=>it.text), ['15','21']);
 });
