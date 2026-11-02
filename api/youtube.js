@@ -16,7 +16,7 @@ import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fail, idParam, json, readJson } from '../lib/http.js';
-import { jobView, listJobs, startJob } from '../lib/jobs.js';
+import { findJob, jobView, listJobs, startJob } from '../lib/jobs.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { nowIso } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
@@ -147,13 +147,32 @@ export async function upload({ request, params, app }) {
   const opts = { people: matchPeople(app.db, loaded) };
   const file = key === 'original' ? originalFile(loaded, readSettings(app.db), opts) : renderedFile(loaded, readSettings(app.db), key, opts);
   if (!file) return fail(404, 'notFound', key === 'original' ? 'The original video isn’t there any more' : 'That video isn’t there any more: render it again');
+  const notReady = await uploadNotReady(app);
+  if (notReady) return notReady;
+  const old = body.replace === true ? currentVideo(loaded.match) : null;
+  if (body.replace === true && !old) return fail(409, 'nothingToReplace', 'This match has no YouTube video to replace');
+  const job = queueUpload(app, loaded, { key, file, privacy, playlist: body.playlist !== false, old });
+  return json(jobView(job), 202);
+}
+
+/** A failure response when uploading can't start (no OAuth client, not signed in), else null. */
+async function uploadNotReady(app) {
   const dir = dirOf(app);
   if (!(await readClient(dir))) return fail(409, 'noClient', 'YouTube upload isn’t set up: the OAuth client file is missing');
   if (!(await readToken(dir))?.refreshToken) return fail(401, 'signin', 'Sign in to YouTube first');
+  return null;
+}
+
+/**
+ * Queues the upload of one file of a match (key: 'video', 'highlights', 'clip:…' or 'original') in the
+ * 'upload' queue: added to the tournament's playlist unless `playlist` is false; with `old`, it takes the
+ * old video's place there and the old video is deleted once the new one is up.
+ */
+function queueUpload(app, loaded, { key, file, privacy, playlist = true, old = null }) {
+  const dir = dirOf(app);
+  const body = { playlist };
   const { match, tournament } = loaded;
-  const old = body.replace === true ? currentVideo(match) : null;
-  if (body.replace === true && !old) return fail(409, 'nothingToReplace', 'This match has no YouTube video to replace');
-  const job = startJob('upload', jobKey(match.id, key), async (j, signal) => {
+  return startJob('upload', jobKey(match.id, key), async (j, signal) => {
     const resource = videoResource({ title: file.title, description: file.description, privacy, recordedOn: match.date });
     j.log(`Uploading ${file.path} as ${privacy}: ${resource.snippet.title}`);
     j.message = 'Starting the upload';
@@ -205,7 +224,36 @@ export async function upload({ request, params, app }) {
     }
     return result;
   }, { queue: 'upload', label: `YouTube${old ? ' replace' : ''} (${file.label}): ${matchLabel(match)}` });
-  return json(jobView(job), 202);
+}
+
+/**
+ * POST /api/tournaments/:id/upload-all { kind: 'rendered' | 'original', privacy?, playlist? }: queues an upload
+ * of every filmed match (or game) here that has no YouTube link yet: 'rendered' its rendered whole video,
+ * 'original' the original of each one not rendered (so nothing goes up twice). They run one after another.
+ */
+export async function uploadAll({ request, params, app }) {
+  const id = idParam(params.id);
+  if (!id || !app.db.prepare('SELECT 1 FROM tournaments WHERE id = ?').get(id)) return fail(404, 'notFound', 'No such tournament');
+  const body = (await readJson(request)) ?? {};
+  if (!['rendered', 'original'].includes(body.kind)) return fail(400, 'badInput', 'Send kind: rendered or original');
+  const notReady = await uploadNotReady(app);
+  if (notReady) return notReady;
+  const privacy = PRIVACY.includes(body.privacy) ? body.privacy : 'unlisted';
+  const settings = readSettings(app.db);
+  const units = app.db.prepare(`SELECT m.id FROM matches m WHERE m.tournament_id = ? AND m.youtube_url IS NULL
+      AND EXISTS (SELECT 1 FROM videos v WHERE v.match_id = m.id) ORDER BY m.match_date, m.match_time, m.game`).all(id);
+  const jobs = [];
+  for (const { id: unit } of units) {
+    const loaded = loadMatch(app.db, unit);
+    const opts = { people: matchPeople(app.db, loaded) };
+    const rendered = renderedFile(loaded, settings, 'video', opts);
+    const key = body.kind === 'rendered' ? 'video' : 'original';
+    const file = body.kind === 'rendered' ? rendered : rendered ? null : originalFile(loaded, settings, opts);
+    const busy = findJob(jobKey(unit, key));
+    if (!file || (busy && (busy.status === 'queued' || busy.status === 'running'))) continue;
+    jobs.push(jobView(queueUpload(app, loaded, { key, file, privacy, playlist: body.playlist !== false })));
+  }
+  return json({ queued: jobs.length, jobs }, jobs.length ? 202 : 200);
 }
 
 /** GET /api/matches/:id/rendered: the match's finished files, newest first, with a URL to play each. */

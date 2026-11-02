@@ -29,7 +29,8 @@ const TIPS = {
   copyDescription: 'Puts the description on the clipboard',
 };
 
-function readPrefs() {
+/** The upload choices (privacy, add to the tournament's playlist) last made in a YouTube box. */
+export function readPrefs() {
   const prefs = { privacy: 'unlisted', playlist: true };
   try {
     return { ...prefs, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') };

@@ -49,6 +49,7 @@ const ROUTES = [
   ['DELETE', '/api/tournaments/:id', tournaments.onRequestDelete],
   ['POST', '/api/tournaments/:id/unlink-all', tournaments.unlinkAll],
   ['POST', '/api/tournaments/:id/render-all', tournaments.renderAll],
+  ['POST', '/api/tournaments/:id/upload-all', youtube.uploadAll],
   ['PUT', '/api/tournaments/:id', tournaments.update],
   ['PUT', '/api/tournaments/:id/complete', tournaments.setComplete],
   ['PUT', '/api/tournaments/:id/players', tournaments.setPlayers],

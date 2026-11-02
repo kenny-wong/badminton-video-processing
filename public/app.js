@@ -29,6 +29,7 @@ import { matchStar } from './match-star.js';
 import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
 import { backLinks, pageShown } from './nav.js';
+import { readPrefs as readUploadPrefs } from './youtube-panel.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
@@ -1011,6 +1012,31 @@ async function renderTournament(id, notice = null, who = null) {
     },
   }, icon('scissors', 16), 'Render all tagged');
 
+  // Upload every video here without a YouTube link: the rendered whole videos, or the originals of those not
+  // rendered. With the privacy and playlist last chosen in a YouTube box; one after another (Jobs page).
+  const uploadAllBtn = (kind, label, tip) => {
+    const btn = h('button', {
+      title: tip,
+      onclick: async () => {
+        const prefs = readUploadPrefs();
+        const what = kind === 'rendered' ? 'every rendered video here that isn’t on YouTube yet' : 'the original of every filmed video here that isn’t rendered or on YouTube yet';
+        if (!confirm(`Upload ${what}, as ${prefs.privacy}${prefs.playlist ? ', into the tournament’s playlist' : ''}?`)) return;
+        btn.disabled = true;
+        try {
+          const r = await api(`/api/tournaments/${id}/upload-all`, { method: 'POST', body: { kind, privacy: prefs.privacy, playlist: prefs.playlist } });
+          fill(msg, h('div', { class: 'notice ok' }, r.queued ? [`Queued ${r.queued} upload${r.queued === 1 ? '' : 's'}. `, h('a', { href: '#/jobs' }, 'Follow them on the Jobs page.')]
+            : kind === 'rendered' ? 'Nothing to upload: every rendered video here is on YouTube already.' : 'Nothing to upload: every filmed video here is rendered or on YouTube already.'));
+        } catch (err) {
+          fill(msg, errorNotice(err));
+        }
+        btn.disabled = false;
+      },
+    }, icon('youtube', 16), label);
+    return btn;
+  };
+  const uploadRenderedBtn = uploadAllBtn('rendered', 'Upload all rendered', 'Upload the rendered whole video of every match (or game) here that isn’t on YouTube yet (not highlights or clips); they go one after another');
+  const uploadOriginalBtn = uploadAllBtn('original', 'Upload all original', 'Upload the original video, as it is, of every filmed match (or game) here that isn’t rendered or on YouTube yet; they go one after another');
+
   const refreshBtn = h('button', {
     title: tournament.badminfoId
       ? 'Read the draws, match times and results again from badminfo and Badminton England (new tournaments fill in as they are played). Your tagging stays.'
@@ -1069,6 +1095,8 @@ async function renderTournament(id, notice = null, who = null) {
         },
       }, icon(tournament.completedAt ? 'refresh' : 'check', 16), tournament.completedAt ? 'Reopen' : 'Mark complete'),
       renderAllBtn,
+      uploadRenderedBtn,
+      uploadOriginalBtn,
       custom ? null : refreshBtn,
       h('details', { class: 'tournament-menu', onclick: (e) => { if (e.target.closest('button')) e.currentTarget.open = false; }, onkeydown: (e) => { if (e.key === 'Escape') { e.currentTarget.open = false; e.currentTarget.querySelector('summary').focus(); } } },
         h('summary', { class: 'btn' }, 'More actions', h('span', { 'aria-hidden': 'true' }, '⌄')),

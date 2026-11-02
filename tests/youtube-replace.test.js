@@ -8,7 +8,8 @@ import { openDb } from '../lib/db.js';
 import { saveTournament } from '../lib/tournaments.js';
 import { parseMatches } from '../lib/schedule.js';
 import { getJob } from '../lib/jobs.js';
-import { onRequestGet, renderedList, upload } from '../api/youtube.js';
+import { onRequestGet, renderedList, upload, uploadAll } from '../api/youtube.js';
+import { rmSync } from 'node:fs';
 import { PAGE } from './fixtures/be-pages.js';
 
 const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -132,4 +133,35 @@ test('the original video can go to YouTube as it is, with the whole match’s ti
   assert.equal(job.result.file, 'original');
   assert.ok(yt.calls.some((c) => c.includes('upload.test/session'))); // the phone's file was sent
   assert.equal(app.db.prepare('SELECT youtube_url FROM matches WHERE id = ?').get(id).youtube_url, 'https://youtu.be/NEW0000000b');
+});
+
+test('Upload all: the rendered whole videos, or the originals of the ones not rendered; nothing already on YouTube', async () => {
+  const { app, id } = setUp(); // id: rendered, on YouTube as OLD
+  const tid = app.db.prepare('SELECT tournament_id FROM matches WHERE id = ?').get(id).tournament_id;
+  const others = app.db.prepare('SELECT id FROM matches WHERE tournament_id = ? AND id <> ? AND game = 0 ORDER BY id LIMIT 2').all(tid, id).map((r) => r.id);
+  const phone = (name, match) => {
+    const path = join(app.dataDir, name);
+    writeFileSync(path, 'phone video bytes');
+    app.db.prepare("INSERT INTO videos (path, size, modified_at, recorded_at, duration, match_id) VALUES (?, 17, 'x', '2026-10-24T08:05:00Z', 600, ?)").run(path, match);
+  };
+  phone('a.mp4', id);
+  // Another match: rendered, not on YouTube; a third: filmed only.
+  phone('b.mp4', others[0]);
+  const rendered = join(app.dataDir, 'b-render.mp4');
+  writeFileSync(rendered, 'rendered bytes');
+  app.db.prepare('UPDATE matches SET output_path = ? WHERE id = ?').run(rendered, others[0]);
+  phone('c.mp4', others[1]);
+  const all = (kind) => ({ request: new Request(`http://127.0.0.1/api/tournaments/${tid}/upload-all`, { method: 'POST', body: JSON.stringify({ kind, playlist: false }) }), params: { id: String(tid) }, app });
+  const yt = fakeYouTube();
+  await withFetch(yt.fetch, async () => {
+    const r = await (await uploadAll(all('rendered'))).json();
+    assert.deepEqual(r.jobs.map((j) => j.key), [`upload:${others[0]}:video`]); // the one on YouTube is left alone
+    for (const j of r.jobs) await finished(new Response(JSON.stringify(j)));
+    const o = await (await uploadAll(all('original'))).json();
+    assert.deepEqual(o.jobs.map((j) => j.key), [`upload:${others[1]}:original`]); // not the rendered one again
+    for (const j of o.jobs) await finished(new Response(JSON.stringify(j)));
+  });
+  assert.equal((await uploadAll({ ...all('original'), request: new Request('http://x', { method: 'POST', body: '{}' }) })).status, 400);
+  rmSync(join(app.dataDir, 'youtube', 'token.json'));
+  assert.equal((await uploadAll(all('rendered'))).status, 401); // signed out: nothing queued
 });
