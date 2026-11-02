@@ -1077,6 +1077,13 @@ async function renderSettings() {
   const outRate = h('input', { type: 'number', id: 'out-rate', min: 0, max: 100, step: 1, value: s.output.maxRate });
   const outReplays = h('input', { type: 'checkbox', id: 'out-replays', checked: s.output.replays });
   const outVoices = h('input', { type: 'checkbox', id: 'out-voices', checked: s.output.removeVoices });
+  // How bright HDR phone videos come out: one frame of the newest HDR video at each choice, to pick by eye.
+  let hdrLook = s.output.hdrLook;
+  const HDR_CHOICES = [['bright', 'Bright', 'as renders were before 1.49.0'], ['normal', 'Normal', 'recommended'], ['darker', 'Darker', '']];
+  const hdrLooks = h('div', { class: 'hdr-looks', role: 'radiogroup', 'aria-label': 'HDR video brightness' }, HDR_CHOICES.map(([key, label, note]) => h('label', { class: 'hdr-look' },
+    h('img', { src: `/media/hdr-preview/${key}`, alt: `${label}: a frame of your newest HDR video`, loading: 'lazy', onerror: (e) => { e.target.closest('.hdr-looks')?.classList.add('no-preview'); e.target.remove(); } }),
+    h('span', { class: 'row' }, h('input', { type: 'radio', name: 'hdr-look', value: key, checked: key === hdrLook, onchange: () => { hdrLook = key; } }),
+      h('strong', {}, label), note ? h('span', { class: 'small muted' }, note) : null))));
   let musicFile = s.music.file;
   const musicInput = h('input', { type: 'file', accept: 'audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,.mp3,.m4a,.wav', id: 'music-file', class: 'visually-hidden' });
   const musicState = h('span', { class: 'small muted' });
@@ -1144,7 +1151,7 @@ async function renderSettings() {
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
               logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value), stats: cardStats.checked },
               description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
-              output: { size: outSize.value, maxRate: Number(outRate.value) || 0, replays: outReplays.checked, removeVoices: outVoices.checked },
+              output: { size: outSize.value, maxRate: Number(outRate.value) || 0, replays: outReplays.checked, removeVoices: outVoices.checked, hdrLook },
               music: { use: musicUse.value, volume: Number(musicVolume.value), court: Number(courtVolume.value) } },
           });
           fill(toolsBox, tools(saved));
@@ -1190,6 +1197,9 @@ async function renderSettings() {
         h('label', { class: 'row', for: 'out-replays' }, outReplays, 'Slow-motion replay of the last 3 seconds of each ★ rally, straight after it (each render can switch it)'),
         h('label', { class: 'row', for: 'out-voices' }, outVoices, 'Remove voices from the sound: players’ shouts, coaching, talk by the court; the shuttle hits stay (each render can switch it; reels and clips too)'),
         data.voices ? null : h('p', { class: 'hint' }, 'Removing voices needs Demucs: run ', h('kbd', {}, 'analysis\\setup.ps1'), ' once (see the README).')),
+      section('HDR phone videos', 'Phones film in HDR; renders, clips and reels turn it into ordinary video at this brightness. It’s built into the file, so videos made before need rendering again.',
+        hdrLooks,
+        h('p', { class: 'hint hdr-none' }, 'No HDR video in the library yet: the preview appears once one is found.')),
       section('Music', 'A track under highlights (and reels, or every video), with the court’s own sound turned down.',
         h('div', { class: 'row' }, h('label', { class: 'btn small', for: 'music-file' }, 'Choose music…'), musicInput, musicState, removeMusic),
         h('div', { class: 'row' }, h('label', { for: 'music-use' }, 'Use it for'), musicUse),

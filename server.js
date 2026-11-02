@@ -13,9 +13,9 @@ import { openDb } from './lib/db.js';
 import { fail, idParam, serverError } from './lib/http.js';
 import { loadMatch, sourceFor } from './lib/pipeline.js';
 import { renderedFile } from './lib/rendered.js';
-import { frameAt, thumbnail } from './lib/thumbs.js';
+import { frameAt, hdrPreview, thumbnail } from './lib/thumbs.js';
 import { findTools } from './lib/ffmpeg.js';
-import { readSettings } from './lib/settings.js';
+import { HDR_LOOKS, readSettings } from './lib/settings.js';
 import { startLog } from './lib/log.js';
 import { BOOT } from './lib/jobs.js';
 import { listenWhenFree } from './lib/restart.js';
@@ -186,6 +186,22 @@ export function createApp(app) {
         const tools = findTools(readSettings(app.db).ffmpegFolder);
         const file = tools && await thumbnail(app.db, tools, app.thumbDir ?? join(tmpdir(), 'badminton-video-thumbs'), idParam(thumb[1])).catch((err) => {
           console.error('thumbnail', thumb[1], err.message);
+          return null;
+        });
+        if (!file) {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
+        createReadStream(file).pipe(res);
+        return;
+      }
+      const preview = /^\/media\/hdr-preview\/(\w+)$/.exec(url.pathname);
+      if (preview && req.method === 'GET') {
+        const look = HDR_LOOKS[preview[1]];
+        const tools = look && findTools(readSettings(app.db).ffmpegFolder);
+        const file = tools && await hdrPreview(app.db, tools, app.thumbDir ?? join(tmpdir(), 'badminton-video-thumbs'), look.npl).catch((err) => {
+          console.error('hdr preview', preview[1], err.message);
           return null;
         });
         if (!file) {

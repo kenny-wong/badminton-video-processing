@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { encoderArgs, musicArgs, outputLength, outputSize, partArgs, plan, toOutput, withReplays } from '../lib/render.js';
+import { encoderArgs, hdrFilter, musicArgs, outputLength, outputSize, partArgs, plan, SDR_TAGS, toOutput, withReplays } from '../lib/render.js';
+import { clipArgs } from '../lib/clip.js';
 import { labelScript } from '../lib/cards.js';
-import { cleanMusic, cleanOutput, DEFAULT_MUSIC, DEFAULT_OUTPUT } from '../lib/settings.js';
+import { cleanMusic, cleanOutput, DEFAULT_MUSIC, DEFAULT_OUTPUT, hdrNpl } from '../lib/settings.js';
 import { audioKind } from '../api/settings.js';
 import { musicFor } from '../lib/pipeline.js';
 import { DEFAULT_BOARD } from '../public/shared/board.js';
@@ -16,8 +17,28 @@ test('outputSize brings the shorter side down, never up, in even numbers', () =>
 });
 
 test('a bitrate cap is passed to either encoder', () => {
-  assert.deepEqual(encoderArgs('h264_nvenc', { maxRate: 8 }).slice(-4), ['-maxrate', '8M', '-bufsize', '16M']);
+  const nvenc = encoderArgs('h264_nvenc', { maxRate: 8 });
+  assert.deepEqual(nvenc.slice(nvenc.indexOf('-maxrate'), nvenc.indexOf('-maxrate') + 4), ['-maxrate', '8M', '-bufsize', '16M']);
   assert.ok(!encoderArgs('libx264').includes('-maxrate'));
+});
+
+test('every encode says in the file that it is ordinary HD video (BT.709, limited range)', () => {
+  for (const encoder of ['h264_nvenc', 'libx264']) assert.deepEqual(encoderArgs(encoder).slice(-SDR_TAGS.length), SDR_TAGS);
+  assert.deepEqual(SDR_TAGS, ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv']);
+});
+
+test('HDR video is tone mapped at the chosen brightness, in renders and clips', () => {
+  assert.equal(hdrNpl({ hdrLook: 'bright' }), 100);
+  assert.equal(hdrNpl({ hdrLook: 'normal' }), 200);
+  assert.equal(hdrNpl({ hdrLook: 'darker' }), 300);
+  assert.equal(hdrNpl(undefined), 200); // settings from before 1.49.0
+  assert.equal(cleanOutput({ hdrLook: 'glaring' }).hdrLook, 'normal');
+  assert.equal(cleanOutput({ hdrLook: 'darker' }).hdrLook, 'darker');
+  const vf = (args) => args[args.indexOf('-vf') + 1];
+  assert.ok(vf(partArgs({ src: 'm.mp4', start: 0, end: 5, out: 'p.mp4', hdr: true, npl: 300 })).startsWith(`${hdrFilter(300)},setpts=`));
+  assert.match(hdrFilter(300), /^zscale=t=linear:npl=300,/);
+  assert.ok(!vf(partArgs({ src: 'm.mp4', start: 0, end: 5, out: 'p.mp4', hdr: false, npl: 300 })).includes('zscale'));
+  assert.ok(vf(clipArgs({ src: 'm.mp4', start: 0, end: 5, out: 'c.mp4', hdr: true, npl: 100 })).startsWith(hdrFilter(100)));
 });
 
 test('replays follow each favourite rally, slowed down, and chapters still find the first showing', () => {
@@ -56,7 +77,7 @@ test('music is looped under the court sound and faded out at the end', () => {
 });
 
 test('output and music settings are cleaned; music is used only where chosen', () => {
-  assert.deepEqual(cleanOutput({ size: 1080, maxRate: 500, replays: 'yes' }), { size: '1080', maxRate: 100, replays: DEFAULT_OUTPUT.replays, removeVoices: false });
+  assert.deepEqual(cleanOutput({ size: 1080, maxRate: 500, replays: 'yes' }), { size: '1080', maxRate: 100, replays: DEFAULT_OUTPUT.replays, removeVoices: false, hdrLook: 'normal' });
   assert.deepEqual(cleanMusic({ volume: 150, use: 'loud', file: 'C:/x.mp3' }), { ...DEFAULT_MUSIC, volume: 100 });
   const settings = { music: { ...DEFAULT_MUSIC, file: 'C:/no/such/music.mp3' } };
   assert.equal(musicFor(settings, true), null); // the file isn't there
