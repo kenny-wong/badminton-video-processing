@@ -10,7 +10,8 @@
 // PUT /api/matches/:id/games/:game/videos { videoIds }: the same for one game of the match,
 //   giving that game its own row (own tagging, render and YouTube link) on first use.
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
-// GET /api/matches/:id/suggestions: a suggested winner for each rally, from the tracking.
+// GET /api/matches/:id/suggestions: a suggested winner for each rally without one, from the sequences of
+//   winners that reach the official result (else, with no result yet, from the tracked shuttle).
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
 // POST /api/matches/:id/analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
@@ -33,7 +34,7 @@ import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
 import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
-import { suggestWinners } from '../lib/winners.js';
+import { inferWinners, suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
 import { teamName } from '../public/shared/names.js';
@@ -214,18 +215,20 @@ export async function suggestions({ params, app }) {
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const { match } = loaded;
   const data = await readTrack(match.trackPath);
-  if (!data) return fail(404, 'notTracked', 'Track the shuttle first');
+  const points = data ? trackPoints(data) : [];
+  const toCourt = courtMapping(match.corners)?.toCourt ?? null;
+  const common = { rallies: match.rallies, format: matchFormat(match), start: startFor(match) ?? { games: [], points: [0, 0] }, oneGame: match.game > 0 };
+  // The official score of what this video shows: the match, or the games up to this one.
+  const official = match.game ? match.games.slice(0, match.game) : match.games;
+  const result = match.game ? official.length === match.game : official.length > 0 && Boolean(match.winner);
+  if (result) {
+    const list = inferWinners({ ...common, firstServer: match.firstServer ?? 'a', finalGames: official });
+    return json({ suggestions: list, method: 'result', possible: list.every((x) => x.possible !== false), result: official });
+  }
+  if (!data) return fail(400, 'noResult', 'Suggestions need the official result (Update results on the tournament page) or the tracked shuttle');
   if (!match.nearAtStart) return fail(400, 'noEnds', 'Say which team is at the near end when the video starts');
-  const list = suggestWinners({
-    rallies: match.rallies,
-    points: trackPoints(data),
-    toCourt: courtMapping(match.corners)?.toCourt ?? null,
-    nearAtStart: match.nearAtStart,
-    format: matchFormat(match),
-    start: startFor(match) ?? { games: [], points: [0, 0] },
-    oneGame: match.game > 0,
-  });
-  return json({ suggestions: list, court: Boolean(match.corners) });
+  const list = suggestWinners({ ...common, points, toCourt, nearAtStart: match.nearAtStart });
+  return json({ suggestions: list, method: 'shuttle', possible: true, shuttle: true, court: Boolean(match.corners) });
 }
 
 export async function takeTagging({ request, params, app }) {

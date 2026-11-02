@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { apply, cleanCorners, COURT, courtLines, courtMapping, homography } from '../public/shared/court.js';
-import { endOf, landing, serveEnd, suggestWinners } from '../lib/winners.js';
+import { endOf, inferWinners, landing, serveEnd, suggestWinners } from '../lib/winners.js';
 
 // A camera behind the near baseline: the near corners wide at the bottom, the far ones narrow higher up.
 const CORNERS = [[0.15, 0.9], [0.85, 0.9], [0.65, 0.35], [0.35, 0.35]];
@@ -89,4 +89,51 @@ test('winners come from the next serve, confirmed by the landing', () => {
   const flipped = suggestWinners({ rallies: [{ ...rallies[0], winner: 'b' }, ...rallies.slice(1)], points, toCourt, nearAtStart: 'b', format: { points: 21 }, start: { games: [], points: [0, 0] } });
   assert.deepEqual(flipped.slice(0, 2).map((x) => x.winner), ['b', 'a']);
   assert.equal(flipped[0].sure, true);
+});
+
+// ---- winners from the official result (inferWinners) ----
+const game = (winners) => winners.split('').map((w, i) => ({ start: i * 10, end: i * 10 + 6, winner: w }));
+const ELEVEN = { points: 11, setting: true, bestOf: 3 };
+const base11 = { format: ELEVEN, start: { games: [], points: [0, 0] }, firstServer: 'a', nearAtStart: 'a', oneGame: true };
+const TRUE_GAME = 'aababbaaaaabbaab' + 'a'; // 11-6 to A
+const blankAt = (rallies, ...idx) => rallies.map((r, i) => (idx.includes(i) ? { ...r, winner: null } : r));
+
+test('one untagged rally follows from the result for certain', () => {
+  const truth = game(TRUE_GAME);
+  const out = inferWinners({ ...base11, rallies: blankAt(truth, 4), finalGames: [[11, 6]] });
+  assert.deepEqual([out[4].winner, out[4].sure, out[4].chance], ['b', true, 1]);
+  assert.equal(out[0].winner, 'a'); // tagged ones come back as they are
+  assert.ok(out.every((x) => x.possible));
+});
+
+test('the result settles how many each side won among the untagged, not which', () => {
+  const truth = game(TRUE_GAME);
+  const out = inferWinners({ ...base11, rallies: blankAt(truth, 2, 3), finalGames: [[11, 6]] }); // a, b in truth
+  assert.deepEqual([out[2].chance, out[2].sure, out[3].chance], [0.5, false, 0.5]);
+  assert.notEqual(out[2].winner, out[3].winner); // one each, as the result needs
+});
+
+test('winners that can’t reach the result are reported, and lets don’t count', () => {
+  const truth = game(TRUE_GAME);
+  const wrong = truth.map((r, i) => (i <= 1 ? { ...r, winner: 'b' } : r)); // 8 tagged to B: more than its 6
+  const out = inferWinners({ ...base11, rallies: blankAt(wrong, 5), finalGames: [[11, 6]] });
+  assert.equal(out[5].possible, false);
+  assert.equal(out[5].winner, null);
+  const withLet = [...truth.slice(0, 3), { start: 25, end: 28, winner: 'let' }, ...truth.slice(3)];
+  const res = inferWinners({ ...base11, rallies: blankAt(withLet, 1), finalGames: [[11, 6]] });
+  assert.deepEqual([res[1].winner, res[1].sure, res[3].winner], ['a', true, 'let']);
+});
+
+test('a game filmed on its own starts after the official earlier games', () => {
+  const truth = game('bbbbbbbbbbb'); // 0-11 to B in game 2
+  const out = inferWinners({ ...base11, firstServer: 'b', start: { games: [[11, 6]], points: [0, 0] }, rallies: blankAt(truth, 10), finalGames: [[11, 6], [0, 11]] });
+  assert.deepEqual([out[10].winner, out[10].sure], ['b', true]);
+});
+
+test('the suggested winners taken together reach the result', () => {
+  const truth = game(TRUE_GAME);
+  const blanks = [1, 2, 3, 4, 5, 6];
+  const out = inferWinners({ ...base11, rallies: blankAt(truth, ...blanks), finalGames: [[11, 6]] });
+  const filled = truth.map((r, i) => (blanks.includes(i) ? out[i].winner : r.winner));
+  assert.deepEqual([filled.filter((w) => w === 'a').length, filled.filter((w) => w === 'b').length], [11, 6]);
 });

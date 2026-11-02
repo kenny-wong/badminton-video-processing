@@ -833,6 +833,17 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (guess?.winner) say(`Rally ${i + 1}: suggested ${guess.winner.toUpperCase()}${guess.sure ? '' : ' (unsure)'}`);
   }
 
+  // A suggestion's tooltip: how likely it is, and why a less likely side may be suggested (the guesses must add up to the result).
+  function guessTitle(g) {
+    const w = g.winner.toUpperCase();
+    if (g.sure) return `Suggested ${w}: it follows from the result and the winners tagged. Click to accept`;
+    if (!g.chance) return `Suggested ${w}. Click to accept`;
+    const pct = Math.round(g.chance * 100);
+    return pct >= 50
+      ? `Suggested ${w}, ${pct}% likely. Click to accept`
+      : `Suggested ${w} so that all the suggestions together add up to the result (on its own ${w === 'A' ? 'B' : 'A'} is ${100 - pct}% likely). Click to accept`;
+  }
+
   function drawList() {
     const rows = rallies.map((r, i) => {
       const s = steps[i];
@@ -851,7 +862,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       }, w === 'let' ? 'Let' : w.toUpperCase())),
       !r.winner && suggested.get(r.start)?.winner ? h('button', {
         class: `guess ${suggested.get(r.start).winner}${suggested.get(r.start).sure ? ' sure' : ''}`,
-        title: `Suggested from the shuttle (${suggested.get(r.start).sure ? 'sure' : 'unsure'}); click to accept`,
+        title: guessTitle(suggested.get(r.start)),
         onclick: () => setWinner(i, suggested.get(r.start).winner),
       }, `${suggested.get(r.start).winner.toUpperCase()}?`) : null),
       h('td', { class: 'nowrap' }, score),
@@ -981,6 +992,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const trackingBox = h('div', { class: 'stack' });
   const trackJobBox = h('div');
   const suggestBox = h('div');
+  const rallySuggestBox = h('div'); // the same suggestions, started from the Rallies tab
   let tracked = data.tracking.tracked;
 
   async function saveTrackingSettings() {
@@ -996,7 +1008,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     } catch { /* not tracked yet */ }
   }
 
-  async function suggest() {
+  // Suggest winners works from the official result; without one, from the tracked shuttle.
+  const hasResult = unitGame ? official.length === unitGame : official.length > 0 && Boolean(match.winner);
+  const canSuggest = () => rallies.length > 0 && (hasResult || (tracked && nearAtStart));
+
+  async function suggest(box = suggestBox) {
     try {
       clearTimeout(saveTimer);
       await save();
@@ -1014,18 +1030,30 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         changed();
         say(onlySure ? `Filled in ${sure} sure winners` : `Filled in ${all.length} winners`);
       };
-      fill(suggestBox, all.length
-        ? h('div', { class: 'notice info stack small' },
-          h('div', {}, `${all.length} winners suggested, ${sure} sure${r.court ? '' : ' (mark the court to check landings too)'}. They show as A? / B? in the rally list.`),
-          h('div', { class: 'row' },
-            sure ? h('button', { class: 'small primary', onclick: () => fillIn(true) }, `Fill in the ${sure} sure ones`) : null,
-            h('button', { class: 'small', onclick: () => fillIn(false) }, 'Fill in all')))
-        : rallies.every((rl) => rl.winner)
-          ? h('div', { class: 'notice info small' }, `All ${rallies.length} rallies already have a winner. Suggestions only fill in rallies without one; your own tags are never changed.`)
-          : h('div', { class: 'notice warn small' }, 'No winners could be worked out. The shuttle may not be visible at serves; check the court marking and the near end.'));
+      const fromResult = r.method === 'result';
+      const from = fromResult ? `the official result (${gamesText(r.result)})` : 'the tracked shuttle';
+      // Guesses close to a coin flip aren't worth filling in: say so instead.
+      const coinFlips = fromResult && !all.some((x) => x.sure || x.chance >= 0.75);
+      fill(box, !r.possible
+        ? h('div', { class: 'notice warn small' }, `The winners tagged so far can’t add up to the official result (${gamesText(r.result)}): a rally may be missing or extra, or a winner wrong. The scoreboard panel shows where the tagged score and the result part.`)
+        : all.length
+          ? h('div', { class: 'notice info stack small' },
+            h('div', {}, `${all.length} winners suggested from ${from}. They show as A? / B? in the rally list (hover for how likely).`),
+            coinFlips
+              ? h('div', {}, 'They’re close to coin flips, so there’s nothing worth filling in yet. Tag more rallies (N goes to the next untagged one) and suggest again: the more you tag, the more the result decides the rest.')
+              : h('div', {}, fromResult
+                ? (sure ? `${sure} follow from the result and the winners you’ve tagged, so they’re sure. ` : 'None is certain yet. ') + 'The more rallies you tag, the more the rest are decided: when only a few are left, the result settles most of them.'
+                : `${sure} sure${r.court ? '' : ' (mark the court to check landings too)'}.`),
+            coinFlips ? null
+              : h('div', { class: 'row' },
+                sure ? h('button', { class: 'small primary', onclick: () => fillIn(true) }, `Fill in the ${sure} sure ones`) : null,
+                h('button', { class: 'small', onclick: () => fillIn(false) }, 'Fill in all (best guesses)')))
+          : rallies.every((rl) => rl.winner)
+            ? h('div', { class: 'notice info small' }, `All ${rallies.length} rallies already have a winner. Suggestions only fill in rallies without one; your own tags are never changed.`)
+            : h('div', { class: 'notice warn small' }, 'No winners could be worked out. The shuttle may not be visible at serves; check the court marking and the near end.'));
       drawList();
     } catch (err) {
-      fill(suggestBox, errorNotice(err));
+      fill(box, errorNotice(err));
     }
   }
 
@@ -1064,8 +1092,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         }, tracked ? 'Track again' : 'Track the shuttle'),
         tracked ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showShuttle, onchange: (e) => { showShuttle = e.target.checked; drawOverlay(); } }), 'Show the shuttle on the video') : null),
       trackJobBox,
-      tracked ? h('div', { class: 'row' }, h('button', { class: 'small primary', disabled: !nearAtStart || !rallies.length, onclick: suggest }, 'Suggest winners'),
-        !nearAtStart ? h('span', { class: 'hint' }, 'choose the near end first') : !rallies.length ? h('span', { class: 'hint' }, 'find or tag the rallies first') : null) : null,
+      tracked || hasResult ? h('div', { class: 'row' }, h('button', { class: 'small primary', disabled: !canSuggest(), onclick: () => suggest(suggestBox) }, 'Suggest winners'),
+        !rallies.length ? h('span', { class: 'hint' }, 'find or tag the rallies first') : !canSuggest() ? h('span', { class: 'hint' }, 'choose the near end first') : null) : null,
       suggestBox);
   }
   drawTrackingPanel();
@@ -1448,7 +1476,16 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     rallies: h('div', {},
       strandedBox,
       card('Rallies', 'list',
-        h('div', { class: 'row spread small' }, h('span', { class: 'muted' }, 'S starts a rally, A / B ends it.'), h('button', { class: 'small', onclick: () => goNextUntagged(-1) }, 'Review untagged (N)')),
+        h('div', { class: 'row spread small' }, h('span', { class: 'muted' }, 'S starts a rally, A / B ends it.'),
+          h('div', { class: 'row tight' },
+            h('button', { class: 'small', onclick: () => goNextUntagged(-1) }, 'Review untagged (N)'),
+            h('button', {
+              class: 'small',
+              title: 'Work out the winners of untagged rallies from the official result',
+              onclick: () => (canSuggest() ? suggest(rallySuggestBox)
+                : fill(rallySuggestBox, h('div', { class: 'notice warn small' }, !rallies.length ? 'Find or tag the rallies first.' : 'Suggestions need the official result (Update results on the tournament page), or the tracked shuttle and the near end on the Tracking tab.'))),
+            }, 'Suggest winners'))),
+        rallySuggestBox,
         listBox),
       card('Find rallies by sound', 'wave',
         h('p', { class: 'hint' }, 'Listens for shuttle hits. Noisy halls with nearby courts may need a lower sensitivity.'),
