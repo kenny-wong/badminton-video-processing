@@ -59,17 +59,30 @@ test('all corners, long doubles names, earlier games and portrait video keep the
 test('international score changes slide inside their own tile, beginning at the rally end', () => {
   const spans=[{from:0,to:2,state},{from:2,to:4,state:{...state,points:[0,1],server:'b'}}];
   const ass=assScript({width:1920,height:1080,teams:[['Amy Lee'],['Cat Ho']],style,spans});
-  const motion=ass.split('\n').filter(l=>l.includes('\\move('));
-  assert.equal(motion.length,2);
-  assert.ok(motion.every(l=>l.includes('\\clip(') && l.includes('0:00:02.00')));
-  assert.ok(motion.some(l=>l.includes('0:00:02.20') && l.endsWith('}0')));
-  assert.ok(motion.some(l=>l.includes('0:00:04.00') && l.endsWith('}1')));
+  const lines=ass.split('\n');
+  const motion=lines.filter(l=>l.includes('\\move('));
+  const xs=(l)=>l.match(/\\move\((\d+),\d+,(\d+),/).slice(1).map(Number);
+  // As in the reference clip: the old number speeds out to the right in the first 0.2 s ...
+  const out=motion.filter(l=>l.endsWith('}0'));
+  assert.deepEqual(out.map(l=>l.split(',').slice(1,3).join('-')),['0:00:02.00-0:00:02.05','0:00:02.05-0:00:02.10','0:00:02.10-0:00:02.15','0:00:02.15-0:00:02.20']);
+  const outSteps=out.map(l=>xs(l)[1]-xs(l)[0]);
+  assert.ok(outSteps.every((d,i)=>d>0 && (i===0 || d>=outSteps[i-1])), String(outSteps)); // speeding up
+  // ... the tile is empty a moment, then the new one slides in from the left and settles by 0.38 s.
+  const into=motion.filter(l=>l.endsWith('}1'));
+  assert.deepEqual(into.map(l=>l.split(',').slice(1,3).join('-')),['0:00:02.18-0:00:02.23','0:00:02.23-0:00:02.28','0:00:02.28-0:00:02.33','0:00:02.33-0:00:02.38']);
+  assert.ok(into.every(l=>xs(l)[1]>=xs(l)[0]));
+  assert.ok(lines.some(l=>l.startsWith('Dialogue: 3,0:00:02.38,0:00:04.00') && l.endsWith('}1') && !l.includes('\\move(')));
+  assert.ok(motion.every(l=>l.includes('\\clip(') && !l.includes('\\pos(')));
   assert.doesNotMatch(ass,/fscy0/);
-  assert.ok(motion.every(l=>!l.includes('\\pos(')));
+  // The serve marker leaves A's row at once and grows in on B's from 0.07 s.
+  assert.equal(lines.filter(l=>l.includes('\\fscx30\\fscy30') && l.includes('0:00:02.07,0:00:04.00')).length,2);
   assert.match(ass,/\\1c&H2E10C8&/); // Denmark's red is a drawing in the actual video.
   assert.match(ass,/\\1c&H2411CE&/); // England's red, independently chosen.
   const stopped=assScript({width:1920,height:1080,teams:[['Amy Lee'],['Cat Ho']],style,spans:[spans[0],{...spans[1],from:2.5}]});
   assert.doesNotMatch(stopped,/\\move\(/);
+  // A span too short for the whole change just shows the new score.
+  const quick=assScript({width:1920,height:1080,teams:[['Amy Lee'],['Cat Ho']],style,spans:[spans[0],{...spans[1],to:2.3}]});
+  assert.doesNotMatch(quick,/\\move\(|fscx30/);
 });
 
 test('game two shows the first game in pale tiles beside equally sized current scores', () => {

@@ -3,13 +3,18 @@
 // (or a plain dark picture when there is none yet).
 
 import { boardLayout, changedNumbers } from './shared/board.js';
-import { SCORE_SLIDE_SECONDS } from './shared/international-board.js';
+import { SCORE_MOTION } from './shared/international-board.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 
 function svg(tag, attrs = {}, ...children) {
   const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined) el.setAttribute(k, v);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined) continue;
+    // The page's CSP (style-src 'self') drops style="" attributes; properties set through the DOM are kept.
+    if (k === 'style') for (const [name, value] of Object.entries(v)) el.style.setProperty(name, value);
+    else el.setAttribute(k, v);
+  }
   el.append(...children);
   return el;
 }
@@ -18,13 +23,17 @@ function svg(tag, attrs = {}, ...children) {
  * The SVG for one moment: `names` [A, B], `state` (games, points, won, server),
  * `style` (a board look), `flags`, `heading`, `banner`, `background` (an image URL).
  * `transparent` omits the backdrop so the board can sit over the playing video.
- * `before` (the moment drawn just before, same fields) makes the numbers that changed flip in.
+ * `before` (the moment drawn just before, same fields) makes the numbers that changed flip in (or slide,
+ * on the international board, with its serve marker hopping rows: SCORE_MOTION, as the video does).
  */
 export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720, transparent = false, before = null }) {
   const { items } = boardLayout({ width, height, names, state, style, flags, heading, banner });
   const previous = before ? boardLayout({ width, height, ...before, banner: '' }).items : [];
   const flipping = changedNumbers(previous, items);
   const oldNumbers = new Map(previous.filter((it) => it.type === 'text' && it.flip).map((it) => [it.key, it.text]));
+  const serveRow = (list) => list.find((it) => it.serve)?.centre[1];
+  const serveMoved = before && serveRow(previous) !== undefined && serveRow(items) !== undefined && serveRow(previous) !== serveRow(items);
+  let serveGroup = null;
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'board-preview', role: 'img', 'aria-label': 'Scoreboard preview' });
   const defs = svg('defs', {}, svg('linearGradient', { id: 'court-bg', x1: 0, y1: 0, x2: 1, y2: 1 },
     svg('stop', { offset: '0', 'stop-color': '#2d4a3e' }), svg('stop', { offset: '1', 'stop-color': '#16251f' })));
@@ -45,7 +54,10 @@ export function boardPreview({ names, state, style, flags, heading = '', banner 
     if (it.type === 'rect') {
       root.append(svg('rect', { x: it.x, y: it.y, width: it.w, height: it.h, fill: it.colour, 'fill-opacity': it.opacity }));
     } else if (it.type === 'poly') {
-      root.append(svg('polygon', { points: it.points.map((p) => p.join(',')).join(' '), fill: it.colour, 'fill-opacity': it.opacity }));
+      const into = it.serve && serveMoved
+        ? (serveGroup ??= root.appendChild(svg('g', { class: 'board-serve-in', style: { 'transform-origin': `${it.centre[0]}px ${it.centre[1]}px`, '--serve-in': `${SCORE_MOTION.serveIn}s`, '--serve-grow': `${SCORE_MOTION.serveGrow}s` } })))
+        : root;
+      into.append(svg('polygon', { points: it.points.map((p) => p.join(',')).join(' '), fill: it.colour, 'fill-opacity': it.opacity }));
     } else {
       // Narrow lettering is drawn squeezed sideways, as the video's subtitles do.
       const k = (it.stretch ?? 100) / 100;
@@ -56,7 +68,8 @@ export function boardPreview({ names, state, style, flags, heading = '', banner 
       if (it.cell && flipping.has(it.key)) {
         const { x, y, w, h } = it.cell;
         const clip = svg('svg', { x, y, width: w, height: h, viewBox: `${x} ${y} ${w} ${h}`, overflow: 'hidden', 'aria-hidden': 'true' });
-        const motion = `--score-slide:${w}px;animation-duration:${SCORE_SLIDE_SECONDS}s`;
+        const m = SCORE_MOTION;
+        const motion = { '--slide-out': `${w * m.outBy}px`, '--slide-in': `${-w * m.inFrom}px`, '--out': `${m.out}s`, '--in': `${m.in}s`, '--in-start': `${m.inStart}s` };
         clip.append(
           svg('g', { class: 'board-slide-in', style: motion }, text(0, { fill: it.colour, 'fill-opacity': it.opacity })),
           svg('g', { class: 'board-slide-out', style: motion }, text(0, { fill: it.colour, 'fill-opacity': it.opacity }, oldNumbers.get(it.key))),

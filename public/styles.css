@@ -819,11 +819,16 @@ table.parts .part-pick { white-space: nowrap; }
 /* A scoreboard number that changed unfolds from its middle line, as in the rendered video. */
 .board-flip { transform-box: fill-box; transform-origin: center; animation: board-flip 0.24s ease-out; }
 @keyframes board-flip { 0%, 50% { transform: scaleY(0); } 100% { transform: scaleY(1); } }
-.board-slide-in { animation: board-slide-in 0.2s linear both; }
-.board-slide-out { animation: board-slide-out 0.2s linear both; }
-@keyframes board-slide-in { from { transform: translateX(calc(-1 * var(--score-slide))); } to { transform: translateX(0); } }
-@keyframes board-slide-out { from { transform: translateX(0); } to { transform: translateX(var(--score-slide)); } }
-@media (prefers-reduced-motion: reduce) { .board-slide-in { animation: none; } .board-slide-out { display: none; } }
+/* International board (timings from public/shared/international-board.js SCORE_MOTION): the old number speeds
+   out to the right, the tile is empty a moment, the new one slides in from the left and settles; the serve
+   marker grows in on its new row. */
+.board-slide-out { animation: board-slide-out var(--out) ease-in both; }
+.board-slide-in { animation: board-slide-in var(--in) ease-in-out var(--in-start) both; }
+.board-serve-in { animation: board-serve-in var(--serve-grow) ease-out var(--serve-in) both; }
+@keyframes board-slide-out { from { transform: translateX(0); } to { transform: translateX(var(--slide-out)); } }
+@keyframes board-slide-in { from { transform: translateX(var(--slide-in)); } to { transform: translateX(0); } }
+@keyframes board-serve-in { from { transform: scale(0.3); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .board-slide-in, .board-serve-in { animation: none; } .board-slide-out { display: none; } }
 @media (prefers-reduced-motion: reduce) { .board-flip { animation: none; } }
 .player .corner-handle { position: absolute; z-index: 2; width: 18px; height: 18px; min-height: 0; margin: -9px 0 0 -9px; padding: 0; border-radius: 50%;
   background: #ffd84d; border: 2px solid #000; box-shadow: 0 0 0 2px rgb(255 255 255 / 55%); cursor: grab; touch-action: none; }

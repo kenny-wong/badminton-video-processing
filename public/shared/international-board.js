@@ -2,7 +2,16 @@
 // Flag panels and score tiles are vectors so the preview and FFmpeg use the same shapes.
 import { cleanCountries, flagOutline, flagShapes } from './flags.js';
 
-export const SCORE_SLIDE_SECONDS = 0.2;
+/**
+ * How a point appears, measured frame by frame on the reference clip (30 fps), in seconds after the
+ * rally ends: the serve marker leaves its row at once and grows in on the other row at `serveIn`
+ * (over `serveGrow`); the old number speeds up out of the right of its tile (`out`), the tile stays
+ * empty a moment, then the new number slides in from the left and settles (`inStart` + `in`).
+ * `outBy` and `inFrom` are distances in tile widths.
+ */
+export const SCORE_MOTION = { out: 0.2, outBy: 0.75, inStart: 0.18, in: 0.2, inFrom: 0.47, serveIn: 0.067, serveGrow: 0.1 };
+/** The whole change, start to settled. */
+export const SCORE_MOTION_SECONDS = SCORE_MOTION.inStart + SCORE_MOTION.in;
 
 export function internationalBoard({ width, height, names, state, style: s, flags, heading, banner, fontWidth }) {
   const items = [];
@@ -65,8 +74,11 @@ export function internationalBoard({ width, height, names, state, style: s, flag
     if(state.server===(row?'b':'a')) {
       const cx=xGames-pad-shuttleW/2, d=shuttleW;
       // Cork down-left, the broad skirt up-right, like the reference's serving marker.
-      poly([[cx-d*0.18,mid+d*0.02],[cx+d*0.06,mid-d*0.43],[cx+d*0.49,mid-d*0.05],[cx+d*0.1,mid+d*0.22]],s.accent);
-      poly([[cx-d*0.31,mid+d*0.1],[cx-d*0.1,mid+d*0.24],[cx-d*0.21,mid+d*0.41],[cx-d*0.4,mid+d*0.31]],s.accent);
+      // serve/centre: the video and preview grow it in about its middle when the serve changes sides.
+      for (const points of [[[cx-d*0.18,mid+d*0.02],[cx+d*0.06,mid-d*0.43],[cx+d*0.49,mid-d*0.05],[cx+d*0.1,mid+d*0.22]],
+        [[cx-d*0.31,mid+d*0.1],[cx-d*0.1,mid+d*0.24],[cx-d*0.21,mid+d*0.41],[cx-d*0.4,mid+d*0.31]]]) {
+        items.push({type:'poly',points:points.map(p=>p.map(Math.round)),colour:s.accent,opacity:1,layer:1,serve:true,centre:[Math.round(cx),Math.round(mid)]});
+      }
     }
     if(finished) finished.forEach((g,i)=>{
       const gx=xGames+i*gameW;
