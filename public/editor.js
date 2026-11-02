@@ -175,8 +175,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         const label = u.game ? `Game ${u.game}${score}` : 'Whole match';
         if (u.id === match.id) return h('span', { class: 'current', 'aria-current': 'page' }, label);
         return u.linked ? h('a', { href: `#/m/${u.id}` }, label) : h('span', { class: 'off', title: 'No video linked' }, label);
-      })),
-      unitGame ? h('span', { class: 'muted small' }, 'this video is this game only') : null);
+      })));
   }
 
   if (!data.source.ready) {
