@@ -10,6 +10,7 @@ test('stageOf: tag, then render, then upload, then done', () => {
   assert.equal(stageOf({ rallies: [] }), 'tag');
   assert.equal(stageOf({ rallies: [r('a'), r(null)] }), 'tag');
   assert.equal(stageOf({ rallies: [r('a'), r('let')] }), 'render');
+  assert.equal(stageOf({ rallies: [r('a'), r('let')], serverSet: false }), 'tag'); // who served first not chosen yet
   assert.equal(stageOf({ rallies: [r('a')], outputPath: 'x.mp4' }), 'upload');
   assert.equal(stageOf({ rallies: [r('a')], outputPath: 'x.mp4' }, false), 'render'); // the file was deleted
   assert.equal(stageOf({ rallies: [], youtubeUrl: 'https://youtu.be/x' }), 'done');
@@ -30,6 +31,9 @@ test('overview sorts filmed matches by stage; search finds them by player or eve
   const ids = [add(['Amy Lee'], ['Cat Ho'], []), add(['Ben Ng'], ['Dee Wu'], tagged), add(['Eve Ma'], ['Fay Yu'], tagged, 'https://youtu.be/abc'), add(['Gil Oh'], ['Hal Ip'], tagged)];
   ids.slice(0, 3).forEach((id, i) => db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at, match_id) VALUES (?, 1, 'x', '2026-10-24T08:00:00Z', ?)`).run(`C:/v/${i}.mp4`, id));
   db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at) VALUES ('C:/v/free.mp4', 1, 'x', '2026-10-24T08:00:00Z')`).run();
+  // Ben Ng's rallies all have winners, but who served first isn't chosen: still to tag, until it is.
+  assert.deepEqual(overview(db).counts, { tag: 2, render: 0, upload: 0, done: 1 });
+  db.prepare('UPDATE matches SET server_set = 1 WHERE id = ?').run(ids[1]);
   const o = overview(db);
   assert.deepEqual(o.counts, { tag: 1, render: 1, upload: 0, done: 1 });
   assert.equal(o.unlinked, 1);

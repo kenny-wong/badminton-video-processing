@@ -114,6 +114,41 @@ test('setting the near end on one game’s video sets the other games’ (ends c
   }
 });
 
+test('who serves first must be chosen (games 2 and 3 know it from the result); until then the video is not tagged', async () => {
+  const app = { db: openDb(), port: 0 };
+  const server = createApp(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  app.port = server.address().port;
+  const base = `http://127.0.0.1:${app.port}`;
+  const call = async (path, method = 'GET', body) => (await fetch(base + path, { method, headers: { Origin: base }, body: body && JSON.stringify(body) })).json();
+  try {
+    saveTournament(app.db, fetched());
+    const m = app.db.prepare("SELECT id FROM matches WHERE draw = 'OS U15 - Group B'").get().id; // 19-21 21-15 12-21
+    app.db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at, duration) VALUES ('C:/v/1.mp4', 1, 'x', '2026-10-24T08:05:00Z', 600), ('C:/v/2.mp4', 1, 'x', '2026-10-24T08:20:00Z', 600)`).run();
+    await call(`/api/matches/${m}/games/1/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${m}/games/2/videos`, 'PUT', { videoIds: [2] });
+    const [g1, g2] = app.db.prepare('SELECT id FROM matches WHERE parent_id = ? ORDER BY game').all(m).map((r) => r.id);
+    const set = (id) => app.db.prepare('SELECT server_set, first_server FROM matches WHERE id = ?').get(id);
+    assert.deepEqual([set(g1).server_set, set(g2).server_set, set(g2).first_server], [null, 1, 'b']); // game 1: the toss; game 2: B won game 1
+    // Saving rallies (the editor's autosave) without a first server leaves it unchosen: not tagged.
+    await call(`/api/matches/${g1}`, 'PUT', { rallies: gameRallies('b', 19) });
+    let t = await call(`/api/tournaments/${app.db.prepare('SELECT tournament_id FROM matches WHERE id = ?').get(m).tournament_id}`);
+    let unit = t.matches.find((x) => x.id === m).units.find((u) => u.game === 1);
+    assert.deepEqual([unit.rallyCount, unit.tagged, unit.serverSet], [40, 40, false]);
+    await call(`/api/matches/${g1}`, 'PUT', { firstServer: 'a' });
+    assert.equal(set(g1).server_set, 1);
+    t = await call(`/api/tournaments/${app.db.prepare('SELECT tournament_id FROM matches WHERE id = ?').get(m).tournament_id}`);
+    unit = t.matches.find((x) => x.id === m).units.find((u) => u.game === 1);
+    assert.equal(unit.serverSet, true);
+    // Unlinking clears it with the rest of the tagging (it goes with the video's carried tagging).
+    await call(`/api/matches/${g1}/videos`, 'PUT', { videoIds: [] });
+    assert.equal(set(g1).server_set, null);
+    assert.equal(JSON.parse(app.db.prepare('SELECT carried_tagging FROM videos WHERE id = 1').get().carried_tagging).server_set, 1);
+  } finally {
+    server.close();
+  }
+});
+
 test('linking a video to one game gives that game its own row and status', async () => {
   const app = { db: openDb(), port: 0 };
   const server = createApp(app);

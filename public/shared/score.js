@@ -119,8 +119,11 @@ const gameWinnerOf = (g) => (Array.isArray(g) && g[0] !== g[1] ? (g[0] > g[1] ? 
  */
 export function defaultServer(game, games = []) {
   if (game < 2) return 'a';
-  return gameWinnerOf(Array.isArray(games) ? games[game - 2] : null) ?? (game === 2 ? 'b' : 'a');
+  return resultServer(game, games) ?? (game === 2 ? 'b' : 'a');
 }
+
+/** The first server the result settles (games 2 and 3: the winner of the game before), else null: it must be chosen. */
+export const resultServer = (game, games = []) => (game >= 2 ? gameWinnerOf(Array.isArray(games) ? games[game - 2] : null) : null);
 
 /** Replays a match's (or a game's) saved tagging. */
 export const replayMatch = (match, format) => replay(match.rallies, format, match.firstServer, startFor(match), { oneGame: (match.game ?? 0) > 0 });

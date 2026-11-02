@@ -49,6 +49,8 @@ test('tournament stats: per favourite and for all favourites; tournaments withou
   db.prepare("UPDATE matches SET rallies = ? WHERE id = ?").run(JSON.stringify([{ start: 1, end: 5, winner: 'a' }, { start: 9, end: 12 }]), m1);
   assert.equal(tournamentStats(db, favourites(db))[club].players[amy].taggedGames, 0);
   db.prepare("UPDATE matches SET rallies = ? WHERE id = ?").run(JSON.stringify([{ start: 1, end: 5, winner: 'a' }, { start: 9, end: 12, winner: 'let' }]), m1);
+  assert.equal(tournamentStats(db, favourites(db))[club].players[amy].taggedGames, 0); // who served first not chosen yet
+  db.prepare('UPDATE matches SET server_set = 1 WHERE id = ?').run(m1);
   assert.equal(tournamentStats(db, favourites(db))[club].players[amy].taggedGames, 2);
   assert.deepEqual([stats[club].players[ben].matches, stats[club].players[ben].filmedMatches], [1, 0]);
   assert.deepEqual([stats[club].mine.matches, stats[club].mine.filmedMatches, stats[club].mine.games], [2, 1, 3]);

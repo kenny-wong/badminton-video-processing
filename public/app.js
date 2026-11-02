@@ -616,7 +616,9 @@ async function renderTournament(id, notice = null, who = null) {
   const unitsOf = (m) => m.units.map((u) => ({ ...u, parent: m }));
   const hasVideo = (m) => m.videoIds.length > 0 || gamesLinked(m);
   const filmedUnits = (m) => m.videoIds.length ? [m] : m.units.filter((u) => u.videoIds.length);
-  const unitStage = (u) => u.youtubeUrl ? 'done' : u.outputPath ? 'upload' : u.rallyCount && u.tagged === u.rallyCount ? 'render' : 'tag';
+  // Tagged: every rally has a winner and who served first is chosen (serverSet false: not yet).
+  const isTagged = (u) => u.rallyCount > 0 && u.tagged === u.rallyCount && u.serverSet !== false;
+  const unitStage = (u) => u.youtubeUrl ? 'done' : u.outputPath ? 'upload' : isTagged(u) ? 'render' : 'tag';
 
   // A suggested video with its Link button.
   const suggestedCell = (u, s) => {
@@ -678,22 +680,24 @@ async function renderTournament(id, notice = null, who = null) {
     if (m.units && !m.videoIds.length && gamesLinked(m)) {
       const units = filmedUnits(m);
       const total = m.units.length;
-      const tagged = units.filter((u) => u.rallyCount && u.tagged === u.rallyCount).length;
+      const tagged = units.filter(isTagged).length;
       const rendered = units.filter((u) => u.outputPath).length;
       const checks = units.filter((u) => u.rallyCount && u.check && u.games?.length);
       const bad = checks.some((u) => !u.check.ok);
       const scoreOk = checks.length === total && !bad;
       return h('div', { class: 'row tags' },
-        tag(tagged > 0, tagged < total ? 'rallies part' : 'rallies', `${tagged}/${total} tagged games`, 'Games with every rally tagged'),
+        tag(tagged > 0, tagged < total ? 'rallies part' : 'rallies', `${tagged}/${total} tagged games`, 'Games with every rally tagged and who served first chosen'),
         tag(bad || scoreOk, bad ? 'score-bad' : scoreOk ? 'score-ok' : 'score', bad ? 'Score ≠' : scoreOk ? 'Score ✓' : 'Score', bad ? 'A game’s tagged score differs from the result' : 'Tagged game scores checked against the result'),
         tag(rendered > 0, 'render', `${rendered}/${total} rendered`, 'Rendered game videos'),
         youtubeTag(m, tag));
     }
     const allTagged = m.rallyCount > 0 && m.tagged === m.rallyCount;
+    const noServer = allTagged && m.serverSet === false; // every winner tagged, but who served first not chosen
     const checked = m.rallyCount > 0 && m.check && m.games?.length;
     return h('div', { class: 'row tags' },
-      tag(m.rallyCount > 0, m.rallyCount && !allTagged ? 'rallies part' : 'rallies', !m.rallyCount ? 'Rallies' : allTagged ? `${m.rallyCount} rallies` : `${m.tagged}/${m.rallyCount} rallies`,
-        !m.rallyCount ? 'No rallies yet' : allTagged ? 'Every rally has a winner' : `${m.rallyCount - m.tagged} rallies have no winner yet`),
+      tag(m.rallyCount > 0, m.rallyCount && (!allTagged || noServer) ? 'rallies part' : 'rallies',
+        !m.rallyCount ? 'Rallies' : noServer ? `${m.rallyCount} rallies · serve?` : allTagged ? `${m.rallyCount} rallies` : `${m.tagged}/${m.rallyCount} rallies`,
+        !m.rallyCount ? 'No rallies yet' : noServer ? 'Every rally has a winner; choose who served first in the editor (Scoring tab)' : allTagged ? 'Every rally has a winner' : `${m.rallyCount - m.tagged} rallies have no winner yet`),
       checked
         ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result'}`)
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
@@ -810,7 +814,7 @@ async function renderTournament(id, notice = null, who = null) {
   const NEXT = { unlinked: ['Needs a video'], tag: ['Needs tagging', 'to tag'], render: ['Ready to render', 'ready to render'], upload: ['Ready for YouTube', 'ready for YouTube'], todo: ['To do: tag, render or upload', 'to do'] };
   const doneSoFar = {
     filmed: () => true,
-    tagged: (u) => u.rallyCount > 0 && u.tagged === u.rallyCount,
+    tagged: (u) => isTagged(u),
     rendered: (u) => Boolean(u.outputPath),
     youtube: (u) => Boolean(u.youtubeUrl),
   };

@@ -203,6 +203,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let format = data.format;
   let formatChosen = data.formatChosen;
   let firstServer = match.firstServer;
+  // Chosen in this editor or known from the result (games 2 and 3); until then the video isn't tagged.
+  let serverChosen = match.serverSet !== false;
   let startScore = match.startScore;
   let matchStart = match.matchStart;
   let matchEnd = match.matchEnd;
@@ -884,7 +886,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   async function save() {
     try {
-      await api(`/api/matches/${id}`, { method: 'PUT', body: { rallies, format: formatChosen ? format : null, firstServer, startScore, matchStart, matchEnd, corners, nearAtStart } });
+      // The first server goes only once chosen: sending it is what marks it chosen.
+      await api(`/api/matches/${id}`, { method: 'PUT', body: { rallies, format: formatChosen ? format : null, firstServer: serverChosen ? firstServer : undefined, startScore, matchStart, matchEnd, corners, nearAtStart } });
       fill(saveState, 'Saved');
     } catch (err) {
       fill(saveState, h('span', { class: 'side-b' }, `Not saved: ${err.message}`));
@@ -1070,8 +1073,22 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       : `${who} won game ${unitGame - 1}, so ${who} should serve first in game ${unitGame} (the winner of a game serves first in the next).`;
     serverHint.classList.toggle('warn-text', firstServer !== lawServer);
   };
-  const serverSel = h('select', { 'aria-label': 'First server', onchange: (e) => { firstServer = e.target.value; showServerHint(); changed(); } },
-    h('option', { value: 'a', selected: firstServer === 'a' }, 'A serves first'), h('option', { value: 'b', selected: firstServer === 'b' }, 'B serves first'));
+  const serverSel = h('select', {
+    'aria-label': 'First server',
+    onchange: (e) => {
+      if (!e.target.value) return;
+      firstServer = e.target.value;
+      serverChosen = true;
+      serveRow?.classList.remove('needs-choice');
+      serveRow?.querySelector('.serve-needed')?.remove();
+      e.target.querySelector('option[value=""]')?.remove();
+      showServerHint();
+      changed();
+    },
+  },
+  serverChosen ? null : h('option', { value: '', selected: true }, 'Choose who serves first…'),
+  h('option', { value: 'a', selected: serverChosen && firstServer === 'a' }, 'A serves first'), h('option', { value: 'b', selected: serverChosen && firstServer === 'b' }, 'B serves first'));
+  let serveRow = null;
   showServerHint();
 
   // ---- the score when the video starts ----
@@ -1716,13 +1733,16 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     h('summary', { title: 'Click to show or hide' }, h('h4', {}, icon(iconName, 17), title)), body);
   // Compact rows: a short label, then its controls on the same line.
   const scoringRow = (label, title, ...body) => h('div', { class: 'scoring-row' }, h('span', { class: 'scoring-label', title: title || null }, label), body);
+  serveRow = scoringRow('Serve', `A = ${nameA}, B = ${nameB}`, serverSel, lawServer ? serverHint : null,
+    serverChosen ? null : h('span', { class: 'serve-needed' }, 'Needed before the video counts as tagged'));
+  if (!serverChosen) serveRow.classList.add('needs-choice');
   const panels = {
     rallies: h('div', {},
       strandedBox,
       card('Scoring', 'sliders',
         h('div', { class: 'scoring-compact' },
           scoringRow('Format', 'Setting: a game at the last point goes on to the cap shown', pointsSel, h('label', { class: 'row tight' }, settingBox, 'setting', capText), bestOfSel),
-          scoringRow('Serve', `A = ${nameA}, B = ${nameB}`, serverSel, lawServer ? serverHint : null),
+          serveRow,
           scoringRow('Starts', unitGame ? 'The score when this video starts' : 'For videos that start mid-match. “A serves first” then means A serves the first rally in the video.',
             startGame, h('span', { class: 'side-a' }, 'A'), startA, '–', startB, h('span', { class: 'side-b' }, 'B')),
           earlierRow, startMsg,

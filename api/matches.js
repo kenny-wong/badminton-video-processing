@@ -29,7 +29,7 @@ import { hdrPlayback, readSettings } from '../lib/settings.js';
 import { findTools } from '../lib/ffmpeg.js';
 import { findJob, jobView, startJob } from '../lib/jobs.js';
 import { describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
-import { cleanFormat, cleanRallies, cleanStart, defaultServer } from '../public/shared/score.js';
+import { cleanFormat, cleanRallies, cleanStart, defaultServer, resultServer } from '../public/shared/score.js';
 import { cleanCorners } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { findPeople, peopleFinder, readPeople, saveSwap } from '../lib/people.js';
@@ -109,6 +109,8 @@ export async function onRequestPut({ request, params, app }) {
   const rallies = body.rallies !== undefined ? cleanRallies(body.rallies) : match.rallies;
   const format = body.format === null ? null : body.format !== undefined ? cleanFormat(body.format) : match.format;
   const firstServer = body.firstServer === 'b' ? 'b' : body.firstServer === 'a' ? 'a' : match.firstServer;
+  // Sending A or B is choosing who served first; until then the video counts as not tagged.
+  const serverSet = body.firstServer === 'a' || body.firstServer === 'b' ? true : match.serverSet;
   let startScore = match.startScore;
   if (body.startScore !== undefined) {
     const wanted = match.game && body.startScore ? { games: match.games.slice(0, match.game - 1), points: body.startScore.points } : body.startScore;
@@ -147,9 +149,9 @@ export async function onRequestPut({ request, params, app }) {
       link = youtubeUrl(vid);
     }
   }
-  app.db.prepare(`UPDATE matches SET rallies = ?, format = ?, first_server = ?, start_score = ?, match_start = ?, match_end = ?,
+  app.db.prepare(`UPDATE matches SET rallies = ?, format = ?, first_server = ?, server_set = ?, start_score = ?, match_start = ?, match_end = ?,
       youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, board_style = ?, updated_at = ? WHERE id = ?`)
-    .run(JSON.stringify(rallies), format ? JSON.stringify(format) : null, firstServer, startScore ? JSON.stringify(startScore) : null,
+    .run(JSON.stringify(rallies), format ? JSON.stringify(format) : null, firstServer, serverSet ? 1 : null, startScore ? JSON.stringify(startScore) : null,
       matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, boardStyle ? JSON.stringify(boardStyle) : null, nowIso(), match.id);
   // The match's other game videos change ends with it.
   if (nearAtStart && nearAtStart !== match.nearAtStart) followEnds(app.db, { ...match, format, startScore, nearAtStart });
@@ -203,9 +205,9 @@ export function gameRow(db, parentId, game) {
   const existing = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game);
   if (existing) return existing.id;
   const games = JSON.parse(db.prepare('SELECT games FROM matches WHERE id = ?').get(parentId)?.games ?? '[]');
-  db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, first_server)
-    SELECT tournament_id, id, ?, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, ? FROM matches WHERE id = ? AND game = 0`)
-    .run(game, defaultServer(game, games), parentId);
+  db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, first_server, server_set)
+    SELECT tournament_id, id, ?, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, ?, ? FROM matches WHERE id = ? AND game = 0`)
+    .run(game, defaultServer(game, games), resultServer(game, games) ? 1 : null, parentId);
   const id = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game)?.id ?? null;
   if (id) endsFromOtherGames(db, id);
   return id;

@@ -644,6 +644,9 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .scoring-compact select, .scoring-compact input[type=number] { min-height: 28px; padding: 2px 6px; }
 .scoring-compact .hint { margin: 0; flex-basis: 100%; padding-left: calc(4.2em + 8px); }
 .scoring-compact > .row, .scoring-compact > .small:not(:empty) { padding-left: calc(4.2em + 8px); }
+/* Who served first, until chosen: the video doesn't count as tagged. */
+.scoring-row.needs-choice { background: var(--no-bg); box-shadow: 0 0 0 2px color-mix(in srgb, var(--no) 55%, transparent); border-radius: 6px; padding: 4px 6px; margin: -4px -6px; }
+.serve-needed { color: var(--no); font-size: var(--fs-xs); font-weight: 650; }
 .rallies tr { cursor: pointer; }
 .rallies tr.sel td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .rallies tr.untagged td:first-child { box-shadow: inset 3px 0 var(--untagged); }

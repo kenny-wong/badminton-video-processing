@@ -155,6 +155,7 @@ export async function getOne({ params, app }) {
       favourites: m.rallies.filter((r) => r.fav).length,
       rallyCount: m.rallies.length,
       tagged: m.rallies.filter((r) => r.winner).length,
+      serverSet: m.serverSet,
       tagGames: games,
       check: m.rallies.length ? checkResult(games, official) : null,
     };
