@@ -31,8 +31,19 @@ test('a title saved with surnames only gets the full names, when they fit', () =
 });
 
 test('the description has the match, result, chapters and links', () => {
-  const d = videoDescription({ tournament, match, games: [[21, 18]], chapterText: '0:00 Game 1', links: ['Draw: https://example.test'] });
-  assert.equal(d, 'Amy Lee / Ben Ng v Cat Ho / Dan Wu\nXD U15 - Group A · Round 1\nExample Junior Gold · 2026-10-24 · Example School - 3\nResult: 21-18\n\n0:00 Game 1\n\nDraw: https://example.test');
+  const d = videoDescription({ tournament, match, games: [[21, 18]], chapterText: '0:00 Game 1 – Rally 1 (0-0)', links: ['Draw: https://example.test'] });
+  assert.equal(d, 'Amy Lee / Ben Ng v Cat Ho / Dan Wu\nXD U15 - Group A · Round 1\nExample Junior Gold · 2026-10-24 · Example School - 3\nResult: 21-18\n\nDraw: https://example.test\n\nJump to a rally:\n0:00 Game 1 – Rally 1 (0-0)');
+});
+
+test('a long chapter list gives way by whole lines, the links kept', () => {
+  const chapterText = Array.from({ length: 400 }, (_, i) => `${i}:00 Rally ${i + 1} (0-0)`).join('\n');
+  const d = videoDescription({ tournament, match, games: [[21, 18]], chapterText, links: ['Draw: https://example.test'] });
+  assert.ok(d.length <= DESCRIPTION_MAX);
+  assert.ok(d.includes('Draw: https://example.test'));
+  assert.match(d, /\(0-0\)\n…$/);
+  const commented = withComment(d, 'Well played!');
+  assert.ok(commented.length <= DESCRIPTION_MAX);
+  assert.match(commented, /\(0-0\)\n…\n\nWell played!$/);
 });
 
 test('file names are safe for Windows and filed by year and tournament', () => {

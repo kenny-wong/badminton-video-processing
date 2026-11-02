@@ -7,7 +7,7 @@ A Windows desktop app for phone videos of badminton matches. It:
 - lets you **tag rallies** from the keyboard, or **finds them by the sound of shuttle hits** so you only say who won each one;
 - keeps the score by the rules (21 / 15 / 11 points, setting, best of 3 or one game) and checks it against the official result;
 - **renders** the match with a **scoreboard** burned in and the **gaps between rallies cut out**, using the NVIDIA encoder when there is one;
-- names the result for **YouTube**: title, description with chapters, and a folder per year and tournament.
+- names the result for **YouTube**: title, description with a chapter for every rally (★ on highlighted ones) to jump to, and a folder per year and tournament.
 
 Everything runs on your PC. Video files are never moved or changed.
 

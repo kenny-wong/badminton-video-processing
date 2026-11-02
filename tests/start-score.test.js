@@ -70,8 +70,8 @@ test('plan keeps only the marked match', () => {
 test('chapters count games from where the video starts', () => {
   const rallies = [{ start: 20, end: 30, winner: 'a' }, { start: 40, end: 50, winner: 'a' }];
   const { steps } = replay(rallies, undefined, 'a', { games: [[18, 21]], points: [20, 5] });
-  const list = chapters(rallies, steps, plan(rallies, 100, { pre: 2, post: 2 }), 11, 2);
-  assert.deepEqual(list.map((c) => c.title), ['Game 2', 'Game 3']);
+  const list = chapters(rallies, steps, plan(rallies, 100, { pre: 2, post: 2 }));
+  assert.deepEqual(list.map((c) => c.title), ['Game 2 – Rally 26 (20-5)', 'Game 3 – Rally 1 (0-0)']);
 });
 
 test('YouTube links in every common shape give the video id', () => {

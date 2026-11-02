@@ -22,19 +22,58 @@ test('plan keeps each rally with some lead-in and run-out, joining close ones', 
   assert.deepEqual(plan([], 50), [{ start: 0, end: 50, outStart: 0 }]);
 });
 
-test('chapters mark each game and its interval, at their times in the result', () => {
+test('chapters mark every rally with the score as it starts, at their times in the result', () => {
   // Game 1 to A 21-0, then B wins the first rally of game 2.
   const rallies = Array.from({ length: 22 }, (_, i) => ({ start: i * 20 + 5, end: i * 20 + 15, winner: i < 21 ? 'a' : 'b' }));
+  rallies[4].fav = true;
   const { steps } = replay(rallies);
   const parts = plan(rallies, 500, { pre: 2, post: 2, mergeGap: 1 });
   const list = chapters(rallies, steps, parts);
-  assert.deepEqual(list.map((c) => c.title), ['Game 1', 'Game 1 – from 11', 'Game 2']);
+  assert.equal(list.length, 22);
+  assert.deepEqual(list.slice(0, 2).map((c) => c.title), ['Game 1 – Rally 1 (0-0)', 'Rally 2 (1-0)']);
+  assert.equal(list[4].title, 'Rally 5 (4-0) ★ Highlight');
+  assert.equal(list[20].title, 'Rally 21 (20-0)');
+  assert.equal(list[21].title, 'Game 2 – Rally 1 (0-0)');
   assert.equal(list[0].at, 0);
-  assert.equal(list[1].at, Math.floor(toOutput(rallies[11].start - 1, parts)));
-  assert.equal(chapterLines(list, clock).split('\n')[0], '0:00 Game 1');
+  assert.equal(list[11].at, Math.floor(toOutput(rallies[11].start - 1, parts)));
+  assert.equal(chapterLines(list, clock).split('\n')[0], '0:00 Game 1 – Rally 1 (0-0)');
   const meta = chapterMetadata(list, 300);
   assert.match(meta, /^;FFMETADATA1\n\[CHAPTER\]\nTIMEBASE=1\/1000\nSTART=0\n/);
-  assert.match(meta, /END=300000\ntitle=Game 2\n$/);
+  assert.match(meta, /END=300000\ntitle=Game 2 – Rally 1 \(0-0\)\n$/);
+});
+
+test('rally chapters stay 10 s long: close rallies share one, a favourite or a new game keeps its own', () => {
+  // Rallies 6 s apart in the result: 1 and 2 share, 3 too short after them, and so on.
+  const rallies = Array.from({ length: 6 }, (_, i) => ({ start: i * 6 + 2, end: i * 6 + 6, winner: 'a' }));
+  const parts = [{ start: 0, end: 40, outStart: 0 }];
+  const { steps } = replay(rallies);
+  assert.deepEqual(chapters(rallies, steps, parts, { total: 40 }).map((c) => [c.at, c.title]), [
+    [0, 'Game 1 – Rallies 1–2 (0-0)'], [13, 'Rallies 3–4 (2-0)'], [25, 'Rallies 5–6 (4-0)'],
+  ]);
+  // A favourite takes its own chapter: rally 2 folds into rally 1's, and rally 4 (too close to 3) into 3's.
+  rallies[2].fav = true;
+  assert.deepEqual(chapters(rallies, steps, parts, { total: 40 }).map((c) => [c.at, c.title]), [
+    [0, 'Game 1 – Rallies 1–2 (0-0)'], [13, 'Rallies 3–4 (2-0) ★ Highlight: rally 3'], [25, 'Rallies 5–6 (4-0)'],
+  ]);
+  rallies[3].fav = true;
+  assert.deepEqual(chapters(rallies, steps, parts, { total: 40 }).map((c) => c.title),
+    ['Game 1 – Rallies 1–2 (0-0)', 'Rallies 3–4 (2-0) ★ Highlight: rallies 3, 4', 'Rallies 5–6 (4-0)']);
+  // The last chapter folds into the one before when the video ends within 10 s of it.
+  assert.deepEqual(chapters(rallies, steps, parts, { total: 30 }).map((c) => c.title),
+    ['Game 1 – Rallies 1–2 (0-0)', 'Rallies 3–6 (2-0) ★ Highlight: rallies 3, 4']);
+  // A favourite right after a plain chapter takes over: the plain one folds into the chapter before it.
+  const plain = Array.from({ length: 4 }, (_, i) => ({ start: [2, 14, 20, 32][i], end: [8, 18, 24, 36][i], winner: 'a', fav: i === 2 }));
+  assert.deepEqual(chapters(plain, replay(plain).steps, parts, { total: 50 }).map((c) => [c.at, c.title]), [
+    [0, 'Game 1 – Rallies 1–2 (0-0)'], [19, 'Rally 3 (2-0) ★ Highlight'], [31, 'Rally 4 (3-0)'],
+  ]);
+});
+
+test('the highlights video has a chapter per favourite rally, without the star', () => {
+  const rallies = Array.from({ length: 6 }, (_, i) => ({ start: i * 30 + 5, end: i * 30 + 15, winner: 'b', fav: i % 2 === 0 }));
+  const favs = rallies.filter((r) => r.fav);
+  const parts = plan(favs, 200, { pre: 2, post: 2, mergeGap: 0 });
+  const list = chapters(rallies, replay(rallies).steps, parts, { highlights: true });
+  assert.deepEqual(list.map((c) => [c.at, c.title]), [[0, 'Game 1 – Rally 1 (0-0)'], [15, 'Rally 3 (0-2)'], [29, 'Rally 5 (0-4)']]);
 });
 
 test('partArgs seeks, shifts time for the scoreboard and encodes every part alike', () => {
