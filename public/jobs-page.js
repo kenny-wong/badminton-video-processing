@@ -7,6 +7,7 @@ import { h, fill } from './dom.js';
 import { api } from './api.js';
 import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
+import { goBack } from './nav.js';
 
 const STATUS = { running: ['Running', 'warn'], queued: ['Waiting', ''], done: ['Done', 'ok'], failed: ['Failed', 'bad'], stopped: ['Stopped', ''] };
 const KIND = { render: 'Render', track: 'Shuttle tracking', analyse: 'Find rallies', scan: 'Scan folders', reel: 'Highlight reel', clip: 'Clip', people: 'Find players', merge: 'Merge videos', split: 'Split a video' };
@@ -66,7 +67,9 @@ export async function renderJobs(main) {
 
   fill(main,
     h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Jobs'), h('div', { class: 'sub' }, 'Background work since the app started. Renders and shuttle tracking take turns on the graphics card.')),
-      h('div', { class: 'row' }, h('button', { onclick: () => api('/api/log/open', { method: 'POST' }).catch(() => {}) }, icon('folder', 16), 'App log'))),
+      h('div', { class: 'row' }, h('button', { onclick: () => api('/api/log/open', { method: 'POST' }).catch(() => {}) }, icon('folder', 16), 'App log'),
+        // Back to the page the Jobs page was opened from (the Tournaments page when it was opened first).
+        h('button', { title: 'Close the Jobs page and go back to the page before', onclick: () => goBack('#/') }, icon('close', 16), 'Close'))),
     table, logBox);
   await draw();
   return () => clearTimeout(timer);
