@@ -224,8 +224,13 @@ export function parseGames(text) {
   return games.every(Boolean) ? games : null;
 }
 
-/** Seconds between a rally's end and the next one's start, when only the next one's end is tagged (Settings: rallyGap). */
-export const RALLY_GAP = 3;
+/**
+ * Seconds between a rally's end and the next one's start, when only the next one's end is tagged (Settings:
+ * rallyGap). On the user's tagging (42 gaps with S-marked starts, 2026-11-02) a serve came a median 8.1 s
+ * after the last rally ended (a tenth within 5.2 s); 5 s puts the start a little early, so with the cut's
+ * 2.5 s lead-in nearly every serve (41 of 42) is kept in highlights and clips.
+ */
+export const RALLY_GAP = 5;
 
 /**
  * Where a rally tagged with only its end (A or B pressed without S) began:

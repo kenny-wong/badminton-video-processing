@@ -5,7 +5,7 @@
 import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
-import { assumedStart, boardAt, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, replay, startFor } from './shared/score.js';
+import { assumedStart, boardAt, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
@@ -143,7 +143,7 @@ const KEYS = [
   ['?', 'this list of keys'],
 ];
 /** The keys as shown, with the gap from Settings filled in. */
-const keyList = (gap = 3) => KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t.replace('the Settings gap', `${gap} s`)));
+const keyList = (gap = RALLY_GAP) => KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t.replace('the Settings gap', `${gap} s`)));
 
 export async function renderEditor(main, id, { runJob, errorNotice, progressBar, canGoBack = false }) {
   let data = await api(`/api/matches/${id}`);
@@ -1660,7 +1660,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
           setWinner(sel, w, { favourite });
         } else {
           // Inside (or just after) a rally without a winner: say who won it. Otherwise a new
-          // rally ending now, taken to have started the Settings gap (rallyGap, 3 s by default) after the one before.
+          // rally ending now, taken to have started the Settings gap (rallyGap, 5 s by default) after the one before.
           const t = now();
           const i = rallies.findIndex((r) => t >= r.start && t <= r.end + 1.5);
           if (i >= 0) setWinner(i, w, { favourite });

@@ -37,24 +37,24 @@ test('parseGames reads "21-18 15-21" and "21-18, 15-21"', () => {
   assert.equal(parseGames('21 to 18'), null);
 });
 
-test('a rally tagged without S starts 3 s after the last one ended', () => {
+test('a rally tagged without S starts 5 s after the last one ended', () => {
   const rallies = [{ start: 10, end: 20 }, { start: 40, end: 52 }];
-  assert.equal(assumedStart(rallies, 70), 55);
-  assert.equal(assumedStart(rallies, 30), 23);
+  assert.equal(assumedStart(rallies, 70), 57);
+  assert.equal(assumedStart(rallies, 30), 25);
   assert.equal(assumedStart(rallies, 54), 53); // never less than 1 s long
   assert.equal(assumedStart([], 30), 20); // nothing before: 10 s back
   assert.equal(assumedStart([], 30, { matchStart: 12 }), 12); // or from the match start
   assert.equal(assumedStart([], 4), 0);
 });
 
-test('the gap before a rally tagged without S is a setting: 3 s unless changed, 0 to 30 s', () => {
+test('the gap before a rally tagged without S is a setting: 5 s unless changed, 0 to 30 s', () => {
   const rallies = [{ start: 10, end: 20 }, { start: 40, end: 52 }];
-  assert.equal(RALLY_GAP, 3);
+  assert.equal(RALLY_GAP, 5);
   assert.equal(assumedStart(rallies, 70, { gap: 6 }), 58);
   assert.equal(assumedStart(rallies, 70, { gap: 0 }), 52);
-  assert.equal(cleanSettings({}).rallyGap, 3);
+  assert.equal(cleanSettings({}).rallyGap, 5);
   assert.equal(cleanSettings({ rallyGap: 4.5 }).rallyGap, 4.5);
-  assert.equal(cleanSettings({ rallyGap: 31 }).rallyGap, 3); // out of range: kept as it was
+  assert.equal(cleanSettings({ rallyGap: 31 }).rallyGap, 5); // out of range: kept as it was
   assert.equal(cleanSettings({ rallyGap: 'soon' }, { ...cleanSettings({}), rallyGap: 5 }).rallyGap, 5);
 });
 
