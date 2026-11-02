@@ -406,7 +406,8 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
 .video-file { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .video-file > span { overflow: hidden; text-overflow: ellipsis; }
 .video-actions { gap: 8px; }
-.video-actions .unlink-video { margin-left: auto; color: var(--muted); padding-left: 5px; padding-right: 5px; }
+.video-actions .video-buttons { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.video-actions .unlink-video { color: var(--muted); padding-left: 5px; padding-right: 5px; }
 .video-suggestion { padding: 10px; background: var(--warn-bg); border-radius: var(--radius-sm); }
 .video-suggestion button { align-self: flex-start; width: fit-content; }
 .game-video-summary { display: flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -723,6 +724,7 @@ button.fav-star.on { color: var(--focus); }
 .legend i.s-mixed { background: var(--accent); }
 .rating-chip { display: inline-block; margin-left: 6px; font-size: 0.7rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .pill.upset { background: var(--gold); color: #3d2f00; }
+.pill.highlight { background: var(--gold); color: #3d2f00; }
 .chance { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .chance .bar { height: 10px; border-radius: 5px; background: var(--side-b); overflow: hidden; }
 .chance .bar span { display: block; height: 100%; background: var(--side-a); }

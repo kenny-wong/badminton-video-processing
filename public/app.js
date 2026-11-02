@@ -542,10 +542,12 @@ async function renderTournament(id, notice = null, who = null) {
     const v = byId.get(u.videoIds[0]);
     return h('div', { class: 'video-link stack' },
       v ? h('div', { class: 'video-file small', title: v.name }, icon('film', 14), h('span', {}, v.name)) : null,
+      // Open editor and Unlink side by side at the right: both act on this video.
       h('div', { class: 'row video-actions' },
-        h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
         v ? h('span', { class: 'small muted' }, clock(v.duration ?? 0)) : null,
-        h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')),
+        h('span', { class: 'video-buttons' },
+          h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
+          h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink'))),
       nextStep(u));
   };
 
@@ -690,7 +692,7 @@ async function renderTournament(id, notice = null, who = null) {
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
       tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
       youtubeTag(m, tag),
-      m.favourites ? h('span', { class: 'pill', title: 'Favourite rallies' }, `★ ${m.favourites}`) : null);
+      m.favourites ? h('span', { class: 'pill highlight', title: 'Favourite (★) rallies: they make the highlights video and reels' }, `★ ${m.favourites} Highlight${m.favourites === 1 ? '' : 's'}`) : null);
   };
 
   // badminfo's chance before the match, each side's with its names.
