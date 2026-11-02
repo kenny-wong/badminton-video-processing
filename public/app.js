@@ -558,32 +558,59 @@ async function renderTournament(id, notice = null, who = null) {
             h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')))));
   };
 
-  // ---- each video's next step, beside it: Render (the usual render job, Settings' options) or Upload ----
-  // (tagging is done in the editor: Open editor). A render started here, or still waiting or running when
-  // the page opens, shows its progress with Stop; the button stays off until it ends.
+  // ---- each video's next steps, one row each with its progress beside it: Render (once every rally has a
+  // winner and who served first is chosen, until it's rendered) and Upload (until it has a YouTube link: the
+  // rendered video when there is one, else the original as it is), straight from here with the choices last
+  // made in a YouTube box. They can run at once (renders and uploads take turns in their own queues); one
+  // started here, or still waiting or running when the page opens, shows its progress with Stop.
   const renderJobs = new Map(); // unit id -> its render job while it waits or runs
+  const uploadJobs = new Map(); // unit id -> its upload job while it waits or runs
+  const percent = (job) => Math.round((job.progress ?? 0) * 100);
+  const progressNote = (job, doing) => h('span', { class: 'step-progress' },
+    job.status === 'queued' ? h('span', { class: 'muted' }, 'Waiting for the jobs before it')
+      : [h('span', { class: 'mini-bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${percent(job)}%` } })), h('span', { class: 'muted' }, `${doing} ${percent(job)}%`)]);
   const renderControl = (uid) => {
     const job = renderJobs.get(uid);
-    return h('div', { class: 'row tight small next-step', 'data-render': uid },
+    return h('div', { class: 'row tight small step-row', 'data-render': uid },
       job
-        ? [h('button', { class: 'small danger', title: 'Stop this render', onclick: () => stopRender(uid) }, icon('stop', 13), 'Stop render'),
-          h('span', { class: 'muted' }, job.status === 'queued' ? 'Waiting for the jobs before it' : `Rendering ${Math.round((job.progress ?? 0) * 100)}%`)]
+        ? [h('button', { class: 'small danger', title: 'Stop this render', onclick: () => stopJob(uid, renderJobs, 'Stop this render? What it has made so far is thrown away.') }, icon('stop', 13), 'Stop render'), progressNote(job, 'Rendering')]
         : h('button', { class: 'small', title: 'Render with the options in Settings (the editor’s Export tab has more)', onclick: () => startRender(uid) }, icon('export', 13), 'Render'));
   };
-  const showRender = (uid) => document.querySelectorAll(`[data-render="${uid}"]`).forEach((el) => el.replaceWith(renderControl(uid)));
-  const followRender = async (uid, job) => {
-    renderJobs.set(uid, job);
-    showRender(uid);
+  const uploadControl = (u) => {
+    const job = uploadJobs.get(u.id);
+    const rendered = Boolean(u.outputPath);
+    return h('div', { class: 'row tight small step-row', 'data-upload': u.id },
+      job
+        ? [h('button', { class: 'small danger', title: 'Stop this upload', onclick: () => stopJob(u.id, uploadJobs, 'Stop this upload? YouTube gets nothing; you can upload again later.') }, icon('stop', 13), 'Stop upload'), progressNote(job, 'Uploading')]
+        : h('button', {
+          class: 'small', onclick: () => startUpload(u),
+          title: rendered ? 'Upload the rendered video to YouTube, with the privacy and playlist last chosen in a YouTube box' : 'Upload the original video, as it is, to YouTube (not rendered yet), with the privacy and playlist last chosen in a YouTube box',
+        }, icon('youtube', 13), rendered ? 'Upload (rendered)' : 'Upload (original)'));
+  };
+  const unitById = (uid) => matches.flatMap((m) => [m, ...m.units]).find((x) => x.id === uid);
+  const show = (uid) => {
+    document.querySelectorAll(`[data-render="${uid}"]`).forEach((el) => el.replaceWith(renderControl(uid)));
+    const u = unitById(uid);
+    if (u) document.querySelectorAll(`[data-upload="${uid}"]`).forEach((el) => el.replaceWith(uploadControl(u)));
+  };
+  const follow = async (uid, job, jobsOf, done) => {
+    jobsOf.set(uid, job);
+    show(uid);
     try {
-      await waitJob(job, (j) => { renderJobs.set(uid, j); if (table.isConnected) showRender(uid); });
-      if (table.isConnected) renderTournament(id, h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'));
+      const finished = await waitJob(job, (j) => { jobsOf.set(uid, j); if (table.isConnected) show(uid); });
+      jobsOf.delete(uid);
+      if (table.isConnected) renderTournament(id, done(finished));
     } catch (err) {
-      renderJobs.delete(uid);
+      jobsOf.delete(uid);
       if (!table.isConnected) return;
-      showRender(uid);
+      show(uid);
       if (err.code !== 'stopped') fill(msg, errorNotice(err));
     }
   };
+  const followRender = (uid, job) => follow(uid, job, renderJobs, () => h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'));
+  // waitJob gives the job's result: the upload's { url, locked, … }.
+  const followUpload = (uid, job) => follow(uid, job, uploadJobs, (r) => h('div', { class: 'notice ok' }, 'Uploaded to YouTube',
+    r?.url ? [': ', h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.url)] : '', r?.locked ? ' (YouTube keeps it private for now)' : '', '.'));
   const startRender = async (uid) => {
     try {
       followRender(uid, await api(`/api/matches/${uid}/render`, { method: 'POST', body: {} }));
@@ -591,24 +618,26 @@ async function renderTournament(id, notice = null, who = null) {
       fill(msg, errorNotice(err));
     }
   };
-  const stopRender = async (uid) => {
-    const job = renderJobs.get(uid);
-    if (!job || !confirm('Stop this render? What it has made so far is thrown away.')) return;
+  const startUpload = async (u) => {
+    const prefs = readUploadPrefs();
+    const file = u.outputPath ? 'video' : 'original';
+    if (!confirm(`Upload the ${file === 'video' ? 'rendered video' : 'original video (not rendered)'} of ${unitName(u)} to YouTube as ${prefs.privacy}${prefs.playlist ? ', into the tournament’s playlist' : ''}?`)) return;
+    try {
+      followUpload(u.id, await api(`/api/matches/${u.id}/youtube`, { method: 'POST', body: { file, privacy: prefs.privacy, playlist: prefs.playlist } }));
+    } catch (err) {
+      fill(msg, err.code === 'signin' ? h('div', { class: 'notice warn' }, 'Sign in to YouTube first: open any video’s editor, Export tab, YouTube box.') : errorNotice(err));
+    }
+  };
+  const stopJob = async (uid, jobsOf, question) => {
+    const job = jobsOf.get(uid);
+    if (!job || !confirm(question)) return;
     await api(`/api/jobs/${job.id}/stop`, { method: 'POST' }).catch((err) => fill(msg, errorNotice(err)));
   };
-  // Upload: the video's own YouTube box, on the editor's Export tab.
-  const toExport = () => {
-    try {
-      localStorage.setItem('badminton-video:editor-tab:v1', 'export');
-    } catch { /* storage blocked: the editor opens on its usual tab */ }
-  };
-  // Render once every rally has a winner (no score, nothing to render) until it's rendered; Upload until it
-  // has a YouTube link (the original can go as it is; replacing one is in the editor's YouTube box).
-  const uploadLink = (u) => h('a', { class: 'btn small', href: `#/m/${u.id}`, onclick: toExport, title: 'Opens this video’s YouTube box (the editor’s Export tab): upload the rendered video, or the original as it is' }, icon('youtube', 13), 'Upload');
   const nextStep = (u) => {
     const render = renderJobs.has(u.id) || unitStage(u) === 'render';
-    if (!render && u.youtubeUrl) return null;
-    return h('div', { class: 'row tight small next-step' }, render ? renderControl(u.id) : null, u.youtubeUrl ? null : uploadLink(u));
+    const upload = uploadJobs.has(u.id) || !u.youtubeUrl;
+    if (!render && !upload) return null;
+    return h('div', { class: 'next-step' }, render ? renderControl(u.id) : null, upload ? uploadControl(u) : null);
   };
 
   const perGame = (m) => m.units.length >= 2 || m.units.some((u) => u.videoIds.length);
@@ -1068,12 +1097,14 @@ async function renderTournament(id, notice = null, who = null) {
     tournamentReturn = { id: String(id), anchor: at?.dataset.anchor ?? null, top: at ? at.getBoundingClientRect().top : 0, ratio: scrollY / Math.max(1, document.documentElement.scrollHeight) };
   }, true);
 
-  // Renders of this tournament's videos still waiting or running (from the editor, Render all or this page) show here too.
+  // Renders and uploads of this tournament's videos still waiting or running (from the editor, Render all, Upload all or this page) show here too.
   const unitIds = new Set(matches.flatMap((m) => [m.id, ...m.units.map((u) => u.id)]).filter(Boolean));
   api('/api/jobs').then(({ jobs }) => {
     for (const j of jobs) {
       const uid = Number(j.key.split(':')[1]);
-      if (j.kind === 'render' && unitIds.has(uid) && (j.status === 'queued' || j.status === 'running') && !renderJobs.has(uid)) followRender(uid, j);
+      const live = unitIds.has(uid) && (j.status === 'queued' || j.status === 'running');
+      if (live && j.kind === 'render' && !renderJobs.has(uid)) followRender(uid, j);
+      if (live && j.kind === 'upload' && !uploadJobs.has(uid)) followUpload(uid, j);
     }
   }).catch(() => { /* the page works without it */ });
 
