@@ -134,6 +134,27 @@ export function serviceCourt({ points, server }) {
   return own % 2 === 0 ? 'right' : 'left';
 }
 
+/**
+ * What the scoreboard shows after a rally (a replay step): its score after,
+ * except once the match is over (or a game's own video's game): then the last
+ * game's final points stay up, not the next game's 0-0, and nobody serves.
+ */
+export function shownAfter(step) {
+  const after = step.after;
+  if (step.event !== 'match' || !after.games.length) return after;
+  return { ...after, games: after.games.slice(0, -1), points: after.games.at(-1), server: null, final: true };
+}
+
+/** What the scoreboard shows at `time` seconds: the score after the last rally that ended by then (see shownAfter). */
+export function boardAt(rallies, steps, time, initial = null) {
+  let state = initial ?? steps[0]?.before ?? { games: [], points: [0, 0], won: [0, 0], server: 'a' };
+  for (let i = 0; i < rallies.length; i++) {
+    if (rallies[i].end <= time) state = steps[i]?.counted ? shownAfter(steps[i]) : state;
+    else break;
+  }
+  return state;
+}
+
 /** The score shown at `time` seconds: the state after the last rally that ended by then. */
 export function scoreAt(rallies, steps, time, initial = null) {
   let state = initial ?? steps[0]?.before ?? { games: [], points: [0, 0], won: [0, 0], server: 'a' };

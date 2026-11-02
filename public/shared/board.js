@@ -90,6 +90,7 @@ export function resolveBoard(settings, override = null) {
  * @returns {[string|null, string|null]}
  */
 export function boardFlags(state, format) {
+  if (state.final) return [null, null];
   const need = format?.bestOf === 1 ? 1 : 2;
   return [0, 1].map((k) => {
     const points = [...state.points];
@@ -126,7 +127,8 @@ export function bannerText(event, names, format) {
  * The scoreboard as boxes and texts, in the picture's pixels:
  *   { type: 'rect', x, y, w, h, colour, opacity, layer }
  *   { type: 'poly', points: [[x, y], …], colour, opacity, layer } (the shuttle)
- *   { type: 'text', x, y (middle), text, size, colour, opacity, bold, anchor: 'start'|'middle', shadow, stretch (% width), layer }
+ *   { type: 'text', x, y (middle), text, size, colour, opacity, bold, anchor: 'start'|'middle', shadow, stretch (% width), layer,
+ *     key (the same place on the board from one moment to the next), flip (a number that flips over when it changes) }
  * Rows are A then B. Flags sit beside the rows on the side away from the
  * picture's edge; the banner sits below the board (above it in a bottom corner).
  */
@@ -136,8 +138,8 @@ export function boardLayout({ width, height, names, state, style, flags = [null,
   const broadcast = s.layout === 'broadcast';
   const stretch = broadcast ? 84 : 100; // narrow lettering, as on TV
   const rect = (x, y, w, h, c, opacity = 1, layer = 1) => items.push({ type: 'rect', x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), colour: c, opacity, layer });
-  const text = (x, y, t, size, c, { opacity = 1, bold = true, anchor = 'start', shadow = false } = {}) =>
-    items.push({ type: 'text', x: Math.round(x), y: Math.round(y), text: String(t), size: Math.round(size), colour: c, opacity, bold, anchor, shadow: shadow && !broadcast, stretch, layer: 2 });
+  const text = (x, y, t, size, c, { opacity = 1, bold = true, anchor = 'start', shadow = false, key = null, flip = false } = {}) =>
+    items.push({ type: 'text', x: Math.round(x), y: Math.round(y), text: String(t), size: Math.round(size), colour: c, opacity, bold, anchor, shadow: shadow && !broadcast, stretch, layer: 2, key, flip });
   const k = ((FONTS[s.font] ?? 0.62) * stretch) / 100;
   const fs = Math.max(14, Math.round((height / 24) * (s.scale / 100)));
   const pad = Math.round(fs * 0.45);
@@ -188,12 +190,12 @@ export function boardLayout({ width, height, names, state, style, flags = [null,
       finished.forEach((g, i) => {
         const won = g[row] > g[1 - row];
         text(x0 + boxW - cellW - colsW + gameW * (i + 0.5), yMid, g[row], fs * 0.9, s.text,
-          broadcast ? { anchor: 'middle' } : { opacity: won ? 1 : 0.55, bold: won, anchor: 'middle', shadow: true });
+          { anchor: 'middle', key: `game${i}-${row}`, flip: true, ...(broadcast ? {} : { opacity: won ? 1 : 0.55, bold: won, shadow: true }) });
       });
     } else {
-      text(x0 + boxW - cellW * 1.5, yMid, state.won[row], fs, s.text, { anchor: 'middle', shadow: true });
+      text(x0 + boxW - cellW * 1.5, yMid, state.won[row], fs, s.text, { anchor: 'middle', shadow: true, key: `won${row}`, flip: true });
     }
-    text(xPoints, yMid, state.points[row], fs, s.pointsText, { anchor: 'middle' });
+    text(xPoints, yMid, state.points[row], fs, s.pointsText, { anchor: 'middle', key: `points${row}`, flip: true });
     if (s.flags && flags[row]) {
       const size = fs * 0.55;
       const w = flags[row].length * size * k + pad * 1.5;
@@ -213,6 +215,15 @@ export function boardLayout({ width, height, names, state, style, flags = [null,
     text(x + w / 2, y + h / 2, banner, size, s.pointsText, { anchor: 'middle' });
   }
   return { items, box: { x: x0, y: y0, w: boxW, h: boxH }, fontSize: fs };
+}
+
+/**
+ * The numbers that changed between two layouts of the board (boardLayout items):
+ * the keys of flipping texts whose text differs from the same place before.
+ */
+export function changedNumbers(before, after) {
+  const was = new Map(before.filter((it) => it.type === 'text' && it.flip).map((it) => [it.key, it.text]));
+  return new Set(after.filter((it) => it.type === 'text' && it.flip && was.has(it.key) && was.get(it.key) !== it.text).map((it) => it.key));
 }
 
 /**

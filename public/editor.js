@@ -5,7 +5,7 @@
 import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
-import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, replay, scoreAt, startFor } from './shared/score.js';
+import { assumedStart, boardAt, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, replay, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
@@ -203,6 +203,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let scoreboardChoice = readShow(scoreboardKey, null);
   let showScoreboard = false;
   let lastVideoBoard = '';
+  let shownMoment = null; // the moment the board over the video shows, to flip the numbers that change
   let corners = match.corners;
   let nearAtStart = match.nearAtStart;
   let shuttle = []; // tracked sightings [t, x, y], once loaded
@@ -795,7 +796,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   let lastBoard = '';
   function scoreboardMoment() {
-    const s = scoreAt(rallies, steps, video.currentTime, initial);
+    const s = boardAt(rallies, steps, video.currentTime, initial);
     const i = rallies.findLastIndex((r, j) => r.end <= video.currentTime && steps[j]?.counted);
     const st = steps[i];
     const banner = st?.event && video.currentTime - rallies[i].end < 6 ? bannerText({ kind: st.event, winner: rallies[i].winner, before: st.before, after: st.after }, [nameA, nameB], format) : '';
@@ -813,8 +814,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const moment = scoreboardMoment();
     const key = JSON.stringify(moment);
     if (key === lastVideoBoard) return;
+    // Numbers flip when the score moves on while playing, not when jumping about the video.
+    const flip = !video.paused && !video.seeking && shownMoment;
     lastVideoBoard = key;
-    fill(videoBoard, boardPreview({ ...moment, transparent: true }));
+    fill(videoBoard, boardPreview({ ...moment, transparent: true, before: flip ? shownMoment : null }));
+    shownMoment = moment;
   }
 
   function showTime() {
@@ -826,7 +830,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (view.to !== null && !video.paused && (t > viewTo() || t < view.from)) setView(t - span() * 0.05, t + span() * 0.95);
     playhead.style.left = `${pct(t)}%`;
     playhead.hidden = t < view.from || t > viewTo();
-    const s = scoreAt(rallies, steps, t, initial);
+    const s = boardAt(rallies, steps, t, initial);
     const key = JSON.stringify(s);
     if (key !== lastBoard) {
       lastBoard = key;

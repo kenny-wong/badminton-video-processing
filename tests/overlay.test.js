@@ -39,6 +39,33 @@ test('scoreSpans carries the interval and game events for banners', () => {
   assert.equal(spans.at(-1).event.winner, 'a');
 });
 
+test('once the match is over the board keeps its last game’s score up, not the next game’s 0-0', () => {
+  // A game's own video: A wins it 21-3.
+  const rallies = [...Array(3).fill('b'), ...Array(21).fill('a')].map((winner, i) => ({ start: i * 10, end: i * 10 + 5, winner }));
+  const { steps } = replay(rallies, undefined, 'a', null, { oneGame: true });
+  const last = scoreSpans(rallies, steps, 300).at(-1);
+  assert.deepEqual([last.state.points, last.state.games, last.state.server, last.event.kind], [[21, 3], [], null, 'match']);
+  const ass = assScript({ width: 1920, height: 1080, teams: [['Amy Lee'], ['Cat Ho']], spans: [last], style: CLASSIC });
+  assert.doesNotMatch(ass, /POINT/); // no GAME POINT flag on the final score
+  // A whole match: the 0-0 between games stays (the match goes on).
+  const two = replay([...Array(21).fill('a'), 'b'].map((winner, i) => ({ start: i * 10, end: i * 10 + 5, winner })));
+  assert.deepEqual(scoreSpans([...Array(21).fill('a'), 'b'].map((winner, i) => ({ start: i * 10, end: i * 10 + 5, winner })), two.steps, 400).at(-2).state.points, [0, 0]);
+});
+
+test('a number that changes flips: the old one folds away, then the new one unfolds', () => {
+  const rallies = [{ start: 10, end: 15, winner: 'b' }, { start: 20, end: 25.05, winner: 'b' }];
+  const { steps } = replay(rallies);
+  const lines = assScript({ width: 1920, height: 1080, teams: [['Amy Lee'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30), style: CLASSIC })
+    .split('\n').filter((l) => l.startsWith('Dialogue:'));
+  // Only B's points change: 0 folds away in the last 0.12 s before 15 s, 1 unfolds then and folds before 25.05 s, 2 unfolds.
+  const flips = lines.filter((l) => l.includes('fscy')).map((l) => [l.split(',').slice(1, 3).join(' '), l.slice(l.indexOf('\\1a') + 8)]);
+  assert.deepEqual(flips, [
+    ['0:00:00.00 0:00:15.00', '\\t(14880,15000,\\fscy0)}0'],
+    ['0:00:15.00 0:00:25.05', '\\fscy0\\t(0,120,\\fscy100)\\t(9930,10050,\\fscy0)}1'],
+    ['0:00:25.05 0:00:30.00', '\\fscy0\\t(0,120,\\fscy100)}2'],
+  ]);
+});
+
 test('assScript draws a two-row scoreboard for each span, sized to the video', () => {
   const rallies = [{ start: 10, end: 15, winner: 'b' }];
   const { steps } = replay(rallies);
