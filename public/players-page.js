@@ -309,7 +309,9 @@ function matchRow(m, onStar) {
     h('td', {}, m.partners.length ? h('div', { class: 'small muted' }, `with ${m.partners.join(' / ')}`) : null, h('div', {}, 'v ', teamName(theirs))),
     h('td', { class: 'nowrap' }, m.won === true ? h('span', { class: 'pill ok' }, 'Won') : m.won === false ? h('span', { class: 'pill bad' }, 'Lost') : null, ' ', gamesView(games)),
     h('td', {}, m.filmed ? openButtons(m.units) : h('span', { class: 'small muted' }, 'not filmed'),
-      m.youtubeUrl ? [' ', h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null));
+      m.youtubeUrl ? [' ', h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')]
+        : m.playlistUrl ? [' ', h('a', { class: 'pill ok', href: m.playlistUrl, target: '_blank', rel: 'noopener', title: 'Games on YouTube: opens the tournament’s playlist' }, 'Playlist ↗')]
+          : m.gamesOnYoutube ? [' ', h('span', { class: 'pill ok', title: 'Games on YouTube, added by hand' }, 'Games on YouTube')] : null));
 }
 
 // The matches list's filters, per device; which groups are open, for this window.

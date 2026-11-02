@@ -25,14 +25,16 @@ import { youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
 import {
-  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, pkce, playlistInfo, PRIVACY, readClient, readToken,
-  signOut as forget, tournamentPlaylistTitle, uploadVideo, videoResource, videoStatus, youtubeDir,
+  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistUrl, PRIVACY, readClient, readToken,
+  signOut as forget, tournamentPlaylistTitle, tournamentPlaylistUrls, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
 const SIGNIN_MAX_AGE = 10 * 60_000;
 const pending = new Map(); // state -> { verifier, redirectUri, at }
 
 const dirOf = (app) => youtubeDir(app.dataDir ?? join(tmpdir(), 'badminton-video'));
+/** Tournament id (as text) -> its playlist's link, for the playlists uploads made. */
+export const tournamentPlaylists = (app) => tournamentPlaylistUrls(dirOf(app));
 const redirectOf = (app) => `http://127.0.0.1:${app.port || Number(process.env.PORT) || 8791}/api/youtube/callback`;
 const jobKey = (id, file) => `upload:${id}:${file}`;
 
@@ -51,7 +53,6 @@ export async function onRequestGet({ request, app }) {
 
 const PLAYLIST_CACHE_MS = 2 * 60_000;
 const playlistCache = new Map(); // playlist id -> { info, at }
-const playlistUrl = (id) => `https://www.youtube.com/playlist?list=${id}`;
 
 /**
  * The playlist an upload from this tournament goes into: { title, exists, url }.

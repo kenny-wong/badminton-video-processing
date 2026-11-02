@@ -577,6 +577,16 @@ async function renderTournament(id, notice = null, who = null) {
     return s ? suggestedCell(u, s) : chooser(u, u.parent.date);
   };
 
+  // A match's own YouTube link; for a match filmed game by game, once a game is uploaded, the tournament's playlist.
+  const youtubeTag = (m, tag) => {
+    const up = m.youtubeUrl ? [] : (m.units ?? []).filter((u) => u.youtubeUrl).map((u) => u.game);
+    if (!up.length) return tag(Boolean(m.youtubeUrl), 'youtube', m.youtubeUrl ? 'YouTube ↗' : 'YouTube', m.youtubeUrl ?? 'Not on YouTube yet', m.youtubeUrl);
+    const which = `Game${up.length > 1 ? 's' : ''} ${up.join(' and ')} on YouTube`;
+    return data.playlistUrl
+      ? tag(true, 'youtube', 'Playlist ↗', `${which}: opens the tournament’s playlist`, data.playlistUrl)
+      : tag(true, 'youtube', `${up.length}/${m.units.length} on YouTube`, `${which} (added by hand, so not in a playlist made by the app)`);
+  };
+
   // What's done for a match (or game), as a row of labels: each in its own colour when done, greyed when not.
   const statusCell = (m) => {
     const tag = (done, kind, text, title, href = null) => (done && href
@@ -591,7 +601,7 @@ async function renderTournament(id, notice = null, who = null) {
         ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result'}`)
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
       tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
-      tag(Boolean(m.youtubeUrl), 'youtube', m.youtubeUrl ? 'YouTube ↗' : 'YouTube', m.youtubeUrl ?? 'Not on YouTube yet', m.youtubeUrl),
+      youtubeTag(m, tag),
       m.favourites ? h('span', { class: 'pill', title: 'Favourite rallies' }, `★ ${m.favourites}`) : null);
   };
 

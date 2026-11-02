@@ -19,15 +19,20 @@ import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkF
 import { loadMatch } from '../lib/pipeline.js';
 import { importPlayerTournaments } from '../lib/player-import.js';
 import { filmedUnits } from '../lib/overview.js';
+import { tournamentPlaylists } from './youtube.js';
 import { jobView, startJob } from '../lib/jobs.js';
 import { disciplineOf, eventCode, ratingSeries, record, resultWinner } from '../public/shared/players.js';
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Every main match (not game rows) a player is in, newest first, with their side and whether it was filmed. */
-function matchesOf(db, id) {
+/**
+ * Every main match (not game rows) a player is in, newest first, with their side and whether it was
+ * filmed; `playlists` (tournament id -> link) gives a match with games on YouTube its `playlistUrl`.
+ */
+function matchesOf(db, id, playlists = {}) {
   const rows = db.prepare(`SELECT m.*, tp.name AS entry_name, t.name AS tournament_name, t.badminfo_id, t.start_date AS tournament_start,
-      EXISTS (SELECT 1 FROM videos v JOIN matches g ON g.id = v.match_id WHERE g.id = m.id OR g.parent_id = m.id) AS filmed
+      EXISTS (SELECT 1 FROM videos v JOIN matches g ON g.id = v.match_id WHERE g.id = m.id OR g.parent_id = m.id) AS filmed,
+      EXISTS (SELECT 1 FROM matches g WHERE g.parent_id = m.id AND g.youtube_url IS NOT NULL) AS games_on_youtube
     FROM tournament_players tp JOIN matches m ON m.tournament_id = tp.tournament_id AND m.game = 0
     JOIN tournaments t ON t.id = m.tournament_id
     WHERE tp.player_id = ? ORDER BY m.match_date DESC, m.match_time DESC`).all(id);
@@ -37,7 +42,10 @@ function matchesOf(db, id) {
     const lower = r.entry_name.toLowerCase();
     const side = m.teamA.some((n) => n.toLowerCase() === lower) ? 'a' : m.teamB.some((n) => n.toLowerCase() === lower) ? 'b' : null;
     if (!side) continue;
-    out.push({ ...view(m, r, side), units: r.filmed ? filmedUnits(db, m.id) : [] });
+    out.push({
+      ...view(m, r, side), units: r.filmed ? filmedUnits(db, m.id) : [],
+      gamesOnYoutube: Boolean(r.games_on_youtube), playlistUrl: r.games_on_youtube ? playlists[m.tournamentId] ?? null : null,
+    });
   }
   return out;
 }
@@ -165,7 +173,7 @@ export async function getOne({ request, params, app }) {
   const row = app.db.prepare('SELECT * FROM players WHERE id = ?').get(id);
   if (!row) return fail(404, 'notFound', 'That player isn’t in any imported tournament');
   const player = playerFromRow(row, { rubbers: true });
-  const matches = matchesOf(app.db, id);
+  const matches = matchesOf(app.db, id, await tournamentPlaylists(app));
   const { rubbers, ...rest } = player;
   return json({
     player: { ...rest, url: playerPageUrl(id) },

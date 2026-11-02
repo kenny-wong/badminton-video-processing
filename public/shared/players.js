@@ -128,7 +128,7 @@ export function matchPasses(m, f) {
   if (f.video === 'filmed' && !m.filmed) return false;
   if (f.video === 'not' && m.filmed) return false;
   if (f.video === 'rendered' && !m.rendered) return false;
-  if (f.video === 'youtube' && !m.youtubeUrl) return false;
+  if (f.video === 'youtube' && !m.youtubeUrl && !m.gamesOnYoutube) return false;
   if (f.fav && !m.favourite) return false;
   const words = String(f.text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {

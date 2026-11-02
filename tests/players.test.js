@@ -143,4 +143,5 @@ test('the player page’s filters: year, event, result, video, favourites and wo
     assert.equal(matchPasses(m, { ...NONE, ...f }), false, JSON.stringify(f));
   }
   assert.equal(matchPasses({ ...m, favourite: false }, { ...NONE, fav: true }), false);
+  assert.ok(matchPasses({ ...m, gamesOnYoutube: true }, { ...NONE, video: 'youtube' })); // filmed game by game, a game uploaded
 });

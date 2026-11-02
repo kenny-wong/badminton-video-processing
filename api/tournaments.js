@@ -28,6 +28,7 @@ import { findTools } from '../lib/ffmpeg.js';
 import { jobView } from '../lib/jobs.js';
 import { startRender } from './matches.js';
 import { stageOf } from '../lib/overview.js';
+import { tournamentPlaylists } from './youtube.js';
 import { existsSync } from 'node:fs';
 import { progress, tournamentStats } from '../lib/tournament-stats.js';
 import { addMatch, createCustom, deleteMatch, rosterOf, setRoster, updateCustom, updateMatch } from '../lib/custom.js';
@@ -125,8 +126,11 @@ export function renderAll({ params, app }) {
 
 const DAY_MS = 86400000;
 
-/** One tournament with its matches, linked videos and suggestions for unlinked ones. */
-export function getOne({ params, app }) {
+/**
+ * One tournament with its matches, linked videos and suggestions for unlinked ones, plus
+ * `playlistUrl`: the tournament's YouTube playlist, once an upload made one.
+ */
+export async function getOne({ params, app }) {
   const id = idParam(params.id);
   const tournament = tournamentFromRow(id && app.db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id));
   if (!tournament) return fail(404, 'notFound', 'No such tournament');
@@ -186,6 +190,7 @@ export function getOne({ params, app }) {
   return json({
     tournament, matches: shown, videos: [...linked, ...free], suggestions, favourites: favs.filter((f) => here.has(f.key)),
     roster: tournament.kind === 'custom' ? rosterOf(app.db, id) : null,
+    playlistUrl: (await tournamentPlaylists(app))[id] ?? null,
   });
 }
 

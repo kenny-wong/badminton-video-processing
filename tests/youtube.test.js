@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistTitle, readClient, tournamentPlaylistTitle,
+  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistTitle, readClient, tournamentPlaylistTitle, tournamentPlaylistUrls,
   uploadVideo, videoResource,
 } from '../lib/youtube.js';
 
@@ -209,6 +209,8 @@ test('playlist name shown before upload: the tournament name, as the playlist wi
   assert.equal(await knownPlaylist(dir, 7), null);
   writeFileSync(join(dir, 'playlists.json'), JSON.stringify({ 7: 'PL9' }));
   assert.equal(await knownPlaylist(dir, 7), 'PL9');
+  assert.deepEqual(await tournamentPlaylistUrls(dir), { 7: 'https://www.youtube.com/playlist?list=PL9' });
+  assert.deepEqual(await tournamentPlaylistUrls(scratch()), {});
   const renamed = async (url) => {
     assert.match(url, /\/playlists\?part=snippet&id=PL9$/);
     return jsonRes({ items: [{ id: 'PL9', snippet: { title: 'Sankey (renamed)' } }] });
