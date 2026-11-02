@@ -5,6 +5,8 @@
 // tested in tests/board.test.js.
 
 import { gameOver } from './score.js';
+import { cleanCountries } from './flags.js';
+import { internationalBoard } from './international-board.js';
 
 /** Fonts every Windows PC has, with how wide their capitals run (per point of size). */
 export const FONTS = { Arial: 0.64, 'Segoe UI': 0.62, Bahnschrift: 0.56, Verdana: 0.72, Tahoma: 0.62, 'Trebuchet MS': 0.6, Calibri: 0.56 };
@@ -18,10 +20,11 @@ export const HEADINGS = { off: 'None', round: 'Event and round', full: 'Tourname
  * shuttle after the server's name, lines between rows and games), or
  * 'classic' (a dot before the server's name, the loser's game scores dimmed).
  */
-export const LAYOUTS = { broadcast: 'Broadcast (shuttle by the server)', classic: 'Classic (dot by the server)' };
+export const LAYOUTS = { international: 'International broadcast (country flags)', broadcast: 'Broadcast (shuttle by the server)', classic: 'Classic (dot by the server)' };
 
 /** Named looks: colours, font and layout. */
 export const PRESETS = {
+  international: { label: 'International broadcast', box: '#f5f4f1', text: '#171819', accent: '#965038', pointsText: '#ffffff', font: 'Bahnschrift', opacity: 98, layout: 'international' },
   broadcast: { label: 'Broadcast white', box: '#f5f5f3', text: '#16181d', accent: '#b9622e', pointsText: '#ffffff', font: 'Bahnschrift', opacity: 97, layout: 'broadcast' },
   tv: { label: 'TV green', box: '#0f3b2d', text: '#ffffff', accent: '#f0b429', pointsText: '#0f3b2d', font: 'Arial', opacity: 85, layout: 'classic' },
   minimal: { label: 'Minimal white', box: '#ffffff', text: '#111111', accent: '#111111', pointsText: '#ffffff', font: 'Segoe UI', opacity: 90, layout: 'classic' },
@@ -39,6 +42,7 @@ export const DEFAULT_BOARD = {
   flags: true,       // GAME POINT / MATCH POINT beside the board
   banners: true,     // INTERVAL, GAME TO …, MATCH TO … for a few seconds after
   heading: 'off',
+  nationalFlags: true, // countries are chosen for each team in the editor, never guessed from names
   longRally: 0,      // a banner after rallies of at least this many shots (from the hit sounds); 0 for none
 };
 
@@ -59,7 +63,8 @@ export function cleanBoard(v) {
   out.scale = int(v.scale, 60, 160) ?? out.scale;
   if (Object.hasOwn(CORNERS, v.corner)) out.corner = v.corner;
   if (Object.hasOwn(HEADINGS, v.heading)) out.heading = v.heading;
-  for (const k of ['showGames', 'flags', 'banners']) out[k] = bool(v[k]) ?? out[k];
+  for (const k of ['showGames', 'flags', 'banners', 'nationalFlags']) out[k] = bool(v[k]) ?? out[k];
+  if (Object.hasOwn(v, 'countries')) out.countries = cleanCountries(v.countries);
   if (v.longRally === 0 || Number.isFinite(v.longRally)) out.longRally = v.longRally ? int(v.longRally, 8, 60) : 0;
   return out;
 }
@@ -72,6 +77,7 @@ export function cleanBoardOverride(v) {
   const out = {};
   if (Object.hasOwn(PRESETS, v.preset)) out.preset = v.preset;
   if (Object.hasOwn(CORNERS, v.corner)) out.corner = v.corner;
+  if (Object.hasOwn(v, 'countries')) out.countries = cleanCountries(v.countries);
   return Object.keys(out).length ? out : null;
 }
 
@@ -81,6 +87,7 @@ export function resolveBoard(settings, override = null) {
   const o = cleanBoardOverride(override);
   if (o?.preset) Object.assign(out, pick(PRESETS[o.preset]), { preset: o.preset });
   if (o?.corner) out.corner = o.corner;
+  if (o?.countries) out.countries = o.countries;
   return out;
 }
 
@@ -134,6 +141,7 @@ export function bannerText(event, names, format) {
  */
 export function boardLayout({ width, height, names, state, style, flags = [null, null], heading = '', banner = '' }) {
   const s = cleanBoard(style);
+  if (s.layout === 'international') return internationalBoard({ width, height, names, state, style: s, flags, heading, banner, fontWidth: FONTS[s.font] ?? 0.62 });
   const items = [];
   const broadcast = s.layout === 'broadcast';
   const stretch = broadcast ? 84 : 100; // narrow lettering, as on TV

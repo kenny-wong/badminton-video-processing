@@ -60,6 +60,23 @@ test('linking a video straight from another match brings its tagging too', async
   });
 });
 
+test('team countries save with the scoreboard and follow the video with its tagging', async () => {
+  await withServer(async ({ call, matches: [first, second] }) => {
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    const boardStyle = { preset: 'international', countries: ['DEN', 'ENG'] };
+    const saved = await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES, boardStyle });
+    assert.deepEqual(saved.body.boardStyle, boardStyle);
+    assert.deepEqual(saved.body.board.countries, ['DEN', 'ENG']);
+    const loaded = await call(`/api/matches/${first}`);
+    assert.deepEqual(loaded.body.match.boardStyle, boardStyle);
+    await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [1] });
+    const moved = await call(`/api/matches/${second}`);
+    assert.deepEqual(moved.body.match.boardStyle, boardStyle);
+    assert.deepEqual(moved.body.board.countries, ['DEN', 'ENG']);
+    assert.equal((await call(`/api/matches/${first}`)).body.match.boardStyle, null);
+  });
+});
+
 test('a match with its own tagging keeps it; the video holds on to the other', async () => {
   await withServer(async ({ db, call, matches: [first, second] }) => {
     await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });

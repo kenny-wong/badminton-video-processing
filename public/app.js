@@ -1227,7 +1227,7 @@ async function renderSettings() {
   const cornerSel = select('board-corner', CORNERS, b.corner);
   const headingSel = select('board-heading', HEADINGS, b.heading);
   const longRally = h('input', { type: 'number', id: 'board-long', min: 0, max: 60, step: 1, value: b.longRally, style: { width: '5em' } });
-  const ticks = Object.fromEntries([['showGames', 'Scores of finished games'], ['flags', 'GAME POINT / MATCH POINT'], ['banners', 'Interval and game banners']].map(([k, label]) =>
+  const ticks = Object.fromEntries([['showGames', 'Scores of finished games'], ['nationalFlags', 'Country flags (International broadcast)'], ['flags', 'GAME POINT / MATCH POINT'], ['banners', 'Interval and game banners']].map(([k, label]) =>
     [k, { label, input: h('input', { type: 'checkbox', id: `board-${k}`, checked: b[k] }) }]));
   const readBoard = () => ({
     preset: presetSel.value,
@@ -1248,7 +1248,7 @@ async function renderSettings() {
     }[sample.value];
     const flags = boardFlags(moment.state, { points: 21, setting: true, bestOf: 3 });
     const heading = boardHeading(style, { tournament: { name: 'Example Open' }, match: { draw: 'MS U15', round: 'Final' } });
-    fill(preview, boardPreview({ names, ...moment, style, flags, heading, background: data.previewThumb, logo: readLogo() }));
+    fill(preview, boardPreview({ names, ...moment, style: { ...style, countries: ['DEN', 'ENG'] }, flags, heading, background: data.previewThumb, logo: readLogo() }));
   };
   presetSel.addEventListener('change', () => {
     const p = PRESETS[presetSel.value];
@@ -1420,7 +1420,8 @@ async function renderSettings() {
             h('div', { class: 'row' }, h('label', { for: 'board-heading' }, 'Heading'), headingSel),
             h('div', { class: 'stack small' }, Object.entries(ticks).map(([k, c]) => h('label', { class: 'row', for: `board-${k}` }, c.input, c.label)),
               h('div', { class: 'row' }, h('label', { for: 'board-long' }, 'Banner after rallies of'), longRally, h('span', {}, 'shots or more (0: none; from the hit sounds)')))),
-          h('div', { class: 'stack' }, preview, h('div', { class: 'row small' }, 'Preview:', sample)))),
+          h('div', { class: 'stack' }, preview, h('div', { class: 'row small' }, 'Preview:', sample),
+            h('p', { class: 'hint' }, 'Choose each team’s country in the editor’s Export → Scoreboard controls. The International broadcast example uses Denmark and England.')))),
       section('Logo', 'A club or channel logo in a corner of every rendered video. A PNG with a see-through background looks best.',
         h('div', { class: 'row' }, h('label', { class: 'btn small', for: 'logo-file' }, 'Choose picture…'), logoInput, logoState, removeLogo),
         h('div', { class: 'row' }, h('label', { for: 'logo-corner' }, 'Corner'), logoCorner, h('label', { for: 'logo-size' }, 'Size'), logoSize, h('label', { for: 'logo-opacity' }, 'Opacity'), logoOpacity),

@@ -13,6 +13,7 @@ import { shuttleInPlay } from './shared/shuttle.js';
 import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
+import { COUNTRIES } from './shared/flags.js';
 import { percent, percents } from './shared/players.js';
 import { landingNote, landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
@@ -1328,18 +1329,33 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     h('option', { value: '' }, 'Look from Settings'), Object.entries(PRESETS).map(([k, p]) => h('option', { value: k, selected: boardStyle?.preset === k }, p.label)));
   const cornerSel = h('select', { 'aria-label': 'Scoreboard corner for this match' },
     h('option', { value: '' }, 'Corner from Settings'), Object.entries(CORNERS).map(([k, label]) => h('option', { value: k, selected: boardStyle?.corner === k }, label)));
+  const countrySelects = ['A', 'B'].map((side, k) => h('select', { 'aria-label': `Team ${side} country` },
+    h('option', { value: '' }, 'No flag'), Object.entries(COUNTRIES).sort((a,b) => a[1].localeCompare(b[1])).map(([code, label]) =>
+      h('option', { value: code, selected: (boardStyle?.countries ?? data.board.countries)?.[k] === code }, label))));
+  const countryControls = h('div', { class: 'board-countries' }, countrySelects.map((el,k) => h('label', { class: 'cf-field' }, h('span', { class: 'small muted' }, `Team ${k ? 'B' : 'A'} country`), el)));
+  const showCountryControls = () => { countryControls.hidden = data.board.layout !== 'international'; };
+  showCountryControls();
   const boardBox = h('div', { class: 'preview-frame small-preview' });
   const drawBoardPreview = () => {
     fill(boardBox, boardPreview({
       ...scoreboardMoment(), background: `/media/thumb/${id}`,
     }));
   };
+  let lookSave = Promise.resolve();
+  let lookRevision = 0;
   const lookChanged = async () => {
-    boardStyle = { ...(lookSel.value ? { preset: lookSel.value } : {}), ...(cornerSel.value ? { corner: cornerSel.value } : {}) };
+    const revision = ++lookRevision;
+    const countries = countrySelects.map(el => el.value);
+    boardStyle = { ...(lookSel.value ? { preset: lookSel.value } : {}), ...(cornerSel.value ? { corner: cornerSel.value } : {}),
+      ...(countries.some(Boolean) || boardStyle?.countries ? { countries } : {}) };
+    const next = boardStyle;
     try {
-      const r = await api(`/api/matches/${id}`, { method: 'PUT', body: { boardStyle } });
+      // Keep rapid changes to the two countries in order, and display the latest choice.
+      const r = await (lookSave = lookSave.catch(() => {}).then(() => api(`/api/matches/${id}`, { method: 'PUT', body: { boardStyle: next } })));
+      if (revision !== lookRevision) return;
       boardStyle = r.boardStyle;
       data.board = r.board; // Settings' look with this match's choice on top, as the render will use
+      showCountryControls();
       drawBoardPreview();
       drawOverlay();
       say('Scoreboard look saved');
@@ -1349,6 +1365,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
   lookSel.addEventListener('change', lookChanged);
   cornerSel.addEventListener('change', lookChanged);
+  countrySelects.forEach(el => el.addEventListener('change', lookChanged));
 
   // ---- the YouTube link, once uploaded by hand ----
   const ytInput = h('input', { type: 'url', placeholder: 'https://youtu.be/…', value: match.youtubeUrl ?? '', 'aria-label': 'YouTube link' });
@@ -1747,6 +1764,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         clipBox),
       foldCard('scoreboard', 'Scoreboard', 'scoreboard',
         h('div', { class: 'row small' }, lookSel, cornerSel),
+        countryControls,
         boardBox,
         h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
         h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.'))),

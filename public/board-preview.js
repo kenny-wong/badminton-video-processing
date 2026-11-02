@@ -3,6 +3,7 @@
 // (or a plain dark picture when there is none yet).
 
 import { boardLayout, changedNumbers } from './shared/board.js';
+import { SCORE_SLIDE_SECONDS } from './shared/international-board.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 
@@ -21,7 +22,9 @@ function svg(tag, attrs = {}, ...children) {
  */
 export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720, transparent = false, before = null }) {
   const { items } = boardLayout({ width, height, names, state, style, flags, heading, banner });
-  const flipping = before ? changedNumbers(boardLayout({ width, height, ...before, banner: '' }).items, items) : new Set();
+  const previous = before ? boardLayout({ width, height, ...before, banner: '' }).items : [];
+  const flipping = changedNumbers(previous, items);
+  const oldNumbers = new Map(previous.filter((it) => it.type === 'text' && it.flip).map((it) => [it.key, it.text]));
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'board-preview', role: 'img', 'aria-label': 'Scoreboard preview' });
   const defs = svg('defs', {}, svg('linearGradient', { id: 'court-bg', x1: 0, y1: 0, x2: 1, y2: 1 },
     svg('stop', { offset: '0', 'stop-color': '#2d4a3e' }), svg('stop', { offset: '1', 'stop-color': '#16251f' })));
@@ -46,10 +49,21 @@ export function boardPreview({ names, state, style, flags, heading = '', banner 
     } else {
       // Narrow lettering is drawn squeezed sideways, as the video's subtitles do.
       const k = (it.stretch ?? 100) / 100;
-      const text = (dx, attrs) => svg('text', {
+      const text = (dx, attrs, value = it.text) => svg('text', {
         x: 0, y: 0, transform: `translate(${it.x + dx},${it.y + dx}) scale(${k},1)`, 'font-family': style.font, 'font-size': it.size,
         'font-weight': it.bold ? 700 : 400, 'text-anchor': it.anchor, 'dominant-baseline': 'central', ...attrs,
-      }, it.text);
+      }, value);
+      if (it.cell && flipping.has(it.key)) {
+        const { x, y, w, h } = it.cell;
+        const clip = svg('svg', { x, y, width: w, height: h, viewBox: `${x} ${y} ${w} ${h}`, overflow: 'hidden', 'aria-hidden': 'true' });
+        const motion = `--score-slide:${w}px;animation-duration:${SCORE_SLIDE_SECONDS}s`;
+        clip.append(
+          svg('g', { class: 'board-slide-in', style: motion }, text(0, { fill: it.colour, 'fill-opacity': it.opacity })),
+          svg('g', { class: 'board-slide-out', style: motion }, text(0, { fill: it.colour, 'fill-opacity': it.opacity }, oldNumbers.get(it.key))),
+        );
+        root.append(clip);
+        continue;
+      }
       // A changed number unfolds from its middle line (styles.css .board-flip), as the video's does.
       const into = flipping.has(it.key) ? root.appendChild(svg('g', { class: 'board-flip' })) : root;
       if (it.shadow) into.append(text(1, { fill: '#000', 'fill-opacity': 0.4 * it.opacity }));
