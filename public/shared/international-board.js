@@ -35,7 +35,10 @@ export function internationalBoard({ width, height, names, state, style: s, flag
   const shuttleW = Math.round(fs * 0.82);
   const stretch = 78;
   const charWidth = fontWidth * stretch / 100;
-  const nameW = Math.max(fs * 5.7, Math.max(...names.map(n=>n.length), 1) * fs * charWidth);
+  // Bold capitals run wider than FONTS' average: 0.53-0.59 of the size for Bahnschrift in Chrome (SAINDHAVI HEMANTH 0.583
+  // against 0.56), so names and pills are fitted with room to spare and never run into the serve shuttle.
+  const fitWidth = fontWidth * 1.08;
+  const nameW = Math.max(fs * 5.7, Math.max(...names.map(n=>n.length), 1) * fs * fitWidth * stretch / 100);
   const otherW = frame * 2 + pad * 3 + flagW + shuttleW + cellW + columns * gameW;
   const boxW = Math.round(Math.min(maxWidth, nameW + otherW));
   const room = Math.max(fs * 2, boxW - otherW);
@@ -70,7 +73,7 @@ export function internationalBoard({ width, height, names, state, style: s, flag
       poly(flagOutline().map(([px,py])=>[fx+px*flagW,fy+py*fh]),'#b6b2ae');
       for(const shape of flagShapes(countries[row],fx+1,fy+1,flagW-2,fh-2)) items.push({...shape,layer:2});
     }
-    text(xName,mid,names[row],fs*1.2,s.text,{stretch:Math.min(stretch/1.2,room/(Math.max(1,names[row].length)*fs*1.2*fontWidth)*100)});
+    text(xName,mid,names[row],fs*1.2,s.text,{stretch:Math.min(stretch/1.2,room/(Math.max(1,names[row].length)*fs*1.2*fitWidth)*100)});
     if(state.server===(row?'b':'a')) {
       const cx=xGames-pad-shuttleW/2, d=shuttleW;
       // Cork down-left, the broad skirt up-right, like the reference's serving marker.
@@ -91,7 +94,7 @@ export function internationalBoard({ width, height, names, state, style: s, flag
     else text(xGames+gameW/2,mid,state.won[row],fs*1.15,s.text,{anchor:'middle',stretch:65,key:`won${row}`,flip:true});
     text(cell.x+cell.w/2,mid,state.points[row],fs*1.4,s.pointsText,{anchor:'middle',stretch:65,key:`points${row}`,flip:true,cell});
     if(s.flags && flags[row]) {
-      const size=fs*0.52, w=flags[row].length*size*charWidth+pad*2, h=fs*0.9;
+      const size=fs*0.52, w=flags[row].length*size*fitWidth*stretch/100+pad*2, h=fs*0.9;
       let x=right?x0-w-pad:x0+boxW+pad, yy=mid-h/2;
       if(x<mx || x+w>width-mx) {x=right?x0:x0+boxW-w;yy=bottom?y0-h-pad:y0+boxH+pad;}
       rect(x,yy,w,h,s.accent);
