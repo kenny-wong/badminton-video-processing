@@ -106,7 +106,6 @@ function cornerDiagram(active) {
 // Chrome plays from 1/16× to 16×, but mutes the sound below 0.25× and above 4×.
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16];
 const SAVE_DELAY_MS = 800;
-const REVIEW_LEAD_S = 4; // reviewing a rally starts this long before its end
 const UNDO_DEPTH = 100;
 const VIEW_KEYS = new Set([' ', 'ArrowLeft', 'ArrowRight', ',', '.', '[', ']', '?', 'Escape']); // the keys that work on a cut render
 const FOLDS_KEY = 'badminton-video:export-folds:v1'; // which folding cards on the Export tab are open
@@ -128,7 +127,6 @@ const KEYS = [
   ['S', 'rally starts now'],
   ['A / B', 'rally ends now, won by A / B (no S: it began 3 s after the last one)'],
   ['L', 'let (replayed, no point)'],
-  ['N', 'next untagged rally'],
   ['↑ / ↓', 'previous / next rally'],
   ['← / →', 'back / on 2 s (Shift: 10 s)'],
   [', / .', 'one frame back / on'],
@@ -882,13 +880,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     favCount.textContent = favs ? `(${favs})` : '(none marked yet)';
   }
 
-  function setWinner(i, w, { advance = false } = {}) {
+  function setWinner(i, w) {
     remember();
-    rallies[i].winner = rallies[i].winner === w && !advance ? null : w;
+    rallies[i].winner = rallies[i].winner === w ? null : w;
     changed();
     const after = steps[i]?.after;
     say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}`);
-    if (advance) goNextUntagged(i);
   }
 
   function toggleFav(i) {
@@ -908,21 +905,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (seek && rallies[i] && !onTimeline) showVideo('', Math.max(0, rallies[i].start - lead));
     else if (seek && rallies[i]) video.currentTime = Math.max(0, rallies[i].start - lead);
     listBox.querySelector('tr.sel')?.scrollIntoView({ block: 'nearest' });
-  }
-
-  function goNextUntagged(from = sel) {
-    const n = rallies.findIndex((r, i) => i > from && !r.winner);
-    const i = n >= 0 ? n : rallies.findIndex((r) => !r.winner);
-    if (i < 0) {
-      sel = -1;
-      drawTimeline();
-      drawList();
-      say('Every rally has a winner');
-      return;
-    }
-    select(i, { seek: false });
-    video.currentTime = Math.max(rallies[i].start, rallies[i].end - REVIEW_LEAD_S);
-    video.play().catch(() => {});
   }
 
   function drawList() {
@@ -1475,13 +1457,13 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
           const after = steps[i]?.after;
           say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}`);
         } else if (sel >= 0) {
-          setWinner(sel, w, { advance: true });
+          setWinner(sel, w);
         } else {
           // Inside (or just after) a rally without a winner: say who won it. Otherwise a new
           // rally ending now, taken to have started 3 s after the one before.
           const t = now();
           const i = rallies.findIndex((r) => t >= r.start && t <= r.end + 1.5);
-          if (i >= 0) setWinner(i, w, { advance: false });
+          if (i >= 0) setWinner(i, w);
           else {
             remember();
             const r = { start: assumedStart(rallies, t, { matchStart }), end: Math.max(t, 1), winner: w };
@@ -1502,7 +1484,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       }
       case 'm': setBound('start', now()); break;
       case 'f': setBound('end', now()); break;
-      case 'n': goNextUntagged(); break;
       case '+': case '=': zoomBy(0.5); break;
       case '-': zoomBy(2); break;
       case '0': setView(0, duration()); break;
