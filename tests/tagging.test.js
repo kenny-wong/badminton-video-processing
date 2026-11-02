@@ -64,13 +64,42 @@ test('a match with its own tagging keeps it; the video holds on to the other', a
   await withServer(async ({ db, call, matches: [first, second] }) => {
     await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
     await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES });
-    await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [2] });
-    await call(`/api/matches/${second}`, 'PUT', { rallies: [{ start: 1, end: 2, winner: 'a' }] });
     await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [] });
-    const r = await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [2, 1] });
+    // Tagging left on a match with no video (from before tagging followed videos).
+    db.prepare('UPDATE matches SET rallies = ? WHERE id = ?').run(JSON.stringify([{ start: 1, end: 2, winner: 'a' }]), second);
+    const r = await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [1] });
     assert.deepEqual(r.body.tagging, { moved: false, rallies: 2 });
     assert.equal(get(db, second).rallies.length, 1);
     assert.match(db.prepare('SELECT carried_tagging FROM videos WHERE id = 1').get().carried_tagging, /"rallies"/);
+  });
+});
+
+test('a match or game takes one video; linking another replaces it, which carries its tagging away', async () => {
+  await withServer(async ({ db, call, matches: [first] }) => {
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES });
+    const two = await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1, 2] });
+    assert.equal(two.status, 400);
+    assert.equal(two.body.error, 'oneVideo');
+    const r = await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [2] });
+    assert.equal(r.status, 200);
+    assert.deepEqual(db.prepare('SELECT id FROM videos WHERE match_id = ?').all(first).map((v) => v.id), [2]);
+    assert.equal(get(db, first).rallies.length, 0);
+    assert.match(db.prepare('SELECT carried_tagging FROM videos WHERE id = 1').get().carried_tagging, /"rallies"/);
+  });
+});
+
+test('unlink all clears a tournament’s links; each video takes its tagging', async () => {
+  await withServer(async ({ db, call, matches: [first, second] }) => {
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES });
+    await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [2] });
+    const tid = db.prepare('SELECT tournament_id FROM matches WHERE id = ?').get(first).tournament_id;
+    const r = await call(`/api/tournaments/${tid}/unlink-all`, 'POST');
+    assert.deepEqual(r.body, { ok: true, unlinked: 2 });
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM videos WHERE match_id IS NOT NULL').get().n, 0);
+    assert.match(db.prepare('SELECT carried_tagging FROM videos WHERE id = 1').get().carried_tagging, /"rallies"/);
+    assert.equal((await call('/api/tournaments/999/unlink-all', 'POST')).status, 404);
   });
 });
 

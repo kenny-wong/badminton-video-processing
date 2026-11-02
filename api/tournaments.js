@@ -1,7 +1,8 @@
 // GET /api/tournaments: every tournament with counts, and its progress for the favourites (`stats`: mine, players[key]).
 // POST /api/tournaments { link }: imports (or re-imports) one; { name } makes a custom tournament.
 // GET /api/tournaments/:id: its matches (each with its games' own rows, `units`, when
-//   filmed game by game), their videos and suggested links.
+//   filmed game by game), their videos and suggested links (one video per match or game).
+// POST /api/tournaments/:id/unlink-all: unlinks every video from its matches (each video carries its tagging).
 // POST /api/tournaments/:id/refresh: re-reads its matches and results.
 // DELETE /api/tournaments/:id: forgets it (video files are untouched).
 // PUT /api/tournaments/:id/complete { complete }: marks it complete (no longer highlighted as unfinished), or not.
@@ -16,7 +17,8 @@ import { fail, idParam, json, readJson, serverError } from '../lib/http.js';
 import { fetchTournament, saveTournament } from '../lib/tournaments.js';
 import { matchFromRow, nowIso, tournamentFromRow, videoFromRow } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
-import { groupParts, suggest } from '../lib/matching.js';
+import { groupParts, perVideo, suggest } from '../lib/matching.js';
+import { detachVideo } from '../lib/tagging.js';
 import { checkResult, replayMatch } from '../public/shared/score.js';
 import { matchFormat } from '../lib/pipeline.js';
 import { beTournamentUrl } from '../lib/links.js';
@@ -81,6 +83,22 @@ export function onRequestDelete({ params, app }) {
   if (!id) return fail(404, 'notFound', 'No such tournament');
   app.db.prepare('DELETE FROM tournaments WHERE id = ?').run(id);
   return json({ ok: true });
+}
+
+/** Unlinks every video from this tournament's matches and games; each carries its match's tagging, as one unlinked by hand does. */
+export function unlinkAll({ params, app }) {
+  const id = idParam(params.id);
+  if (!id || !app.db.prepare('SELECT 1 FROM tournaments WHERE id = ?').get(id)) return fail(404, 'notFound', 'No such tournament');
+  const ids = app.db.prepare('SELECT v.id FROM videos v JOIN matches m ON m.id = v.match_id WHERE m.tournament_id = ?').all(id).map((r) => r.id);
+  app.db.exec('BEGIN');
+  try {
+    for (const v of ids) detachVideo(app.db, v);
+    app.db.exec('COMMIT');
+  } catch (err) {
+    app.db.exec('ROLLBACK');
+    throw err;
+  }
+  return json({ ok: true, unlinked: ids.length });
 }
 
 export async function setComplete({ request, params, app }) {
@@ -157,9 +175,16 @@ export function getOne({ params, app }) {
   const candidates = shown.filter((m) => !filmed.has(m.id) && (!anyMine || m.mine))
     .map((m) => ({ id: m.id, startsAt: Date.parse(m.startsAt), duration: m.duration }));
   const groups = groupParts(free.map((v) => ({ id: v.id, recordedAt: Date.parse(v.recordedAt), duration: v.duration })));
+  // Back-to-back videos of one match go to its games: as many as were played, else as many as the format allows.
+  const gamesOf = (mid) => { const m = shown.find((x) => x.id === mid); return m.games.length || matchFormat(m).bestOf; };
+  const suggestions = perVideo(suggest(groups, candidates), gamesOf);
+  for (const s of suggestions) {
+    const m = shown.find((x) => x.id === s.matchId);
+    while (m.units.length < s.game) m.units.push({ id: null, game: m.units.length + 1, videoIds: [], rallyCount: 0 });
+  }
   const here = new Set(shown.flatMap((m) => [...m.favs.a, ...m.favs.b]));
   return json({
-    tournament, matches: shown, videos: [...linked, ...free], suggestions: suggest(groups, candidates), favourites: favs.filter((f) => here.has(f.key)),
+    tournament, matches: shown, videos: [...linked, ...free], suggestions, favourites: favs.filter((f) => here.has(f.key)),
     roster: tournament.kind === 'custom' ? rosterOf(app.db, id) : null,
   });
 }

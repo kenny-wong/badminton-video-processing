@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
 
 const STATUS = { running: ['Running', 'warn'], queued: ['Waiting', ''], done: ['Done', 'ok'], failed: ['Failed', 'bad'], stopped: ['Stopped', ''] };
-const KIND = { render: 'Render', track: 'Shuttle tracking', analyse: 'Find rallies', prepare: 'Join videos', scan: 'Scan folders', reel: 'Highlight reel', clip: 'Clip', merge: 'Merge videos', split: 'Split a video' };
+const KIND = { render: 'Render', track: 'Shuttle tracking', analyse: 'Find rallies', scan: 'Scan folders', reel: 'Highlight reel', clip: 'Clip', merge: 'Merge videos', split: 'Split a video' };
 
 const time = (ms) => (ms ? new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '');
 const took = (j) => {

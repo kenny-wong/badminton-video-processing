@@ -142,17 +142,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   if (!data.source.ready) {
     const box = h('div', { class: 'card' });
     fill(main, header, box);
-    if (data.source.reason === 'needsJoin') {
-      fill(box, h('p', {}, `This match has ${data.videos.length} videos. They’re joined into one file first (no re-encoding; about a minute).`));
-      const jobBox = h('div');
-      box.append(jobBox);
-      try {
-        await runJob(jobBox, () => api(`/api/matches/${id}/prepare`, { method: 'POST' }));
-        return renderEditor(main, id, { runJob, errorNotice, progressBar });
-      } catch (err) {
-        fill(jobBox, errorNotice(err));
-      }
-    } else if (data.source.reason === 'missing') {
+    if (data.source.reason === 'missing') {
       fill(box, h('p', {}, 'A video file for this match has been moved or deleted. Put it back and scan again, or link other videos from the tournament page.'));
     } else {
       fill(box, h('p', {}, 'No video is linked to this match yet. ', h('a', { href: `#/t/${tournament.id}` }, 'Link one on the tournament page.')));

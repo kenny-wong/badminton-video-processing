@@ -3,7 +3,8 @@
 //   saves tagging, the score the video starts at, where the match starts and
 //   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
 //   own scoreboard preset and corner (null uses Settings).
-// PUT /api/matches/:id/videos { videoIds }: links these videos, in this order. A match
+// PUT /api/matches/:id/videos { videoIds }: links this video ([] unlinks; a match or game takes one
+//   video, so two games filmed separately go to the game rows below). A match
 //   left with no video is cleared and its tagging goes with the video, arriving on the
 //   next match it is linked to (if that match has none of its own).
 // PUT /api/matches/:id/games/:game/videos { videoIds }: the same for one game of the match,
@@ -11,7 +12,7 @@
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
 // GET /api/matches/:id/suggestions: a suggested winner for each rally, from the tracking.
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
-// POST /api/matches/:id/prepare | analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
+// POST /api/matches/:id/analyse { sensitivity } | render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
 // GET /api/matches/:id/levels: the sound level along the video (404 until worked out); POST starts working it out (a job).
 // POST /api/matches/:id/clip { rally (0-based), upright }: queues a clip of one rally, upright 9:16 following the shuttle or as filmed.
@@ -25,7 +26,7 @@ import { nowIso } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { findTools } from '../lib/ffmpeg.js';
 import { findJob, jobView, startJob } from '../lib/jobs.js';
-import { analyseMatch, describeOutput, joinParts, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
+import { analyseMatch, describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
 import { cleanFormat, cleanRallies, cleanStart, defaultServer, startFor } from '../public/shared/score.js';
 import { cleanCorners, courtMapping } from '../public/shared/court.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
@@ -40,8 +41,6 @@ import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
 
-const MAX_VIDEOS = 12;
-
 function load(app, params) {
   const id = idParam(params.id);
   return id ? loadMatch(app.db, id) : null;
@@ -55,7 +54,7 @@ export function onRequestGet({ params, app }) {
   const sides = favouriteMatcher(app.db, loaded.tournament.id, favourites(app.db));
   const source = sourceFor(loaded);
   const described = { people: matchPeople(app.db, loaded), options: settings.description };
-  const jobs = Object.fromEntries(['prepare', 'analyse', 'render', 'track'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
+  const jobs = Object.fromEntries(['analyse', 'render', 'track'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
   return json({
     ...loaded,
     source: { ...source, path: undefined, url: source.ready ? `/media/match/${match.id}` : null },
@@ -149,9 +148,9 @@ export async function linkVideos({ request, params, app }) {
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const body = await readJson(request);
   const ids = Array.isArray(body?.videoIds) ? [...new Set(body.videoIds.filter((x) => Number.isInteger(x) && x > 0))] : null;
-  if (!ids || ids.length > MAX_VIDEOS) return fail(400, 'badInput', 'Expected a list of video ids');
+  if (!ids) return fail(400, 'badInput', 'Expected a list of video ids');
+  if (ids.length > 1) return fail(400, 'oneVideo', 'A match or game takes one video. For games filmed separately, link each video to its game.');
   const { match, videos } = loaded;
-  const before = videos.map((v) => v.id).join(',');
   const { db } = app;
   let tagging = null;
   db.exec('BEGIN');
@@ -162,10 +161,7 @@ export async function linkVideos({ request, params, app }) {
       const row = db.prepare('SELECT match_id FROM videos WHERE id = ?').get(v);
       if (row?.match_id && row.match_id !== match.id) detachVideo(db, v);
     }
-    const put = db.prepare('UPDATE videos SET match_id = ?, part = ? WHERE id = ?');
-    ids.forEach((v, i) => put.run(match.id, i + 1, v));
-    // The joined file no longer matches once the parts change; tagging stays (part 1 keeps its times).
-    if (ids.length && ids.join(',') !== before) db.prepare('UPDATE matches SET source_path = NULL WHERE id = ?').run(match.id);
+    for (const v of ids) db.prepare('UPDATE videos SET match_id = ?, part = 1 WHERE id = ?').run(match.id, v);
     tagging = applyCarried(db, match.id, ids);
     db.exec('COMMIT');
   } catch (err) {
@@ -293,16 +289,6 @@ export async function revealPath({ request, app }) {
   if (!path || !path.toLowerCase().startsWith(root) || !existsSync(path)) return fail(404, 'notFound', 'That file isn’t in the output folder any more');
   if (process.platform === 'win32') spawn('explorer.exe', [selectArg(path)], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
   return json({ ok: true, path });
-}
-
-export function prepare({ params, app }) {
-  const loaded = load(app, params);
-  if (!loaded) return fail(404, 'notFound', 'No such match');
-  const { settings, tools: t } = tools(app);
-  if (!t) return noFfmpeg();
-  const id = loaded.match.id;
-  const job = startJob('prepare', `prepare:${id}`, (j, signal) => joinParts(app.db, t, settings, id, { signal, job: j }));
-  return json(jobView(job), 202);
 }
 
 export async function analyse({ request, params, app }) {

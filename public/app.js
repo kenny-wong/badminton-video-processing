@@ -422,7 +422,11 @@ async function renderTournament(id, notice = null, who = null) {
   // A custom tournament (made by hand): its details, players and matches are edited here.
   const custom = tournament.kind === 'custom' ? customTournamentPanel({ id, data, rerender: (n) => renderTournament(id, n ?? null), errorNotice }) : null;
   const byId = new Map(videos.map((v) => [v.id, v]));
-  const suggestionFor = new Map(suggestions.map((s) => [s.matchId, s]));
+  // One video per match (game 0) or per game: back-to-back videos of one match are suggested game by game.
+  const suggestionFor = new Map(suggestions.map((s) => [`${s.matchId}:${s.game}`, s]));
+  const suggestionOf = (m, game = 0) => suggestionFor.get(`${m.id}:${game}`);
+  const gameSuggestions = (m) => suggestions.filter((s) => s.matchId === m.id && s.game);
+  const suggestionPath = (s) => (s.game ? `/api/matches/${s.matchId}/games/${s.game}/videos` : `/api/matches/${s.matchId}/videos`);
   const suggested = new Set(suggestions.flatMap((s) => s.ids));
   const free = videos.filter((v) => !v.matchId);
   const anyMine = matches.some((m) => m.mine);
@@ -480,10 +484,14 @@ async function renderTournament(id, notice = null, who = null) {
       }
     }
     if (!ids.length) return;
+    if (ids.length > 1) {
+      fill(msg, h('div', { class: 'notice warn' }, 'A match or game takes one video. Drop each game’s video on its own game.'));
+      return;
+    }
     const current = u.videoIds ?? [];
-    if (current.some((v) => ids.includes(v))) return;
-    if (current.length && !confirm(`This ${unitName(u)} already has ${current.length} video${current.length === 1 ? '' : 's'}. Add the dropped one${ids.length === 1 ? '' : 's'} after ${current.length === 1 ? 'it' : 'them'}, as the next part?`)) return;
-    link(u, [...current, ...ids]);
+    if (current.includes(ids[0])) return;
+    if (current.length && !confirm(`This ${unitName(u)} already has a video (${byId.get(current[0])?.name ?? 'linked'}). Replace it with the dropped one? Its tagging goes with the old video.`)) return;
+    link(u, ids);
   };
   const dropOn = (u) => ({
     ondragover: (e) => {
@@ -510,11 +518,10 @@ async function renderTournament(id, notice = null, who = null) {
   };
 
   const linkedCell = (u) => {
-    const vs = u.videoIds.map((v) => byId.get(v)).filter(Boolean);
-    const total = vs.reduce((t, v) => t + (v.duration ?? 0), 0);
+    const v = byId.get(u.videoIds[0]);
     return h('div', { class: 'stack' },
       h('div', {}, h('a', { class: 'btn primary', href: `#/m/${u.id}` }, 'Open'), ' ',
-        h('span', { class: 'small' }, `${vs.length === 1 ? vs[0].name : `${vs.length} videos`} · ${clock(total)}`)),
+        h('span', { class: 'small' }, v ? `${v.name} · ${clock(v.duration ?? 0)}` : '')),
       youtubeLink(u),
       h('button', { class: 'small', onclick: () => link(u, []) }, 'Unlink'));
   };
@@ -524,21 +531,44 @@ async function renderTournament(id, notice = null, who = null) {
   const unitsOf = (m) => m.units.map((u) => ({ ...u, parent: m }));
   const hasVideo = (m) => m.videoIds.length > 0 || gamesLinked(m);
 
+  // A suggested video with its Link button.
+  const suggestedCell = (u, s) => {
+    const v = byId.get(s.ids[0]);
+    return h('div', { class: 'stack' },
+      h('div', { class: 'small' }, h('span', { class: 'pill warn' }, 'Suggested'), ' ',
+        v?.name ?? '', h('span', { class: 'muted' }, ` · recorded ${when(v?.recordedAt, { date: false })}${s.lateMin && !s.game ? `, ${s.lateMin > 0 ? `${s.lateMin} min after` : `${-s.lateMin} min before`} due` : ''}`)),
+      h('button', { class: 'small primary', onclick: () => link(u, s.ids) }, 'Link'));
+  };
+
   const videoCell = (m) => {
     if (m.videoIds.length) return linkedCell(m);
     if (gamesLinked(m)) return h('span', { class: 'small muted' }, 'Filmed game by game ↓');
-    const s = suggestionFor.get(m.id);
-    if (s) {
-      const vs = s.ids.map((v) => byId.get(v)).filter(Boolean);
+    const s = suggestionOf(m);
+    if (s) return suggestedCell(m, s);
+    const games = gameSuggestions(m);
+    if (games.length) {
       return h('div', { class: 'stack' },
-        h('div', { class: 'small' }, h('span', { class: 'pill warn' }, 'Suggested'), ' ',
-          vs.map((v) => v.name).join(' + '), h('span', { class: 'muted' }, ` · recorded ${when(vs[0]?.recordedAt, { date: false })}${s.lateMin ? `, ${s.lateMin > 0 ? `${s.lateMin} min after` : `${-s.lateMin} min before`} due` : ''}`)),
-        h('button', { class: 'small primary', onclick: () => link(m, s.ids) }, 'Link'));
+        h('span', { class: 'small' }, h('span', { class: 'pill warn' }, 'Suggested'), ` ${games.length} videos, one per game ↓`),
+        h('button', {
+          class: 'small primary',
+          onclick: async () => {
+            try {
+              for (const g of games) await api(suggestionPath(g), { method: 'PUT', body: { videoIds: g.ids } });
+              renderTournament(id);
+            } catch (err) {
+              fill(msg, errorNotice(err));
+            }
+          },
+        }, `Link ${games.length === 2 ? 'both' : `all ${games.length}`}`));
     }
     return h('div', { class: 'stack' }, chooser(m, m.date), perGame(m) ? h('span', { class: 'hint' }, 'whole match, or per game below') : null);
   };
 
-  const unitVideoCell = (u) => (u.videoIds.length ? linkedCell(u) : chooser(u, u.parent.date));
+  const unitVideoCell = (u) => {
+    if (u.videoIds.length) return linkedCell(u);
+    const s = suggestionOf(u.parent, u.game);
+    return s ? suggestedCell(u, s) : chooser(u, u.parent.date);
+  };
 
   const statusCell = (m) => {
     const bits = [];
@@ -604,7 +634,7 @@ async function renderTournament(id, notice = null, who = null) {
       filmed
         ? thumbOf(m, lengthOf(m))
         : games && gamesLinked(m) ? null
-          : h('div', { class: 'thumb empty' }, suggestionFor.has(m.id) ? 'Video suggested' : 'No video'),
+          : h('div', { class: 'thumb empty' }, suggestionOf(m) || gameSuggestions(m).length ? 'Video suggested' : 'No video'),
       h('div', { class: 'match-body stack' },
         h('div', { class: 'small muted' }, [m.time, m.court, `${m.draw}${m.round ? ` · ${m.round}` : ''}`].filter(Boolean).join(' · ')),
         h('div', { class: 'teams' }, teams(m)),
@@ -622,7 +652,7 @@ async function renderTournament(id, notice = null, who = null) {
             u.videoIds.length
               ? h('div', { class: 'row' }, h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, 'Open'), youtubeLink(u),
                 h('button', { class: 'small', onclick: () => link(u, []) }, 'Unlink'))
-              : chooser(u, m.date))))) : null));
+              : unitVideoCell(u))))) : null));
   }));
 
   const drawTable = () => {
@@ -658,10 +688,29 @@ async function renderTournament(id, notice = null, who = null) {
   const linkAll = suggestions.length ? h('button', {
     class: 'primary',
     onclick: async () => {
-      for (const s of suggestions) await api(`/api/matches/${s.matchId}/videos`, { method: 'PUT', body: { videoIds: s.ids } });
-      renderTournament(id);
+      try {
+        for (const s of suggestions) await api(suggestionPath(s), { method: 'PUT', body: { videoIds: s.ids } });
+        renderTournament(id);
+      } catch (err) {
+        fill(msg, errorNotice(err));
+      }
     },
   }, `Link all ${suggestions.length} suggested`) : null;
+
+  // Every linked video back to unlinked, e.g. to start the linking again.
+  const linkedCount = videos.filter((v) => v.matchId).length;
+  const unlinkAllBtn = linkedCount ? h('button', {
+    title: 'Unlink every video from this tournament’s matches and games',
+    onclick: async () => {
+      if (!confirm(`Unlink all ${linkedCount} video${linkedCount === 1 ? '' : 's'} from ${tournament.name}’s matches? Each video takes its tagging with it, ready for the match or game you link it to next; render and YouTube status are cleared. The video files aren’t touched.`)) return;
+      try {
+        const r = await api(`/api/tournaments/${id}/unlink-all`, { method: 'POST' });
+        renderTournament(id, h('div', { class: 'notice ok' }, `Unlinked ${r.unlinked} video${r.unlinked === 1 ? '' : 's'}.`));
+      } catch (err) {
+        fill(msg, errorNotice(err));
+      }
+    },
+  }, icon('link', 16), 'Unlink all') : null;
 
   // ---- highlight reel: everyone's ★ rallies here, or one favourite player's ----
   const reelBtn = h('button', {
@@ -765,6 +814,7 @@ async function renderTournament(id, notice = null, who = null) {
       reelBtn,
       renderAllBtn,
       custom ? null : refreshBtn,
+      unlinkAllBtn,
       h('button', {
         class: 'danger',
         onclick: async () => {
@@ -777,7 +827,7 @@ async function renderTournament(id, notice = null, who = null) {
     notice,
     custom?.el,
     suggestions.length ? h('div', { class: 'notice info row spread' },
-      h('span', {}, `${suggestions.length === 1 ? 'One match below has a suggested video' : `${suggestions.length} matches below have suggested videos`}, going by when the videos were recorded. Check, then link.`), linkAll) : null,
+      h('span', {}, `${suggestions.length === 1 ? 'One video has a suggested match' : `${suggestions.length} videos have suggested matches`}, going by when they were recorded (one video per match, or per game when a match was filmed game by game). Check, then link.`), linkAll) : null,
     !videos.length ? h('div', { class: 'notice warn' }, 'No videos from these dates yet. ', h('a', { href: '#/' }, 'Scan your video folders'), ' after copying them from your phone.') : null,
     unmatched.length ? h('div', { class: 'stack small' },
       h('div', { class: 'muted' }, `${unmatched.length} video${unmatched.length === 1 ? '' : 's'} from these dates aren’t linked or suggested: drag one onto its match, or choose it in the Video column. A video file can also be dragged straight from Explorer.`),
@@ -851,7 +901,7 @@ async function renderVideos() {
         h('td', { class: 'nowrap' }, clock(v.duration ?? 0)),
         h('td', { class: 'small' }, `${v.width}×${v.height}`, h('div', { class: 'muted' }, `${Math.round(v.fps ?? 0)} fps · ${v.codec ?? '?'}${v.hdr ? ' · HDR' : ''}`)),
         h('td', { class: 'small' }, v.match
-          ? [h('a', { href: `#/m/${v.match.id}` }, `${teamName(v.match.teamA)} v ${teamName(v.match.teamB)}`), h('div', { class: 'muted' }, `${v.match.tournament} · ${v.match.draw}${v.part > 1 ? ` · part ${v.part}` : ''}`)]
+          ? [h('a', { href: `#/m/${v.match.id}` }, `${teamName(v.match.teamA)} v ${teamName(v.match.teamB)}`), h('div', { class: 'muted' }, `${v.match.tournament} · ${v.match.draw}`)]
           : h('span', { class: 'muted' }, 'not linked')),
         h('td', {}, h('div', { class: 'row tight' },
           v.match ? h('button', {
