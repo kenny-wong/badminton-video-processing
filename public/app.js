@@ -601,15 +601,14 @@ async function renderTournament(id, notice = null, who = null) {
       localStorage.setItem('badminton-video:editor-tab:v1', 'export');
     } catch { /* storage blocked: the editor opens on its usual tab */ }
   };
-  // Render once every rally has a winner (no score, nothing to render) until it's rendered; Upload always
-  // (the original can go as it is, and one already on YouTube can be replaced or uploaded again).
-  const uploadLink = (u) => h('a', {
-    class: 'btn small', href: `#/m/${u.id}`, onclick: toExport,
-    title: u.youtubeUrl ? 'Opens this video’s YouTube box (the editor’s Export tab): replace it on YouTube, or upload another' : 'Opens this video’s YouTube box (the editor’s Export tab): upload the rendered video, or the original as it is',
-  }, icon('youtube', 13), 'Upload');
-  const nextStep = (u) => h('div', { class: 'row tight small next-step' },
-    renderJobs.has(u.id) || unitStage(u) === 'render' ? renderControl(u.id) : null,
-    uploadLink(u));
+  // Render once every rally has a winner (no score, nothing to render) until it's rendered; Upload until it
+  // has a YouTube link (the original can go as it is; replacing one is in the editor's YouTube box).
+  const uploadLink = (u) => h('a', { class: 'btn small', href: `#/m/${u.id}`, onclick: toExport, title: 'Opens this video’s YouTube box (the editor’s Export tab): upload the rendered video, or the original as it is' }, icon('youtube', 13), 'Upload');
+  const nextStep = (u) => {
+    const render = renderJobs.has(u.id) || unitStage(u) === 'render';
+    if (!render && u.youtubeUrl) return null;
+    return h('div', { class: 'row tight small next-step' }, render ? renderControl(u.id) : null, u.youtubeUrl ? null : uploadLink(u));
+  };
 
   const perGame = (m) => m.units.length >= 2 || m.units.some((u) => u.videoIds.length);
   const gamesLinked = (m) => m.units.some((u) => u.videoIds.length);
