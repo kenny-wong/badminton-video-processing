@@ -543,16 +543,18 @@ async function renderTournament(id, notice = null, who = null) {
 
   const linkedCell = (u) => {
     const v = byId.get(u.videoIds[0]);
-    return h('div', { class: 'video-link stack' },
-      // The video (name, length), then Open editor and Unlink under it at the right: both act on this video.
-      v ? h('div', { class: 'video-file small', title: v.name },
-        icon('film', 14), h('span', { class: 'video-name' }, v.name),
-        h('span', { class: 'video-length', title: 'Length of the video' }, icon('hourglass', 13), clock(v.duration ?? 0))) : null,
-      h('div', { class: 'row video-actions' },
-        h('span', { class: 'video-buttons' },
-          h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
-          h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink'))),
-      nextStep(u));
+    // Its next step (Render, Upload) on the left, centred in the row; at the right the video (name, length)
+    // with Open editor and Unlink under it, as one block: both act on this video.
+    return h('div', { class: 'video-link' },
+      nextStep(u),
+      h('div', { class: 'video-main' },
+        v ? h('div', { class: 'video-file small', title: v.name },
+          icon('film', 14), h('span', { class: 'video-name' }, v.name),
+          h('span', { class: 'video-length', title: 'Length of the video' }, icon('hourglass', 13), clock(v.duration ?? 0))) : null,
+        h('div', { class: 'row video-actions' },
+          h('span', { class: 'video-buttons' },
+            h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
+            h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')))));
   };
 
   // ---- each video's next step, beside it: Render (the usual render job, Settings' options) or Upload ----
@@ -599,12 +601,12 @@ async function renderTournament(id, notice = null, who = null) {
       localStorage.setItem('badminton-video:editor-tab:v1', 'export');
     } catch { /* storage blocked: the editor opens on its usual tab */ }
   };
+  // Render while it isn't rendered; Upload until it's on YouTube, rendered or not (the original can go as it is).
+  const uploadLink = (u) => h('a', { class: 'btn small', href: `#/m/${u.id}`, onclick: toExport, title: 'Opens this video’s YouTube box (the editor’s Export tab): upload the rendered video, or the original as it is' }, icon('youtube', 13), 'Upload');
   const nextStep = (u) => {
-    if (renderJobs.has(u.id) || unitStage(u) === 'render') return renderControl(u.id);
-    if (unitStage(u) === 'upload') {
-      return h('div', { class: 'row tight small next-step' },
-        h('a', { class: 'btn small', href: `#/m/${u.id}`, onclick: toExport, title: 'Opens this video’s YouTube box (the editor’s Export tab)' }, icon('youtube', 13), 'Upload'));
-    }
+    const stage = unitStage(u);
+    if (renderJobs.has(u.id) || stage === 'render') return h('div', { class: 'row tight small next-step' }, renderControl(u.id), uploadLink(u));
+    if (stage === 'upload') return h('div', { class: 'row tight small next-step' }, uploadLink(u));
     return null;
   };
 
@@ -1046,7 +1048,7 @@ async function renderTournament(id, notice = null, who = null) {
   }).catch(() => { /* the page works without it */ });
 
   fill(main,
-    backLinks('#/', 'Tournaments'),
+    backLinks('#/', 'Tournaments', '', { up: true }), // always to the Tournaments list, not back into an editor
     pageHead(tournament.name,
       [tournament.start === tournament.end ? day(tournament.start) : `${day(tournament.start)} – ${day(tournament.end)}`, ' · ',
         !custom && courts.venues.length && courts.venues.length <= 3 ? [courts.venues.join(' · '), ' · '] : null,

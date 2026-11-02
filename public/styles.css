@@ -358,6 +358,9 @@ button.tournament-metric { align-items: flex-start; justify-content: flex-start;
 button.tournament-metric:hover { background: var(--surface); border-color: var(--accent); }
 button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .next-step { gap: 8px; }
+/* A linked video: its next step at the left, centred; the video and its buttons as one block at the right. */
+.video-link { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
+.video-link .video-main { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
 .tournament-toolbar { margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .tournament-toolbar h2 { margin: 0; font-size: var(--fs-lg); }
 .match-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }

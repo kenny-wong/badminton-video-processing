@@ -1433,10 +1433,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     commentTimer = setTimeout(saveComment, 800);
   });
 
-  /** The finished files, for the player's switch and the YouTube box. */
+  /** The finished files, for the player's switch and the YouTube box (which can also upload the original). */
+  let original = null;
   async function loadFiles() {
     try {
-      ({ files } = await api(`/api/matches/${id}/rendered`));
+      ({ files, original } = await api(`/api/matches/${id}/rendered`));
     } catch {
       return;
     }
@@ -1444,7 +1445,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     showSel.hidden = !files.length;
     if (showing && !files.some((f) => f.key === showing)) showVideo('');
     else showSel.value = showing;
-    youtube.setFiles(files);
+    youtube.setFiles(original ? [...files, original] : files);
   }
   /** Deletes the rendered file the player shows, switching back to the original first so Windows lets go of it. */
   async function deleteShown() {

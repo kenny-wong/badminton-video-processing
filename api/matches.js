@@ -322,7 +322,8 @@ export async function revealPath({ request, app }) {
   const body = (await readJson(request)) ?? {};
   const root = normalize(readSettings(app.db).outputFolder).toLowerCase();
   const path = typeof body.path === 'string' ? normalize(body.path) : '';
-  if (!path || !path.toLowerCase().startsWith(root) || !existsSync(path)) return fail(404, 'notFound', 'That file isn’t in the output folder any more');
+  const inLibrary = path && app.db.prepare('SELECT 1 FROM videos WHERE path = ? COLLATE NOCASE').get(path);
+  if (!path || !(path.toLowerCase().startsWith(root) || inLibrary) || !existsSync(path)) return fail(404, 'notFound', 'That file isn’t in the output folder or the video library any more');
   if (process.platform === 'win32') spawn('explorer.exe', [selectArg(path)], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
   return json({ ok: true, path });
 }

@@ -8,7 +8,7 @@ import { openDb } from '../lib/db.js';
 import { saveTournament } from '../lib/tournaments.js';
 import { parseMatches } from '../lib/schedule.js';
 import { getJob } from '../lib/jobs.js';
-import { onRequestGet, upload } from '../api/youtube.js';
+import { onRequestGet, renderedList, upload } from '../api/youtube.js';
 import { PAGE } from './fixtures/be-pages.js';
 
 const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -114,4 +114,22 @@ test('a plain upload deletes nothing, and Replace needs a video to replace', asy
   app.db.prepare('UPDATE matches SET youtube_url = NULL WHERE id = ?').run(id);
   const res = await upload({ ...post(id, { file: 'video', replace: true }), app });
   assert.equal(res.status, 409);
+});
+
+test('the original video can go to YouTube as it is, with the whole match’s title, before any render', async () => {
+  const { app, id } = setUp();
+  app.db.prepare('UPDATE matches SET output_path = NULL, youtube_url = NULL WHERE id = ?').run(id);
+  const original = join(app.dataDir, 'phone.mp4');
+  writeFileSync(original, 'phone video bytes');
+  app.db.prepare("INSERT INTO videos (path, size, modified_at, recorded_at, duration, match_id) VALUES (?, 17, 'x', '2026-10-24T08:05:00Z', 600, ?)").run(original, id);
+  // The YouTube box gets it beside the finished files (none yet).
+  const listed = await (await renderedList({ params: { id: String(id) }, app })).json();
+  assert.deepEqual([listed.files.length, listed.original.key, listed.original.path], [0, 'original', original]);
+  assert.match(listed.original.title, /^Example · /);
+  const yt = fakeYouTube();
+  const job = await withFetch(yt.fetch, async () => finished(await upload({ ...post(id, { file: 'original', playlist: false }), app })));
+  assert.equal(job.status, 'done', job.error);
+  assert.equal(job.result.file, 'original');
+  assert.ok(yt.calls.some((c) => c.includes('upload.test/session'))); // the phone's file was sent
+  assert.equal(app.db.prepare('SELECT youtube_url FROM matches WHERE id = ?').get(id).youtube_url, 'https://youtu.be/NEW0000000b');
 });

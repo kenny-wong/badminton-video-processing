@@ -21,7 +21,7 @@ import { loadMatch } from '../lib/pipeline.js';
 import { nowIso } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { matchPeople } from '../lib/players.js';
-import { deleteRendered, renderedFile, renderedFiles } from '../lib/rendered.js';
+import { deleteRendered, originalFile, renderedFile, renderedFiles } from '../lib/rendered.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
@@ -143,8 +143,10 @@ export async function upload({ request, params, app }) {
   const body = (await readJson(request)) ?? {};
   const key = typeof body.file === 'string' ? body.file : body.highlights === true ? 'highlights' : 'video';
   const privacy = PRIVACY.includes(body.privacy) ? body.privacy : 'unlisted';
-  const file = renderedFile(loaded, readSettings(app.db), key, { people: matchPeople(app.db, loaded) });
-  if (!file) return fail(404, 'notFound', 'That video isn’t there any more: render it again');
+  // 'original': the match's video itself, uploaded without rendering.
+  const opts = { people: matchPeople(app.db, loaded) };
+  const file = key === 'original' ? originalFile(loaded, readSettings(app.db), opts) : renderedFile(loaded, readSettings(app.db), key, opts);
+  if (!file) return fail(404, 'notFound', key === 'original' ? 'The original video isn’t there any more' : 'That video isn’t there any more: render it again');
   const dir = dirOf(app);
   if (!(await readClient(dir))) return fail(409, 'noClient', 'YouTube upload isn’t set up: the OAuth client file is missing');
   if (!(await readToken(dir))?.refreshToken) return fail(401, 'signin', 'Sign in to YouTube first');
@@ -210,8 +212,12 @@ export async function upload({ request, params, app }) {
 export function renderedList({ params, app }) {
   const loaded = loadMatch(app.db, idParam(params.id));
   if (!loaded) return fail(404, 'notFound', 'No such match');
-  const files = renderedFiles(loaded, readSettings(app.db), { people: matchPeople(app.db, loaded) });
-  return json({ files: files.map((f) => ({ ...f, url: `/media/rendered/${loaded.match.id}?key=${encodeURIComponent(f.key)}&v=${encodeURIComponent(f.mtime)}` })) });
+  const settings = readSettings(app.db);
+  const opts = { people: matchPeople(app.db, loaded) };
+  const files = renderedFiles(loaded, settings, opts);
+  // The original as well, for the YouTube box (uploading it without rendering); not one of the finished files.
+  return json({ files: files.map((f) => ({ ...f, url: `/media/rendered/${loaded.match.id}?key=${encodeURIComponent(f.key)}&v=${encodeURIComponent(f.mtime)}` })),
+    original: originalFile(loaded, settings, opts) });
 }
 
 export async function renderedDelete({ request, params, app }) {
