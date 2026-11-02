@@ -38,7 +38,7 @@
   --tag-render: #4338ca;  --tag-render-bg: #e4e3fb;
   --tag-youtube: #b42318; --tag-youtube-bg: #fde4e1;
   --tag-highlight: #8a5a00; --tag-highlight-bg: #fdf0c8;
-  --retry: #3d2a00; --retry-bg: #ffd84d;
+  --retry: #b07d00;
   --fav-bg: #ffeaa0;
   --radius: 12px;
   --radius-sm: 8px;
@@ -86,7 +86,7 @@
     --tag-rallies: #5eead4; --tag-rallies-bg: #10302c;
     --tag-render: #a5b4fc;  --tag-render-bg: #23234a;
     --tag-youtube: #ff8a80; --tag-youtube-bg: #3a1714;
-    --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c; --retry: #261a00; --retry-bg: #fcd34d;
+    --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c; --retry: #fcd34d;
     --fav-bg: #4d3d00;
     --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 20%);
     --shadow-lg: 0 6px 24px rgb(0 0 0 / 40%);
@@ -126,7 +126,7 @@
   --tag-rallies: #5eead4; --tag-rallies-bg: #10302c;
   --tag-render: #a5b4fc;  --tag-render-bg: #23234a;
   --tag-youtube: #ff8a80; --tag-youtube-bg: #3a1714;
-  --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c; --retry: #261a00; --retry-bg: #fcd34d;
+  --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c; --retry: #fcd34d;
   --fav-bg: #4d3d00;
   --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 20%);
   --shadow-lg: 0 6px 24px rgb(0 0 0 / 40%);
@@ -367,8 +367,8 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
 .mini-bar > span { display: block; height: 100%; background: var(--accent); }
 /* A failed render or upload: "Failed" beside its button, the reason in the tooltip. */
 .step-failed { display: inline-flex; align-items: center; gap: 4px; color: var(--no); font-weight: 650; cursor: help; min-width: 0; flex-wrap: wrap; row-gap: 4px; }
-/* When YouTube's limit lets it go again: the thing to act on, so it stands out. */
-.step-failed .retry-at { margin-left: 4px; padding: 2px 8px; border-radius: 4px; background: var(--retry-bg); color: var(--retry); font-weight: 700; white-space: nowrap; }
+/* When YouTube's limit lets it go again: the thing to act on, so it stands out (yellow text, no background). */
+.step-failed .retry-at { margin-left: 4px; color: var(--retry); font-weight: 700; white-space: nowrap; }
 .match-progress .next-step, .match-card .match-body > .next-step { margin-top: 8px; }
 /* A linked video: its next step at the left, centred; the video and its buttons as one block at the right. */
 .video-link { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
