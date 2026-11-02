@@ -38,7 +38,7 @@ test('chapters mark each game and its interval, at their times in the result', (
 test('partArgs seeks, shifts time for the scoreboard and encodes every part alike', () => {
   const args = partArgs({ src: 'C:/v/match.mp4', start: 12.5, end: 30, out: 'p1.mp4', encoder: 'h264_nvenc', fps: 60 });
   const vf = args[args.indexOf('-vf') + 1];
-  assert.equal(vf, 'setpts=PTS+12.5/TB,ass=overlay.ass,setpts=PTS-STARTPTS,format=yuv420p');
+  assert.equal(vf, 'setpts=PTS+12.5/TB,ass=overlay.ass:fontsdir=fonts,setpts=PTS-STARTPTS,format=yuv420p'); // the app's own fonts (lib/fonts.js)
   assert.deepEqual(args.slice(args.indexOf('-ss'), args.indexOf('-ss') + 6), ['-ss', '12.5', '-to', '30', '-i', 'C:/v/match.mp4']);
   assert.ok(args.includes('h264_nvenc'));
   assert.equal(args[args.indexOf('-r') + 1], '60');

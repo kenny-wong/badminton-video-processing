@@ -99,7 +99,9 @@ test('the broadcast look is the default: narrow lettering, a shuttle by the serv
   const s = state([5, 3], [1, 0], [[21, 18]], 'b');
   const l = boardLayout({ width: 1920, height: 1080, names: ['AMY LEE', 'CAT HO'], state: s, style: DEFAULT_BOARD });
   const texts = l.items.filter((i) => i.type === 'text');
-  assert.ok(texts.every((t) => t.stretch === 84 && !t.shadow));
+  assert.ok(texts.every((t) => t.stretch === 100 && !t.shadow)); // D-DIN Condensed is narrow already
+  const wider = boardLayout({ width: 1920, height: 1080, names: ['AMY LEE', 'CAT HO'], state: s, style: { ...DEFAULT_BOARD, preset: 'custom', font: 'Bahnschrift' } });
+  assert.ok(wider.items.filter((i) => i.type === 'text').every((t) => t.stretch === 84)); // a wider font is squeezed, as on TV
   assert.ok(texts.filter((t) => t.text === '21' || t.text === '18').every((t) => t.opacity === 1 && t.bold)); // the loser's score isn't dimmed
   const polys = l.items.filter((i) => i.type === 'poly');
   assert.equal(polys.length, 2); // skirt and cork

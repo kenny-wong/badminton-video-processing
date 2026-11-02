@@ -54,7 +54,7 @@ test('replays follow each favourite rally, slowed down, and chapters still find 
 test('a replay part is slowed, silent and labelled; a smaller size is scaled at the end', () => {
   const args = partArgs({ src: 'm.mp4', start: 17, end: 20, out: 'r.mp4', slow: 2, label: 'replay.ass', size: { w: 1280, h: 720 } });
   const vf = args[args.indexOf('-vf') + 1];
-  assert.equal(vf, 'setpts=PTS+17/TB,ass=overlay.ass,setpts=PTS-STARTPTS,setpts=2*PTS,ass=replay.ass,scale=1280:720,setsar=1,format=yuv420p');
+  assert.equal(vf, 'setpts=PTS+17/TB,ass=overlay.ass:fontsdir=fonts,setpts=PTS-STARTPTS,setpts=2*PTS,ass=replay.ass:fontsdir=fonts,scale=1280:720,setsar=1,format=yuv420p');
   assert.ok(args.includes('anullsrc=r=48000:cl=stereo'));
   assert.equal(args[args.indexOf('anullsrc=r=48000:cl=stereo') - 2], '6'); // twice as long
   const fit = partArgs({ src: 'm.mp4', start: 0, end: 5, out: 'p.mp4', overlay: false, size: { w: 1920, h: 1080, fit: true } });

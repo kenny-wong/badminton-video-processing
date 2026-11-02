@@ -1,5 +1,9 @@
 /* Badminton Video: design tokens, then layout and components. Light and dark. */
 
+/* The scoreboard's lettering, with the app (public/fonts, SIL Open Font License): FFmpeg gets the same files. */
+@font-face { font-family: 'D-DIN Condensed'; src: url('fonts/D-DINCondensed.otf') format('opentype'); font-weight: 400; font-display: block; }
+@font-face { font-family: 'D-DIN Condensed'; src: url('fonts/D-DINCondensed-Bold.otf') format('opentype'); font-weight: 700; font-display: block; }
+
 :root {
   --bg: #f3f5f1;
   --surface: #ffffff;
@@ -822,22 +826,13 @@ table.parts .part-pick { white-space: nowrap; }
 /* A scoreboard number that changed unfolds from its middle line, as in the rendered video. */
 .board-flip { transform-box: fill-box; transform-origin: center; animation: board-flip 0.24s ease-out; }
 @keyframes board-flip { 0%, 50% { transform: scaleY(0); } 100% { transform: scaleY(1); } }
-/* International board (timings from public/shared/international-board.js SCORE_MOTION): the old number speeds
-   out to the right, the tile is empty a moment, the new one slides in from the left and settles; the serve
-   marker grows in on its new row. */
+@media (prefers-reduced-motion: reduce) { .board-flip { animation: none; } }
+/* The international board's slide and serve marker run from board-preview.js (Web Animations, SCORE_MOTION). */
 /* A player's flag (Players page): the scoreboard's own vector flags. */
 .nation-pick { display: inline-flex; align-items: center; gap: 6px; }
 .nation-pick select { max-width: 11rem; }
 .flag-icon { display: block; flex: none; border-radius: 2px; box-shadow: 0 0 0 1px var(--border); }
 .flag-icon.none { box-shadow: none; outline: 1px dashed var(--border-strong); outline-offset: -1px; }
-.board-slide-out { animation: board-slide-out var(--out) ease-in both; }
-.board-slide-in { animation: board-slide-in var(--in) ease-in-out var(--in-start) both; }
-.board-serve-in { animation: board-serve-in var(--serve-grow) ease-out var(--serve-in) both; }
-@keyframes board-slide-out { from { transform: translateX(0); } to { transform: translateX(var(--slide-out)); } }
-@keyframes board-slide-in { from { transform: translateX(var(--slide-in)); } to { transform: translateX(0); } }
-@keyframes board-serve-in { from { transform: scale(0.3); } to { transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) { .board-slide-in, .board-serve-in { animation: none; } .board-slide-out { display: none; } }
-@media (prefers-reduced-motion: reduce) { .board-flip { animation: none; } }
 .player .corner-handle { position: absolute; z-index: 2; width: 18px; height: 18px; min-height: 0; margin: -9px 0 0 -9px; padding: 0; border-radius: 50%;
   background: #ffd84d; border: 2px solid #000; box-shadow: 0 0 0 2px rgb(255 255 255 / 55%); cursor: grab; touch-action: none; }
 .player .corner-handle:hover { background: #ffe680; }

@@ -104,9 +104,9 @@ test('the default broadcast board draws the shuttle as a shape and narrows the l
   const rallies = [{ start: 10, end: 15, winner: 'b' }];
   const { steps } = replay(rallies);
   const ass = assScript({ width: 1920, height: 1080, teams: [['Amy Lee'], ['Cat Ho']], spans: scoreSpans(rallies, steps, 30) });
-  assert.match(ass, /Style: Text,Bahnschrift,/);
-  assert.match(ass, /\\fscx84\\b1\\shad0\\1c&H1D1816&\\1a&H00&\}AMY LEE\n/);
+  assert.match(ass, /Style: Text,D-DIN Condensed,/); // the app's own DIN condensed (public/fonts)
+  assert.match(ass, /\\fscx100\\b1\\shad0\\1c&H1D1816&\\1a&H00&\}AMY LEE\n/); // narrow already: not squeezed
   const lines = ass.split('\n');
-  assert.equal(lines.filter((l) => /\\1a&H4D&\}m( \d+ \d+){1} l( \d+ \d+){3}\{/.test(l)).length, 2); // the see-through skirt, in each of the two spans
-  assert.equal(lines.filter((l) => /\}m \d+ \d+ l( \d+ \d+){7}\{/.test(l)).length, 2); // the eight-sided cork
+  assert.equal(lines.filter((l) => /\\p3\\1c&H2E62B9&\\1a&H4D&\}m( \d+ \d+){1} l( \d+ \d+){3}\{/.test(l)).length, 2); // the see-through skirt, in each of the two spans
+  assert.equal(lines.filter((l) => /\\p3.*\}m \d+ \d+ l( \d+ \d+){7}\{/.test(l)).length, 2); // the eight-sided cork, in quarter pixels
 });

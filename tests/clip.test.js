@@ -29,7 +29,7 @@ test('cropPath eases towards the shuttle, holds when it is lost and stays inside
 
 test('clipArgs crops along the path, draws the board and shrinks only when asked', () => {
   const a = clipArgs({ src: 'm.mp4', start: 30, end: 42, out: 'c.mp4', crop: { w: 608, h: 1080 }, startX: 500, encoder: 'h264_nvenc' });
-  assert.equal(a[a.indexOf('-vf') + 1], 'setpts=PTS+30/TB,sendcmd=f=clip.cmd,crop=608:1080:500:0,ass=clip.ass,setpts=PTS-STARTPTS,format=yuv420p');
+  assert.equal(a[a.indexOf('-vf') + 1], 'setpts=PTS+30/TB,sendcmd=f=clip.cmd,crop=608:1080:500:0,ass=clip.ass:fontsdir=fonts,setpts=PTS-STARTPTS,format=yuv420p');
   const wide = clipArgs({ src: 'm.mp4', start: 0, end: 5, out: 'c.mp4', overlay: false });
   assert.equal(wide[wide.indexOf('-vf') + 1], 'setpts=PTS+0/TB,setpts=PTS-STARTPTS,format=yuv420p');
   const big = clipArgs({ src: 'm.mp4', start: 0, end: 5, out: 'c.mp4', crop: { w: 1216, h: 2160 }, upright: { w: 1080, h: 1920 } });

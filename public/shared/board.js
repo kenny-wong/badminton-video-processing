@@ -8,8 +8,32 @@ import { gameOver } from './score.js';
 import { cleanCountries } from './flags.js';
 import { internationalBoard } from './international-board.js';
 
-/** Fonts every Windows PC has, with how wide their capitals run (per point of size). */
-export const FONTS = { Arial: 0.64, 'Segoe UI': 0.62, Bahnschrift: 0.56, Verdana: 0.72, Tahoma: 0.62, 'Trebuchet MS': 0.6, Calibri: 0.56 };
+/**
+ * The board's fonts: D-DIN Condensed (a free DIN 1451 condensed, SIL Open Font License, which comes with
+ * the app in public/fonts: the broadcast boards' lettering) and fonts every Windows PC has.
+ *   width: how wide capitals run, per point of size;
+ *   em: the em size per point in the video. FFmpeg's subtitles (libass) size text by the font's Windows
+ *     ascent + descent, the browser by its em, so the preview draws text at size × em to match the video;
+ *   cap: capital (and figure) height per point in the video;
+ *   condensed: narrow already, never squeezed further;
+ *   embolden: an outline in the text's own colour, per point, that brings the regular weight up to the
+ *     broadcast's (between D-DIN Condensed and its bold; matched on the reference clip);
+ *   files: its files in public/fonts, given to FFmpeg with each render (lib/fonts.js).
+ */
+export const FONTS = {
+  'D-DIN Condensed': { width: 0.4, em: 0.921, cap: 0.635, condensed: true, embolden: 0.0085, files: ['D-DINCondensed.otf', 'D-DINCondensed-Bold.otf'] },
+  Arial: { width: 0.64, em: 0.895, cap: 0.641 },
+  'Segoe UI': { width: 0.62, em: 0.752, cap: 0.526 },
+  Bahnschrift: { width: 0.56, em: 0.833, cap: 0.592 },
+  Verdana: { width: 0.72, em: 0.823, cap: 0.598 },
+  Tahoma: { width: 0.62, em: 0.828, cap: 0.602 },
+  'Trebuchet MS': { width: 0.6, em: 0.861, cap: 0.616 },
+  Calibri: { width: 0.56, em: 0.819, cap: 0.518 },
+};
+/** A font's measures (FONTS), Arial's for an unknown one. */
+export const fontOf = (name) => FONTS[name] ?? FONTS.Arial;
+/** The broadcast looks' lettering, and the default. */
+export const BOARD_FONT = 'D-DIN Condensed';
 
 export const CORNERS = { tl: 'Top left', tr: 'Top right', bl: 'Bottom left', br: 'Bottom right' };
 
@@ -24,12 +48,12 @@ export const LAYOUTS = { international: 'International broadcast (country flags)
 
 /** Named looks: colours, font and layout. */
 export const PRESETS = {
-  international: { label: 'International broadcast', box: '#f5f4f1', text: '#171819', accent: '#965038', pointsText: '#ffffff', font: 'Bahnschrift', opacity: 98, layout: 'international' },
-  broadcast: { label: 'Broadcast white', box: '#f5f5f3', text: '#16181d', accent: '#b9622e', pointsText: '#ffffff', font: 'Bahnschrift', opacity: 97, layout: 'broadcast' },
+  international: { label: 'International broadcast', box: '#f5f4f1', text: '#171819', accent: '#965038', pointsText: '#ffffff', font: BOARD_FONT, opacity: 98, layout: 'international' },
+  broadcast: { label: 'Broadcast white', box: '#f5f5f3', text: '#16181d', accent: '#b9622e', pointsText: '#ffffff', font: BOARD_FONT, opacity: 97, layout: 'broadcast' },
   tv: { label: 'TV green', box: '#0f3b2d', text: '#ffffff', accent: '#f0b429', pointsText: '#0f3b2d', font: 'Arial', opacity: 85, layout: 'classic' },
   minimal: { label: 'Minimal white', box: '#ffffff', text: '#111111', accent: '#111111', pointsText: '#ffffff', font: 'Segoe UI', opacity: 90, layout: 'classic' },
   contrast: { label: 'High contrast', box: '#000000', text: '#ffffff', accent: '#ffd400', pointsText: '#000000', font: 'Arial', opacity: 100, layout: 'classic' },
-  navy: { label: 'Navy and orange', box: '#10264a', text: '#ffffff', accent: '#e8642c', pointsText: '#ffffff', font: 'Bahnschrift', opacity: 88, layout: 'broadcast' },
+  navy: { label: 'Navy and orange', box: '#10264a', text: '#ffffff', accent: '#e8642c', pointsText: '#ffffff', font: BOARD_FONT, opacity: 88, layout: 'broadcast' },
 };
 const LOOK = ['box', 'text', 'accent', 'pointsText', 'font', 'opacity', 'layout'];
 
@@ -141,14 +165,15 @@ export function bannerText(event, names, format) {
  */
 export function boardLayout({ width, height, names, state, style, flags = [null, null], heading = '', banner = '' }) {
   const s = cleanBoard(style);
-  if (s.layout === 'international') return internationalBoard({ width, height, names, state, style: s, flags, heading, banner, fontWidth: FONTS[s.font] ?? 0.62 });
+  const font = fontOf(s.font);
+  if (s.layout === 'international') return internationalBoard({ width, height, names, state, style: s, flags, heading, banner, font });
   const items = [];
   const broadcast = s.layout === 'broadcast';
-  const stretch = broadcast ? 84 : 100; // narrow lettering, as on TV
+  const stretch = broadcast && !font.condensed ? 84 : 100; // narrow lettering, as on TV
   const rect = (x, y, w, h, c, opacity = 1, layer = 1) => items.push({ type: 'rect', x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h), colour: c, opacity, layer });
   const text = (x, y, t, size, c, { opacity = 1, bold = true, anchor = 'start', shadow = false, key = null, flip = false } = {}) =>
     items.push({ type: 'text', x: Math.round(x), y: Math.round(y), text: String(t), size: Math.round(size), colour: c, opacity, bold, anchor, shadow: shadow && !broadcast, stretch, layer: 2, key, flip });
-  const k = ((FONTS[s.font] ?? 0.62) * stretch) / 100;
+  const k = (font.width * stretch) / 100;
   const fs = Math.max(14, Math.round((height / 24) * (s.scale / 100)));
   const pad = Math.round(fs * 0.45);
   const rowH = Math.round(fs * 1.45);

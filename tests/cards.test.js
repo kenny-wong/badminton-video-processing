@@ -63,7 +63,7 @@ test('cardArgs makes a silent clip of the board colour, encoded like the parts',
   const a = cardArgs({ out: 't.mp4', width: 1280, height: 720, fps: 60, seconds: 3, colour: '#0f3b2d', encoder: 'h264_nvenc', ass: 'title.ass' });
   assert.ok(a.includes('color=c=0x0f3b2d:s=1280x720:r=60:d=3'));
   assert.ok(a.includes('anullsrc=r=48000:cl=stereo'));
-  assert.match(a[a.indexOf('-vf') + 1], /^ass=title\.ass,fade=t=in:st=0:d=0\.4,fade=t=out:st=2\.6:d=0\.4,format=yuv420p$/);
+  assert.match(a[a.indexOf('-vf') + 1], /^ass=title\.ass:fontsdir=fonts,fade=t=in:st=0:d=0\.4,fade=t=out:st=2\.6:d=0\.4,format=yuv420p$/);
   assert.equal(a[a.indexOf('-video_track_timescale') + 1], '90000');
   assert.ok(a.includes('h264_nvenc'));
 });
@@ -75,7 +75,7 @@ test('a logo goes into a corner, scaled and faded, after the scoreboard', () => 
   const args = partArgs({ src: 'm.mp4', start: 5, end: 9, out: 'p.mp4', hasAudio: false, logo: { path: 'C:/data/logo.png', width: 200, corner: 'tr', opacity: 1 } });
   assert.ok(!args.includes('-vf'));
   const fc = args[args.indexOf('-filter_complex') + 1];
-  assert.match(fc, /^\[0:v\]setpts=PTS\+5\/TB,ass=overlay\.ass,setpts=PTS-STARTPTS\[base\];\[1:v\]scale=200:-1.*\[base\]\[logo\]overlay=x=.*:eof_action=repeat,format=yuv420p\[v\]$/);
+  assert.match(fc, /^\[0:v\]setpts=PTS\+5\/TB,ass=overlay\.ass:fontsdir=fonts,setpts=PTS-STARTPTS\[base\];\[1:v\]scale=200:-1.*\[base\]\[logo\]overlay=x=.*:eof_action=repeat,format=yuv420p\[v\]$/);
   assert.equal(args[args.indexOf('[v]') - 1], '-map');
   assert.ok(args.includes('2:a:0')); // the silent sound is the third input
   const plain = partArgs({ src: 'm.mp4', start: 0, end: 4, out: 'p.mp4', overlay: false, logo: { path: 'l.png', width: 100 } });
