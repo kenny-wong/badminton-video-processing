@@ -405,6 +405,11 @@ function videoLabel(v) {
 
 // The tournament page's list/grid choice and filters, per device.
 const PREFS_KEY = 'badminton-video:tournament-view:v1';
+// Where the tournament page was when a match or game was opened in the editor: that match or game
+// and how far down the window it sat (`top`), or the page's scrolled fraction when it's gone. Coming
+// back from the editor puts it there again; other redraws (filters, linking) leave the scroll alone.
+let tournamentReturn = null; // { id, anchor, top, ratio }
+let backFromEditor = false; // set by the router for the next tournament page only
 // Keep the current search and expanded games when a link or result update redraws the page.
 const tournamentViews = new Map();
 function readPrefs() {
@@ -539,7 +544,61 @@ async function renderTournament(id, notice = null, who = null) {
       h('div', { class: 'row video-actions' },
         h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
         v ? h('span', { class: 'small muted' }, clock(v.duration ?? 0)) : null,
-        h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')));
+        h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')),
+      nextStep(u));
+  };
+
+  // ---- each video's next step, beside it: Render (the usual render job, Settings' options) or Upload ----
+  // (tagging is done in the editor: Open editor). A render started here, or still waiting or running when
+  // the page opens, shows its progress with Stop; the button stays off until it ends.
+  const renderJobs = new Map(); // unit id -> its render job while it waits or runs
+  const renderControl = (uid) => {
+    const job = renderJobs.get(uid);
+    return h('div', { class: 'row tight small next-step', 'data-render': uid },
+      job
+        ? [h('button', { class: 'small danger', title: 'Stop this render', onclick: () => stopRender(uid) }, icon('stop', 13), 'Stop render'),
+          h('span', { class: 'muted' }, job.status === 'queued' ? 'Waiting for the jobs before it' : `Rendering ${Math.round((job.progress ?? 0) * 100)}%`)]
+        : h('button', { class: 'small', title: 'Render with the options in Settings (the editor’s Export tab has more)', onclick: () => startRender(uid) }, icon('export', 13), 'Render'));
+  };
+  const showRender = (uid) => document.querySelectorAll(`[data-render="${uid}"]`).forEach((el) => el.replaceWith(renderControl(uid)));
+  const followRender = async (uid, job) => {
+    renderJobs.set(uid, job);
+    showRender(uid);
+    try {
+      await waitJob(job, (j) => { renderJobs.set(uid, j); if (table.isConnected) showRender(uid); });
+      if (table.isConnected) renderTournament(id, h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'));
+    } catch (err) {
+      renderJobs.delete(uid);
+      if (!table.isConnected) return;
+      showRender(uid);
+      if (err.code !== 'stopped') fill(msg, errorNotice(err));
+    }
+  };
+  const startRender = async (uid) => {
+    try {
+      followRender(uid, await api(`/api/matches/${uid}/render`, { method: 'POST', body: {} }));
+    } catch (err) {
+      fill(msg, errorNotice(err));
+    }
+  };
+  const stopRender = async (uid) => {
+    const job = renderJobs.get(uid);
+    if (!job || !confirm('Stop this render? What it has made so far is thrown away.')) return;
+    await api(`/api/jobs/${job.id}/stop`, { method: 'POST' }).catch((err) => fill(msg, errorNotice(err)));
+  };
+  // Upload: the video's own YouTube box, on the editor's Export tab.
+  const toExport = () => {
+    try {
+      localStorage.setItem('badminton-video:editor-tab:v1', 'export');
+    } catch { /* storage blocked: the editor opens on its usual tab */ }
+  };
+  const nextStep = (u) => {
+    if (renderJobs.has(u.id) || unitStage(u) === 'render') return renderControl(u.id);
+    if (unitStage(u) === 'upload') {
+      return h('div', { class: 'row tight small next-step' },
+        h('a', { class: 'btn small', href: `#/m/${u.id}`, onclick: toExport, title: 'Opens this video’s YouTube box (the editor’s Export tab)' }, icon('youtube', 13), 'Upload'));
+    }
+    return null;
   };
 
   const perGame = (m) => m.units.length >= 2 || m.units.some((u) => u.videoIds.length);
@@ -670,7 +729,7 @@ async function renderTournament(id, notice = null, who = null) {
     !m.games?.length ? h('span', { class: 'muted result-pending', title: 'No result is recorded: not played yet, or played but its result isn’t in yet (Update results)' }, 'No result yet') : null);
 
   // One game: its thumbnail when filmed, its name and score, progress, and its video (Open, a suggestion or the chooser).
-  const gameRow = (u) => h('div', { class: 'game-video-row', ...dropOn(u) },
+  const gameRow = (u) => h('div', { class: 'game-video-row', 'data-anchor': u.id ? `u${u.id}` : null, ...dropOn(u) },
     u.videoIds.length ? thumbOf(u, lengthOf(u), false) : null,
     h('div', { class: 'game-video-heading' }, h('div', { class: 'small game-name' }, gameLabel(u)), statusCell(u)),
     h('div', { class: 'game-video-controls' }, unitVideoCell(u)));
@@ -695,7 +754,7 @@ async function renderTournament(id, notice = null, who = null) {
 
   const listView = (list) => h('div', { class: 'table-scroll tournament-table' }, h('table', {},
     h('thead', {}, h('tr', {}, ['Time / court', 'Match & result', 'Win chance', 'Video', 'Progress'].map((x) => h('th', { scope: 'col' }, x)))),
-    list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, ...dropOn(m) },
+    list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(m) },
       h('tr', { class: `match-main${m.mine ? ' mine' : ''}` },
         h('td', { class: 'match-schedule' },
           h('div', { class: 'row tight' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), h('strong', {}, m.time)),
@@ -717,7 +776,7 @@ async function renderTournament(id, notice = null, who = null) {
   const gridView = (list) => h('div', { class: 'match-grid' }, list.map((m) => {
     const filmed = m.videoIds.length > 0;
     const games = perGame(m) && !filmed;
-    return h('article', { class: `match-card${m.mine ? ' mine' : ''}`, ...dropOn(m) },
+    return h('article', { class: `match-card${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(m) },
       filmed
         ? thumbOf(m, lengthOf(m))
         : null,
@@ -734,9 +793,30 @@ async function renderTournament(id, notice = null, who = null) {
   }));
 
   const search = h('input', { type: 'search', value: viewState.search, placeholder: 'Find a player, event, round or court…', 'aria-label': 'Find a match in this tournament', oninput: () => { viewState.search = search.value; drawTable(); } });
-  const progressFilter = h('select', { 'aria-label': 'Filter by progress', onchange: () => { viewState.progress = progressFilter.value; drawTable(); } },
-    [['', 'All progress'], ['unlinked', 'Needs a video'], ['tag', 'Needs tagging'], ['render', 'Ready to render'], ['upload', 'Ready for YouTube'], ['done', 'On YouTube']].map(([value, label]) => h('option', { value }, label)));
+  // Two kinds of progress filter, never mixed. Done so far (also what the totals' clicks pick) counts a video that
+  // went further: Tagged includes tagged videos since rendered or uploaded, Rendered includes those on YouTube.
+  // Next step is where each video is now: Ready for YouTube is rendered and not uploaded yet.
+  const DONE = { filmed: ['Filmed', 'linked'], tagged: ['Tagged', 'tagged'], rendered: ['Rendered', 'rendered'], youtube: ['On YouTube', 'on YouTube'] };
+  const NEXT = { unlinked: ['Needs a video'], tag: ['Needs tagging', 'to tag'], render: ['Ready to render', 'ready to render'], upload: ['Ready for YouTube', 'ready for YouTube'], todo: ['To do: tag, render or upload', 'to do'] };
+  const doneSoFar = {
+    filmed: () => true,
+    tagged: (u) => u.rallyCount > 0 && u.tagged === u.rallyCount,
+    rendered: (u) => Boolean(u.outputPath),
+    youtube: (u) => Boolean(u.youtubeUrl),
+  };
+  const unitPasses = (u, f) => (Object.hasOwn(doneSoFar, f) ? doneSoFar[f](u) : f === 'todo' ? ['tag', 'render', 'upload'].includes(unitStage(u)) : unitStage(u) === f);
+  const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  if (viewState.progress === 'done') viewState.progress = 'youtube'; // its name before 1.60.0
+  const progressFilter = h('select', { 'aria-label': 'Filter by progress', onchange: () => setProgress(progressFilter.value) },
+    h('option', { value: '' }, 'All progress'),
+    h('optgroup', { label: 'Done so far' }, Object.entries(DONE).map(([value, [label]]) => h('option', { value }, label))),
+    h('optgroup', { label: 'Next step' }, Object.entries(NEXT).map(([value, [label]]) => h('option', { value }, label))));
   progressFilter.value = viewState.progress;
+  const setProgress = (value) => {
+    progressFilter.value = value;
+    viewState.progress = value;
+    drawTable();
+  };
   const matchCount = h('span', { class: 'small muted match-count', role: 'status', 'aria-live': 'polite' });
   const hideNoVideo = h('input', { type: 'checkbox', checked: prefs.hideNoVideo, onchange: (e) => setPref('hideNoVideo', e.target.checked) });
   const clearFilters = () => {
@@ -761,11 +841,16 @@ async function renderTournament(id, notice = null, who = null) {
       if (!words.every((word) => text.includes(word))) return false;
       if (!progressFilter.value) return true;
       if (progressFilter.value === 'unlinked') return !m.videoIds.length && (!m.units.length || m.units.some((u) => !u.videoIds.length));
-      return filmedUnits(m).some((u) => unitStage(u) === progressFilter.value);
+      return filmedUnits(m).some((u) => unitPasses(u, progressFilter.value));
     });
     const days = [...new Set(shown.map((m) => m.date))];
     const view = prefs.view === 'grid' ? gridView : listView;
-    matchCount.textContent = `Showing ${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
+    // A video filter says how many videos it found as well: several can belong to one match.
+    const f = progressFilter.value;
+    const what = (DONE[f] ?? NEXT[f])?.[1];
+    const videosFound = what ? `${plural(shown.flatMap(filmedUnits).filter((u) => unitPasses(u, f)).length, 'video')} ${what} · ` : '';
+    matchCount.textContent = `${videosFound}Showing ${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
+    drawOverview();
     clearFilterBtn.hidden = !search.value && !progressFilter.value && !prefs.hideNoVideo && (!anyMine || !prefs.who);
     // Each day: its filmed matches first, then the rest folded under "Not filmed (n)", both in time order.
     // Nothing folds while the tournament has nothing filmed (there's nothing else to see yet). A search or
@@ -817,16 +902,18 @@ async function renderTournament(id, notice = null, who = null) {
     matches.some((m) => perGame(m) && !hasVideo(m)) ? h('p', { class: 'hint' }, 'A match takes one video for the whole match, or one per game under Game videos.') : null);
 
   const filmed = matches.flatMap(filmedUnits);
-  // The whole tournament's totals, whatever the filters: matches, then videos (a match filmed game by game has one per game).
-  const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-  const videosOf = () => `of ${plural(filmed.length, 'video')}`;
-  const overview = h('div', { class: 'tournament-overview', 'aria-label': 'This tournament’s totals' },
-    [['Matches', matches.length, `${matches.filter(hasVideo).length} filmed`],
-      ['Videos', filmed.length, 'linked to a match or game'],
-      ['Tagged', filmed.filter((u) => u.rallyCount && u.tagged === u.rallyCount).length, videosOf()],
-      ['Rendered', filmed.filter((u) => u.outputPath).length, videosOf()],
-      ['On YouTube', filmed.filter((u) => u.youtubeUrl).length, videosOf()]].map(([label, value, detail]) =>
-      h('div', { class: 'tournament-metric' }, h('span', { class: 'metric-label' }, label), h('strong', {}, value), h('span', { class: 'small muted' }, detail))));
+  // The whole tournament's totals, whatever the filters: matches, then videos (a match filmed game by game has one per
+  // game). A video total is a button for its Done so far filter; pressed again, it clears it.
+  const videosOf = `of ${plural(filmed.length, 'video')}`;
+  const overview = h('div', { class: 'tournament-overview', 'aria-label': 'This tournament’s totals' });
+  const drawOverview = () => fill(overview,
+    h('div', { class: 'tournament-metric' }, h('span', { class: 'metric-label' }, 'Matches'), h('strong', {}, matches.length), h('span', { class: 'small muted' }, `${matches.filter(hasVideo).length} filmed`)),
+    [['filmed', 'Videos', 'linked to a match or game'], ['tagged', 'Tagged', videosOf], ['rendered', 'Rendered', videosOf], ['youtube', 'On YouTube', videosOf]].map(([filter, label, detail]) =>
+      h('button', {
+        type: 'button', class: 'tournament-metric', 'aria-pressed': String(progressFilter.value === filter),
+        title: progressFilter.value === filter ? 'Show every match again' : `Show the matches with a video ${DONE[filter][1]}`,
+        onclick: () => setProgress(progressFilter.value === filter ? '' : filter),
+      }, h('span', { class: 'metric-label' }, label), h('strong', {}, filmed.filter(doneSoFar[filter]).length), h('span', { class: 'small muted' }, detail))));
 
   const linkAll = suggestions.length ? h('button', {
     class: 'primary',
@@ -934,6 +1021,23 @@ async function renderTournament(id, notice = null, who = null) {
   }, icon('refresh', 16), 'Update results');
 
   const unmatched = free.filter((v) => !suggested.has(v.id));
+  // Opening the editor from here remembers the place to come back to.
+  table.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href^="#/m/"]');
+    if (!a) return;
+    const at = a.closest('[data-anchor]');
+    tournamentReturn = { id: String(id), anchor: at?.dataset.anchor ?? null, top: at ? at.getBoundingClientRect().top : 0, ratio: scrollY / Math.max(1, document.documentElement.scrollHeight) };
+  }, true);
+
+  // Renders of this tournament's videos still waiting or running (from the editor, Render all or this page) show here too.
+  const unitIds = new Set(matches.flatMap((m) => [m.id, ...m.units.map((u) => u.id)]).filter(Boolean));
+  api('/api/jobs').then(({ jobs }) => {
+    for (const j of jobs) {
+      const uid = Number(j.key.split(':')[1]);
+      if (j.kind === 'render' && unitIds.has(uid) && (j.status === 'queued' || j.status === 'running') && !renderJobs.has(uid)) followRender(uid, j);
+    }
+  }).catch(() => { /* the page works without it */ });
+
   fill(main,
     h('a', { class: 'crumb', href: '#/' }, icon('back', 15), 'Tournaments'),
     pageHead(tournament.name,
@@ -982,6 +1086,30 @@ async function renderTournament(id, notice = null, who = null) {
     toolbar,
     table);
   drawTable();
+  const back = backFromEditor && tournamentReturn?.id === String(id) ? tournamentReturn : null;
+  backFromEditor = false;
+  if (back) returnTo(back, table);
+}
+
+/**
+ * Puts the match or game opened in the editor back where it sat in the window (else the same fraction
+ * of the page). Thumbnails above it can load afterwards and push it down, so it's put back after each,
+ * until the user scrolls or a few seconds pass.
+ */
+function returnTo(back, table) {
+  const place = () => {
+    const el = back.anchor && table.querySelector(`[data-anchor="${back.anchor}"]`);
+    if (el) window.scrollTo(0, scrollY + el.getBoundingClientRect().top - back.top);
+    else window.scrollTo(0, back.ratio * document.documentElement.scrollHeight);
+  };
+  place();
+  let done = false;
+  const stop = () => { done = true; };
+  for (const name of ['wheel', 'keydown', 'touchstart', 'pointerdown']) window.addEventListener(name, stop, { once: true, passive: true });
+  setTimeout(stop, 4000);
+  for (const img of table.querySelectorAll('img')) {
+    if (!img.complete) img.addEventListener('load', () => { if (!done) place(); }, { once: true });
+  }
 }
 
 // ---------- Refreshing the video list ----------
@@ -1326,12 +1454,15 @@ async function renderSettings() {
 
 // ---------- Router ----------
 
+let lastSection = null;
 async function router() {
   leaving?.();
   leaving = null;
   main.classList.remove('wide');
   const [path, query] = (location.hash || '#/').split('?');
   const [, section, id] = path.split('/');
+  backFromEditor = lastSection === 'm' && section === 't';
+  lastSection = section;
   try {
     if (section === 't' && id) await renderTournament(id, null, new URLSearchParams(query ?? '').get('who'));
     else if (section === 'm' && id) {
