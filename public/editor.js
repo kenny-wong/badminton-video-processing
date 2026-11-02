@@ -19,6 +19,7 @@ import { landingNote, landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 import { youtubePanel } from './youtube-panel.js';
 import { matchStar } from './match-star.js';
+import { backLinks } from './nav.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -145,7 +146,7 @@ const KEYS = [
 /** The keys as shown, with the gap from Settings filled in. */
 const keyList = (gap = RALLY_GAP) => KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t.replace('the Settings gap', `${gap} s`)));
 
-export async function renderEditor(main, id, { runJob, errorNotice, progressBar, canGoBack = false }) {
+export async function renderEditor(main, id, { runJob, errorNotice, progressBar }) {
   let data = await api(`/api/matches/${id}`);
   const { match, tournament } = data;
   const [nameA, nameB] = boardNames([match.teamA, match.teamB], data.nameStyle);
@@ -154,17 +155,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
   document.title = `${nameA} v ${nameB} · Badminton Video`;
 
   const headRight = h('div', { class: 'row' });
-  // Back to wherever the editor was opened from (a tournament comes back to this match's place), else the tournament.
-  const goBack = () => {
-    if (canGoBack) history.back();
-    else location.hash = `#/t/${tournament.id}`;
-  };
   // The head stays on screen while scrolling (styles.css .editor-head); its height places the video column under it.
+  // Back returns to wherever the editor was opened from (a tournament comes back to this match's place).
   const header = h('div', { class: 'editor-head' },
     h('div', {},
-      h('div', { class: 'editor-crumbs' },
-        h('button', { type: 'button', class: 'small', title: 'Back to the previous page', onclick: goBack }, icon('back', 15), 'Back'),
-        h('a', { class: 'crumb', href: `#/t/${tournament.id}`, title: 'Open the tournament' }, tournament.name)),
+      backLinks(`#/t/${tournament.id}`, tournament.name, 'Open the tournament'),
       h('h1', {}, matchStar(match.id, data.starredMatch), ' ', h('span', { class: 'side-a' }, teamName(match.teamA)), h('span', { class: 'vs' }, 'v'), h('span', { class: 'side-b' }, teamName(match.teamB))),
       h('div', { class: 'meta' },
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
@@ -1021,13 +1016,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
     if (tab === 'export') showClipTarget();
     if (seek && rallies[i] && !onTimeline) showVideo('', Math.max(0, rallies[i].start - lead));
     else if (seek && rallies[i]) video.currentTime = Math.max(0, rallies[i].start - lead);
-    listBox.querySelector('tr.sel')?.scrollIntoView({ block: 'nearest' });
   }
 
   function drawList() {
     const rows = rallies.map((r, i) => {
       const s = steps[i];
-      const score = !s ? '' : !s.counted ? (s.reason === 'afterMatch' ? 'after match end' : s.reason === 'let' ? 'let' : '') : s.event === 'game' || s.event === 'match' ? `Game ${s.after.games.length}: ${s.after.games.at(-1).join('-')}` : s.after.points.join('-');
+      const score = !s ? '' : !s.counted ? (s.reason === 'afterMatch' ? 'after match end' : s.reason === 'let' ? 'let' : '') : s.event === 'game' || s.event === 'match' ? `G${s.after.games.length} ${s.after.games.at(-1).join('-')}` : s.after.points.join('-');
       return h('tr', {
         class: [i === sel ? 'sel' : '', r.winner ? '' : 'untagged', s && !s.counted && r.winner ? 'void' : '', s?.event === 'game' || s?.event === 'match' ? 'game-end' : ''].join(' '),
         onclick: (e) => { if (!e.target.closest('button')) select(i); },
@@ -1042,7 +1036,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
       }, w === 'let' ? 'Let' : w.toUpperCase()))),
       h('td', { class: 'nowrap' }, score),
       h('td', {}, h('button', { class: `star${r.fav ? ' on' : ''}`, title: r.fav ? 'Favourite (H)' : 'Mark as favourite (H)', 'aria-pressed': String(Boolean(r.fav)), onclick: () => toggleFav(i) }, r.fav ? '★' : '☆')),
-      h('td', {}, h('button', { class: 'small', title: 'Remove', onclick: () => { remember(); rallies.splice(i, 1); if (sel >= rallies.length) sel = -1; changed(); } }, '✕')));
+      h('td', {}, h('button', { class: 'small remove', title: 'Remove this rally', onclick: () => { remember(); rallies.splice(i, 1); if (sel >= rallies.length) sel = -1; changed(); } }, '✕')));
     });
     fill(listBox, rallies.length
       ? h('table', {}, h('thead', {}, h('tr', {}, ['#', 'Start', 'Len', 'Winner', 'Score', '★', ''].map((x) => h('th', {}, x)))), h('tbody', {}, rows))
@@ -1057,11 +1051,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
   const formatChanged = () => {
     format = cleanFormat({ points: Number(pointsSel.value), setting: settingBox.checked, bestOf: Number(bestOfSel.value) });
     formatChosen = true;
-    capText.textContent = format.setting ? `setting to ${CAPS[format.points]}` : 'no setting';
+    capText.textContent = format.setting ? `to ${CAPS[format.points]}` : '';
     changed();
   };
   for (const el of [pointsSel, settingBox, bestOfSel]) el.addEventListener('change', formatChanged);
-  capText.textContent = format.setting ? `setting to ${CAPS[format.points]}` : 'no setting';
+  capText.textContent = format.setting ? `to ${CAPS[format.points]}` : '';
   // In game 2 or 3 the winner of the game before serves first (from the official result).
   const lawServer = unitGame >= 2 && match.games[unitGame - 2] ? defaultServer(unitGame, match.games) : null;
   const serverHint = h('p', { class: 'hint' });
@@ -1079,8 +1073,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
 
   // ---- the score when the video starts ----
   const startGame = h('select', { 'aria-label': 'Game the video starts in' }, [1, 2, 3].map((g) => h('option', { value: g }, `game ${g}`)));
-  const startA = h('input', { type: 'number', min: 0, max: 30, value: startScore?.points[0] ?? 0, 'aria-label': 'A points', style: { width: '4.5em' } });
-  const startB = h('input', { type: 'number', min: 0, max: 30, value: startScore?.points[1] ?? 0, 'aria-label': 'B points', style: { width: '4.5em' } });
+  const startA = h('input', { type: 'number', min: 0, max: 30, value: startScore?.points[0] ?? 0, 'aria-label': 'A points', style: { width: '3.6em' } });
+  const startB = h('input', { type: 'number', min: 0, max: 30, value: startScore?.points[1] ?? 0, 'aria-label': 'B points', style: { width: '3.6em' } });
   const earlier = h('input', { type: 'text', placeholder: 'e.g. 21-18', 'aria-label': 'Earlier games', style: { width: '9em' } });
   const earlierRow = h('div', { class: 'row small' }, 'Earlier games', earlier, h('span', { class: 'muted' }, 'A’s points first'));
   const startMsg = h('div', { class: 'small' });
@@ -1115,7 +1109,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
   showEarlier();
 
   // ---- where the match starts and finishes in the video ----
-  const boundsBox = h('div', { class: 'stack small' });
+  const boundsBox = h('div', { class: 'row tight small' });
   function setBound(which, t) {
     if (which === 'start') {
       if (t !== null && matchEnd !== null && t >= matchEnd) return say('The match must start before it finishes');
@@ -1128,11 +1122,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
     say(t === null ? `Match ${which} cleared` : `Match ${which === 'start' ? 'starts' : 'finishes'} at ${clock(t)}`);
   }
   function drawBounds() {
-    const part = (label, which, t) => h('div', { class: 'row' },
-      h('span', { style: { minWidth: '9em' } }, `${label}: `, h('strong', {}, t === null ? (which === 'start' ? 'video start' : 'video end') : clock(t))),
+    const part = (label, which, t) => h('span', { class: 'row tight' },
+      `${label} `, h('strong', {}, t === null ? (which === 'start' ? 'video start' : 'video end') : clock(t)),
       t !== null ? h('button', { class: 'small', onclick: () => { video.currentTime = t; } }, 'Go') : null,
       t !== null ? h('button', { class: 'small', onclick: () => setBound(which, null) }, 'Clear') : null);
-    fill(boundsBox, part('Starts', 'start', matchStart), part('Finishes', 'end', matchEnd));
+    fill(boundsBox, part('from', 'start', matchStart), h('span', { class: 'muted' }, '·'), part('to', 'end', matchEnd));
   }
 
   // ---- tagging stranded on a match with no video (tagged before tagging followed videos) ----
@@ -1716,9 +1710,19 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
   /** A card that folds to its title, closed until opened; the choice is remembered. */
   const foldCard = (key, title, iconName, ...body) => h('details', { class: 'card stack fold-card', open: Boolean(readFolds()[key]), ontoggle: (e) => writeFold(key, e.target.open) },
     h('summary', { title: 'Click to show or hide' }, h('h4', {}, icon(iconName, 17), title)), body);
+  // Compact rows: a short label, then its controls on the same line.
+  const scoringRow = (label, title, ...body) => h('div', { class: 'scoring-row' }, h('span', { class: 'scoring-label', title: title || null }, label), body);
   const panels = {
     rallies: h('div', {},
       strandedBox,
+      card('Scoring', 'sliders',
+        h('div', { class: 'scoring-compact' },
+          scoringRow('Format', 'Setting: a game at the last point goes on to the cap shown', pointsSel, h('label', { class: 'row tight' }, settingBox, 'setting', capText), bestOfSel),
+          scoringRow('Serve', `A = ${nameA}, B = ${nameB}`, serverSel, lawServer ? serverHint : null),
+          scoringRow('Starts', unitGame ? 'The score when this video starts' : 'For videos that start mid-match. “A serves first” then means A serves the first rally in the video.',
+            startGame, h('span', { class: 'side-a' }, 'A'), startA, '–', startB, h('span', { class: 'side-b' }, 'B')),
+          earlierRow, startMsg,
+          scoringRow('Match', 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering.', boundsBox))),
       card('Rallies', 'list',
         h('div', { class: 'row spread small' }, h('span', { class: 'muted' }, 'S starts a rally, A / B ends it.'),
           h('button', {
@@ -1735,19 +1739,6 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
           }, icon('trash', 14), 'Clear all rallies')),
         h('p', { class: 'hint' }, 'Shift+A / Shift+B marks the winner and ★ favourite together. H toggles the star during or after a rally.'),
         listBox)),
-    scoring: h('div', {},
-      card('Scoring', 'sliders',
-        h('div', { class: 'row small' }, pointsSel, h('label', { class: 'row' }, settingBox, 'setting'), capText, bestOfSel),
-        h('div', { class: 'row small' }, serverSel, h('span', { class: 'muted' }, `A = ${nameA}, B = ${nameB}`)),
-        lawServer ? serverHint : null,
-        h('div', { class: 'subhead' }, 'Video starts at'),
-        h('div', { class: 'row small' }, startGame, 'score', h('span', { class: 'side-a' }, 'A'), startA, '–', startB, h('span', { class: 'side-b' }, 'B')),
-        earlierRow,
-        startMsg,
-        unitGame ? null : h('p', { class: 'hint' }, 'For videos that start mid-match. “A serves first” then means A serves the first rally in the video.'),
-        h('div', { class: 'subhead' }, 'Match in the video'),
-        boundsBox,
-        h('p', { class: 'hint' }, 'Press M where the match starts and F where it finishes. Warm-up before and anything after are left out of rendering.'))),
     players: h('div', {}, card('Players', 'user', peopleBox)),
     stats: h('div', {}, card('Statistics', 'wave', statsBox)),
     tracking: h('div', {},
@@ -1789,7 +1780,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
         h('div', { class: 'row spread small' }, h('span', { class: 'hint' }, 'As it will look at the current moment of the video.'), h('button', { class: 'small', onclick: () => drawBoardPreview() }, 'Refresh')),
         h('p', { class: 'hint' }, 'Colours, size and the rest are in ', h('a', { href: '#/settings' }, 'Settings'), '.'))),
   };
-  const TABS = [['rallies', 'Rallies', 'rally'], ['scoring', 'Scoring', 'scoreboard'], ['players', 'Players', 'user'], ['stats', 'Stats', 'wave'], ['tracking', 'Tracking', 'tracking'], ['export', 'Export', 'export']];
+  // Scoring and the rallies are one tab (key 'rallies'; a saved 'scoring' opens it too).
+  const TABS = [['rallies', 'Scoring', 'scoreboard'], ['players', 'Players', 'user'], ['stats', 'Stats', 'wave'], ['tracking', 'Tracking', 'tracking'], ['export', 'Export', 'export']];
   let tab = TABS.some(([k]) => k === readTab()) ? readTab() : 'rallies';
   const tabBar = h('div', { class: 'panel-tabs', role: 'tablist' });
   const panel = h('div', { class: 'panel' });

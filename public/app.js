@@ -28,6 +28,7 @@ import { renderTools } from './tools-page.js';
 import { matchStar } from './match-star.js';
 import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
+import { backLinks, pageShown } from './nav.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
@@ -1039,7 +1040,7 @@ async function renderTournament(id, notice = null, who = null) {
   }).catch(() => { /* the page works without it */ });
 
   fill(main,
-    h('a', { class: 'crumb', href: '#/' }, icon('back', 15), 'Tournaments'),
+    backLinks('#/', 'Tournaments'),
     pageHead(tournament.name,
       [tournament.start === tournament.end ? day(tournament.start) : `${day(tournament.start)} – ${day(tournament.end)}`, ' · ',
         !custom && courts.venues.length && courts.venues.length <= 3 ? [courts.venues.join(' · '), ' · '] : null,
@@ -1468,12 +1469,13 @@ async function renderSettings() {
 // ---------- Router ----------
 
 let lastSection = null;
-let pagesShown = 0; // pages shown in this window, so the editor's Back button knows there's one to go back to
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; // each page opens at its top (below)
 async function router() {
-  pagesShown += 1;
+  pageShown();
   leaving?.();
   leaving = null;
   main.classList.remove('wide');
+  window.scrollTo(0, 0);
   const [path, query] = (location.hash || '#/').split('?');
   const [, section, id] = path.split('/');
   backFromEditor = lastSection === 'm' && section === 't';
@@ -1483,7 +1485,7 @@ async function router() {
     else if (section === 'm' && id) {
       setTab('home');
       main.classList.add('wide');
-      leaving = await renderEditor(main, Number(id), { runJob, errorNotice, progressBar, canGoBack: pagesShown > 1 });
+      leaving = await renderEditor(main, Number(id), { runJob, errorNotice, progressBar });
     } else if (section === 'players') {
       setTab('players');
       await renderPlayers(main);

@@ -496,9 +496,10 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
   position: sticky; top: var(--head-h); z-index: 15; margin: -12px 0 16px; padding: 12px 0 12px; background: var(--bg);
   box-shadow: 0 10px 12px -12px rgb(0 0 0 / 35%); }
 .editor-head h1 { font-size: var(--fs-xl); }
-.editor-crumbs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-.editor-crumbs .crumb { margin: 0; font-size: var(--fs-lg); font-weight: 650; color: var(--text); }
-.editor-crumbs .crumb:hover { color: var(--accent); }
+/* Back button and the page above, at the top of every page under the top tabs (public/nav.js). */
+.crumbs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.crumbs .crumb { margin: 0; font-size: var(--fs-lg); font-weight: 650; color: var(--text); }
+.crumbs .crumb:hover { color: var(--accent); }
 /* On a phone the head would take most of the screen, so it scrolls away there. */
 @media (max-width: 700px) { .editor-head { position: static; margin-top: 0; padding-top: 0; box-shadow: none; } }
 .vs { color: var(--faint); font-weight: 500; margin: 0 6px; }
@@ -620,10 +621,19 @@ kbd { font: 650 var(--fs-xs) ui-monospace, Consolas, monospace; border: 1px soli
 .fold-card > summary:hover h4::after { color: var(--text); }
 .subhead { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 18px !important; }
 
-.rallies { max-height: 52vh; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.rallies table { font-size: var(--fs-sm); }
-.rallies td, .rallies th { padding: 5px 8px; }
-.rallies th { position: sticky; top: 0; z-index: 1; }
+/* Every rally shows (no box of its own to scroll), columns as narrow as their contents. */
+.rallies { width: fit-content; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.rallies table { font-size: var(--fs-sm); width: auto; }
+.rallies td, .rallies th { padding: 4px 5px; white-space: nowrap; }
+.rallies button.remove { padding: 0 7px; min-height: 24px; }
+/* Scoring settings, compact: one line each, a short label then its controls (details in the labels' tooltips). */
+.scoring-compact { display: grid; gap: 6px; font-size: var(--fs-sm); }
+.scoring-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.scoring-row .scoring-label { width: 4.2em; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.scoring-row .scoring-label[title] { cursor: help; }
+.scoring-compact select, .scoring-compact input[type=number] { min-height: 28px; padding: 2px 6px; }
+.scoring-compact .hint { margin: 0; flex-basis: 100%; padding-left: calc(4.2em + 8px); }
+.scoring-compact > .row, .scoring-compact > .small:not(:empty) { padding-left: calc(4.2em + 8px); }
 .rallies tr { cursor: pointer; }
 .rallies tr.sel td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .rallies tr.untagged td:first-child { box-shadow: inset 3px 0 var(--untagged); }

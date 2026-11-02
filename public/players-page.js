@@ -13,6 +13,7 @@ import { matchStar } from './match-star.js';
 import { matchPasses } from './shared/players.js';
 import { COUNTRIES } from './shared/flags.js';
 import { flagIcon } from './flag-icon.js';
+import { backLinks } from './nav.js';
 
 const DISCIPLINES = [['singles', 'Singles'], ['doubles', 'Doubles'], ['mixed', 'Mixed']];
 
@@ -498,7 +499,7 @@ export async function renderPlayer(main, id) {
     },
   }, icon('highlights', 16), 'Highlight reel');
   fill(main,
-    h('a', { class: 'crumb', href: '#/players' }, icon('back', 15), 'Players'),
+    backLinks('#/players', 'Players'),
     pageHead(h('span', { class: 'row' }, starButton({ id, key: data.favourite, listed: data.listed }, () => renderPlayer(main, id), (err) => fill(reelBox, errorNotice(err))), p.name),
       [p.county, p.beNumber ? `BE ${p.beNumber}` : null].filter(Boolean).join(' · ') || null,
       importButton(id, false, reelBox, () => {}, false),
