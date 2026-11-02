@@ -19,7 +19,7 @@ import { landingNote, landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 import { youtubePanel } from './youtube-panel.js';
 import { matchStar } from './match-star.js';
-import { backLinks } from './nav.js';
+import { backLinks, replacePage } from './nav.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -180,7 +180,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         const score = u.game && match.games[u.game - 1] ? ` · ${match.games[u.game - 1].join('-')}` : '';
         const label = u.game ? `Game ${u.game}${score}` : 'Whole match';
         if (u.id === match.id) return h('span', { class: 'current', 'aria-current': 'page' }, label);
-        return u.linked ? h('a', { href: `#/m/${u.id}` }, label) : h('span', { class: 'off', title: 'No video linked' }, label);
+        // Moving between games replaces this page, so Back still goes to where the match was opened from.
+        return u.linked
+          ? h('a', { href: `#/m/${u.id}`, onclick: (e) => { if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; e.preventDefault(); replacePage(`#/m/${u.id}`); } }, label)
+          : h('span', { class: 'off', title: 'No video linked' }, label);
       })));
   }
 

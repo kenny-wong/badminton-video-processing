@@ -6,11 +6,22 @@ import { h } from './dom.js';
 import { icon } from './icons.js';
 
 let shown = 0;
+let replacing = false;
 
 /** Called by the router for every page it shows. */
 export const pageShown = () => {
-  shown += 1;
+  if (replacing) replacing = false; // took the place of the page before: no new step back
+  else shown += 1;
 };
+
+/**
+ * Shows `hash` in place of the current page, so Back skips it: moving between a match's games in the
+ * editor, where Back should still go to the tournament (or wherever the match was opened from).
+ */
+export function replacePage(hash) {
+  replacing = true;
+  location.replace(hash);
+}
 
 /** Back to the previous page in this window, or to `fallback` (a #/ address) when this is the first. */
 export function goBack(fallback) {
