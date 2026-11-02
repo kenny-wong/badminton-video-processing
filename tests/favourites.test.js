@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readdirSync, readFileSync } from 'node:fs';
 
 import { migrate, openDb } from '../lib/db.js';
-import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite } from '../lib/favourites.js';
+import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, orderFavourites, removeFavourite } from '../lib/favourites.js';
 import { playerId } from './fixtures/badminfo-sample.js';
 
 const [AMY, AMY2, CAT] = [1, 2, 3].map(playerId);
@@ -39,6 +39,16 @@ test('the old "My players" settings move to favourites, with their pasted links'
   migrate(db);
   assert.deepEqual(db.prepare('SELECT name, player_id FROM favourites ORDER BY id').all().map((r) => ({ ...r })), [{ name: 'Zed', player_id: null }, { name: 'Amy', player_id: AMY }]);
   assert.deepEqual(db.prepare('SELECT key FROM settings').all().map((r) => r.key), ['sensitivity']);
+});
+
+test('the Players list keeps the order it was dragged into; players never moved come after, by name', () => {
+  const db = setUp();
+  const [zoe, bea, kit] = ['Zoe Ng', 'Bea Ho', 'Kit Yu'].map((name) => addFavourite(db, { name, starred: name !== 'Kit Yu' }));
+  assert.deepEqual(favourites(db, { all: true }).map((f) => f.name), ['Bea Ho', 'Kit Yu', 'Zoe Ng']);
+  assert.equal(orderFavourites(db, [zoe, kit, 999]), 2);
+  const late = addFavourite(db, { name: 'Ann Lo' });
+  assert.deepEqual(favourites(db, { all: true }).map((f) => f.name), ['Zoe Ng', 'Kit Yu', 'Ann Lo', 'Bea Ho']);
+  assert.deepEqual(favourites(db).map((f) => f.key), [zoe, late, bea], 'favourites only, in the same order');
 });
 
 test('favourites: a name is tied to its player once only one player has it', () => {

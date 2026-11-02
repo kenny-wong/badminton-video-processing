@@ -8,13 +8,14 @@
 // GET /api/favourites[?all=1]: the favourites (or everyone listed) with the tournaments each one joined.
 // POST /api/favourites { id } | { link } | { name }, starred?: lists a player (by badminfo id or link) or a name, starred unless starred is false.
 // PUT /api/favourites/:key { link } ties a name-only entry to a badminfo profile link; { starred } stars or unstars (unstarred players stay listed).
+// PUT /api/favourites/order { keys }: the Players list's order (dragged on the Players page).
 // DELETE /api/favourites/:key: takes a player off the list.
 
 import { fail, idParam, json, readJson } from '../lib/http.js';
 import { apiUrl, badminfoId, entrants, getJson, playerPageUrl } from '../lib/badminfo.js';
 import { matchFromRow } from '../lib/db.js';
 import { matchPeople, playerFromRow, refreshProfile, refreshProfiles, saveEntrants, teamIds } from '../lib/players.js';
-import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, removeFavourite, setStarred } from '../lib/favourites.js';
+import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, orderFavourites, removeFavourite, setStarred } from '../lib/favourites.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { importPlayerTournaments } from '../lib/player-import.js';
 import { filmedUnits } from '../lib/overview.js';
@@ -141,6 +142,14 @@ export async function linkFavouriteRoute({ request, params, app }) {
   const player = await linkedPlayer(app.db, body.link);
   if (player.error) return player.error;
   return json({ key: linkFavourite(app.db, key, player.id, player.name) });
+}
+
+export async function orderFavouritesRoute({ request, app }) {
+  const keys = (await readJson(request))?.keys;
+  if (!Array.isArray(keys) || keys.length > 1000 || !keys.every((k) => Number.isInteger(k) && k > 0) || new Set(keys).size !== keys.length) {
+    return fail(400, 'badInput', 'Send keys: the players’ keys in their new order');
+  }
+  return json({ ok: true, moved: orderFavourites(app.db, keys) });
 }
 
 export function removeFavouriteRoute({ params, app }) {

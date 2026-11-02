@@ -148,3 +148,13 @@ test('starring a match, also from one of its games, marks the whole match', asyn
     assert.equal((await call(`/api/matches/${first}/favourite`, 'PUT', { favourite: 'yes' })).status, 400);
   });
 });
+
+test('the Players list order is saved by PUT /api/favourites/order', async () => {
+  await withServer(async ({ db, call }) => {
+    const add = db.prepare('INSERT INTO favourites (name, starred) VALUES (?, 1)');
+    const [a, b] = ['Zoe Ng', 'Bea Ho'].map((n) => Number(add.run(n).lastInsertRowid));
+    assert.deepEqual((await call('/api/favourites/order', 'PUT', { keys: [a, b] })).body, { ok: true, moved: 2 });
+    assert.deepEqual((await call('/api/favourites')).body.favourites.map((f) => f.name), ['Zoe Ng', 'Bea Ho']);
+    for (const keys of [null, ['x'], [a, a]]) assert.equal((await call('/api/favourites/order', 'PUT', { keys })).status, 400);
+  });
+});

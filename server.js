@@ -94,6 +94,7 @@ const ROUTES = [
   ['POST', '/api/players/:id/tournaments', players.importTournaments],
   ['GET', '/api/favourites', players.favouritesList],
   ['POST', '/api/favourites', players.addFavouriteRoute],
+  ['PUT', '/api/favourites/order', players.orderFavouritesRoute], // before :key
   ['PUT', '/api/favourites/:key', players.linkFavouriteRoute],
   ['DELETE', '/api/favourites/:key', players.removeFavouriteRoute],
   ['GET', '/api/videos', videos.onRequestGet],

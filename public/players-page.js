@@ -145,9 +145,9 @@ export async function renderPlayers(main) {
     },
   }, icon('trash', 14), 'Remove');
 
-  const card = (f) => h('div', { class: `card stack player-card${f.starred ? '' : ' unstarred'}` },
+  const card = (f, grip = null) => h('div', { class: `card stack player-card${f.starred ? '' : ' unstarred'}`, 'data-key': f.key },
     h('div', { class: 'row spread' },
-      h('h3', { class: 'card-title' }, starButton({ id: f.id, key: f.starred ? f.key : null, listed: f.key }, refreshCards, (err) => fill(msg, errorNotice(err))),
+      h('h3', { class: 'card-title' }, grip, starButton({ id: f.id, key: f.starred ? f.key : null, listed: f.key }, refreshCards, (err) => fill(msg, errorNotice(err))),
         f.id ? h('a', { href: `#/p/${f.id}` }, f.player?.name ?? f.name) : f.name),
       h('span', { class: 'row' }, f.player?.county ? h('span', { class: 'pill' }, f.player.county) : null, removeBtn(f))),
     f.id
@@ -203,14 +203,55 @@ export async function renderPlayers(main) {
   query.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(runSearch, 250); });
 
   const cards = h('div');
+  // The list's order (also the Tournaments page's): drag a card by its grip within
+  // its section, or focus the grip and press the arrow keys. Saved straight away.
+  let dragKey = null;
+  const move = async (d, list, from, to) => {
+    const [f] = list.splice(from, 1);
+    list.splice(to, 0, f);
+    drawCards(d);
+    cards.querySelector(`[data-key="${f.key}"] .drag-grip`)?.focus();
+    try {
+      await api('/api/favourites/order', { method: 'PUT', body: { keys: [...d.favourites, ...d.others].map((x) => x.key) } });
+    } catch (err) {
+      fill(msg, errorNotice(err));
+      await refreshCards();
+    }
+  };
+  const orderedCards = (d, list) => list.map((f, i) => {
+    const grip = h('button', {
+      type: 'button', class: 'small ghost icon-only drag-grip', title: 'Drag to change the order (or press ← → ↑ ↓)', 'aria-label': `Move ${f.name}: drag, or use the arrow keys`,
+      onpointerdown: () => { el.draggable = true; },
+      onpointerup: () => { el.draggable = false; },
+      onkeydown: (e) => {
+        const step = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+        if (!step) return;
+        e.preventDefault();
+        if (i + step >= 0 && i + step < list.length) move(d, list, i, i + step);
+      },
+    }, '⠿');
+    const el = card(f, grip);
+    const ours = () => dragKey !== null && list.some((x) => x.key === dragKey); // only within its own section
+    el.addEventListener('dragstart', (e) => { dragKey = f.key; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', f.name); el.classList.add('dragging'); });
+    el.addEventListener('dragend', () => { el.draggable = false; el.classList.remove('dragging'); dragKey = null; });
+    el.addEventListener('dragover', (e) => { if (ours() && dragKey !== f.key) { e.preventDefault(); el.classList.add('drop-here'); } });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-here'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('drop-here');
+      const from = list.findIndex((x) => x.key === dragKey);
+      if (from >= 0 && from !== i) move(d, list, from, i);
+    });
+    return el;
+  });
   const drawCards = (d) => fill(cards,
     h('div', { class: 'section-title' }, icon('star', 15), `Favourites (${d.favourites.length})`),
     d.favourites.length
-      ? h('div', { class: 'player-grid' }, d.favourites.map(card))
+      ? h('div', { class: 'player-grid' }, orderedCards(d, d.favourites))
       : h('div', { class: 'empty' }, icon('user', 34), h('div', {}, 'No favourites yet. Add your players above, or find them below, and star them (☆).')),
     h('div', { class: 'section-title' }, icon('user', 15), `Other players (${d.others.length})`),
     d.others.length
-      ? h('div', { class: 'player-grid' }, d.others.map(card))
+      ? h('div', { class: 'player-grid' }, orderedCards(d, d.others))
       : h('p', { class: 'hint' }, 'Players you add without a star, or unstar, stay here: for custom tournaments, and to star again later.'));
   // After a change, only the cards are drawn again (the boxes keep their text).
   const refreshCards = async () => drawCards(await api('/api/players'));

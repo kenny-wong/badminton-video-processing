@@ -730,3 +730,8 @@ table.player-matches .star-cell { width: 28px; padding-right: 0; }
 
 /* Tournaments page: the name box beside "whose tournaments" */
 input[type="search"].tournament-find { flex: 0 1 240px; width: 240px; }
+
+/* Players page: dragging a card into a new place */
+.player-card .drag-grip { cursor: grab; color: var(--muted); font-size: 1.1rem; line-height: 1; min-width: 26px; min-height: 26px; padding: 0; }
+.player-card.dragging { opacity: 0.5; }
+.player-card.drop-here { box-shadow: 0 0 0 2px var(--accent); }
