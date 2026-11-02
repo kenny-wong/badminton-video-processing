@@ -544,10 +544,11 @@ async function renderTournament(id, notice = null, who = null) {
   const linkedCell = (u) => {
     const v = byId.get(u.videoIds[0]);
     return h('div', { class: 'video-link stack' },
-      v ? h('div', { class: 'video-file small', title: v.name }, icon('film', 14), h('span', {}, v.name)) : null,
-      // Open editor and Unlink side by side at the right: both act on this video.
+      // The video (name, length), then Open editor and Unlink under it at the right: both act on this video.
+      v ? h('div', { class: 'video-file small', title: v.name },
+        icon('film', 14), h('span', { class: 'video-name' }, v.name),
+        h('span', { class: 'video-length', title: 'Length of the video' }, icon('hourglass', 13), clock(v.duration ?? 0))) : null,
       h('div', { class: 'row video-actions' },
-        v ? h('span', { class: 'small muted' }, clock(v.duration ?? 0)) : null,
         h('span', { class: 'video-buttons' },
           h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
           h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink'))),

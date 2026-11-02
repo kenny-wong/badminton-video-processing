@@ -37,6 +37,7 @@
   --tag-rallies: #0f766e; --tag-rallies-bg: #d9f2ee;
   --tag-render: #4338ca;  --tag-render-bg: #e4e3fb;
   --tag-youtube: #b42318; --tag-youtube-bg: #fde4e1;
+  --tag-highlight: #8a5a00; --tag-highlight-bg: #fdf0c8;
   --fav-bg: #ffeaa0;
   --radius: 12px;
   --radius-sm: 8px;
@@ -84,6 +85,7 @@
     --tag-rallies: #5eead4; --tag-rallies-bg: #10302c;
     --tag-render: #a5b4fc;  --tag-render-bg: #23234a;
     --tag-youtube: #ff8a80; --tag-youtube-bg: #3a1714;
+    --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c;
     --fav-bg: #4d3d00;
     --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 20%);
     --shadow-lg: 0 6px 24px rgb(0 0 0 / 40%);
@@ -123,6 +125,7 @@
   --tag-rallies: #5eead4; --tag-rallies-bg: #10302c;
   --tag-render: #a5b4fc;  --tag-render-bg: #23234a;
   --tag-youtube: #ff8a80; --tag-youtube-bg: #3a1714;
+  --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c;
   --fav-bg: #4d3d00;
   --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 20%);
   --shadow-lg: 0 6px 24px rgb(0 0 0 / 40%);
@@ -406,7 +409,8 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
 .chance-meter span { display: block; height: 100%; background: var(--side-a); }
 .video-chooser { width: 100%; min-width: 0; max-width: 100%; font-size: var(--fs-sm); }
 .video-file { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-.video-file > span { overflow: hidden; text-overflow: ellipsis; }
+.video-file > .video-name { overflow: hidden; text-overflow: ellipsis; }
+.video-file > .video-length { flex: none; display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .video-actions { gap: 8px; }
 .video-actions .video-buttons { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .video-actions .unlink-video { color: var(--muted); padding-left: 5px; padding-right: 5px; }
@@ -726,7 +730,7 @@ button.fav-star.on { color: var(--focus); }
 .legend i.s-mixed { background: var(--accent); }
 .rating-chip { display: inline-block; margin-left: 6px; font-size: 0.7rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 .pill.upset { background: var(--gold); color: #3d2f00; }
-.pill.highlight { background: var(--gold); color: #3d2f00; }
+.pill.highlight { background: var(--tag-highlight-bg); color: var(--tag-highlight); }
 .chance { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .chance .bar { height: 10px; border-radius: 5px; background: var(--side-b); overflow: hidden; }
 .chance .bar span { display: block; height: 100%; background: var(--side-a); }
