@@ -394,6 +394,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
   const roundCorner = (n) => Math.round(Math.min(1.5, Math.max(-0.5, n)) * 10000) / 10000;
 
+  // A click on the picture plays or pauses, except on the Tracking tab, where clicks mark and move the court.
+  player.addEventListener('click', (e) => {
+    if (onTracking || marking || e.target.closest('button, a, input, select, .corner-handle')) return;
+    toggle();
+  });
+
   let hover = null; // the pointer while marking, in canvas px, for the name of the corner being marked
   overlay.addEventListener('pointerdown', (e) => {
     if (!marking) return;
@@ -679,7 +685,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // The corner handles sit on the marked corners while the court shows on the Tracking tab.
   function placeHandles(box) {
-    const show = Boolean(onTracking && corners && showCourt && !marking);
+    const show = Boolean(onTracking && corners && showCourt && !marking && !showing);
     cornerHandles.forEach((el, k) => {
       el.hidden = !show;
       if (!show) return;
@@ -702,6 +708,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.clearRect(0, 0, box.cw, box.ch);
     placeHandles(box);
+    // The shuttle, players and court belong to the original's picture and timeline: a rendered file
+    // is cut (and has its own scoreboard), so they'd land in the wrong places on it.
+    if (showing) return;
     const px = ([x, y]) => [box.x + x * box.w, box.y + y * box.h];
     if (showPlayers && people) drawPlayers(g, box);
     if (showShuttle && shuttle.length) {
