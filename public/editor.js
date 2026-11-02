@@ -5,7 +5,7 @@
 import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
-import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, gamesText, parseGames, replay, scoreAt, startFor } from './shared/score.js';
+import { assumedStart, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, replay, scoreAt, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
@@ -1042,8 +1042,20 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
   for (const el of [pointsSel, settingBox, bestOfSel]) el.addEventListener('change', formatChanged);
   capText.textContent = format.setting ? `setting to ${CAPS[format.points]}` : 'no setting';
-  const serverSel = h('select', { 'aria-label': 'First server', onchange: (e) => { firstServer = e.target.value; changed(); } },
+  // In game 2 or 3 the winner of the game before serves first (from the official result).
+  const lawServer = unitGame >= 2 && match.games[unitGame - 2] ? defaultServer(unitGame, match.games) : null;
+  const serverHint = h('p', { class: 'hint' });
+  const showServerHint = () => {
+    if (!lawServer) return;
+    const who = lawServer === 'a' ? 'A' : 'B';
+    serverHint.textContent = firstServer === lawServer
+      ? `${who} won game ${unitGame - 1}, so ${who} serves first in game ${unitGame}.`
+      : `${who} won game ${unitGame - 1}, so ${who} should serve first in game ${unitGame} (the winner of a game serves first in the next).`;
+    serverHint.classList.toggle('warn-text', firstServer !== lawServer);
+  };
+  const serverSel = h('select', { 'aria-label': 'First server', onchange: (e) => { firstServer = e.target.value; showServerHint(); changed(); } },
     h('option', { value: 'a', selected: firstServer === 'a' }, 'A serves first'), h('option', { value: 'b', selected: firstServer === 'b' }, 'B serves first'));
+  showServerHint();
 
   // ---- the score when the video starts ----
   const startGame = h('select', { 'aria-label': 'Game the video starts in' }, [1, 2, 3].map((g) => h('option', { value: g }, `game ${g}`)));
@@ -1685,6 +1697,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       card('Scoring', 'sliders',
         h('div', { class: 'row small' }, pointsSel, h('label', { class: 'row' }, settingBox, 'setting'), capText, bestOfSel),
         h('div', { class: 'row small' }, serverSel, h('span', { class: 'muted' }, `A = ${nameA}, B = ${nameB}`)),
+        lawServer ? serverHint : null,
         h('div', { class: 'subhead' }, 'Video starts at'),
         h('div', { class: 'row small' }, startGame, 'score', h('span', { class: 'side-a' }, 'A'), startA, '–', startB, h('span', { class: 'side-b' }, 'B')),
         earlierRow,

@@ -94,7 +94,10 @@ test('gamesText writes games as on a score sheet', () => {
   assert.equal(gamesText([[21, 18], [15, 21]]), '21-18 15-21');
 });
 
-test('a game’s own video starts with A serving in games 1 and 3, B in game 2', () => {
-  assert.deepEqual([1, 2, 3].map(defaultServer), ['a', 'b', 'a']);
+test('the winner of a game serves first in the next game’s own video', () => {
+  assert.deepEqual([1, 2, 3].map((g) => defaultServer(g, [[21, 18], [15, 21], [21, 9]])), ['a', 'a', 'b']);
+  assert.deepEqual([1, 2, 3].map((g) => defaultServer(g, [[18, 21], [21, 15]])), ['a', 'b', 'a']);
+  // Without the result: A in game 1 (the toss) and 3, B in game 2.
+  assert.deepEqual([1, 2, 3].map((g) => defaultServer(g)), ['a', 'b', 'a']);
   assert.equal(defaultServer(0), 'a');
 });

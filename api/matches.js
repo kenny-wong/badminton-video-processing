@@ -194,9 +194,10 @@ export async function linkVideos({ request, params, app }) {
 export function gameRow(db, parentId, game) {
   const existing = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game);
   if (existing) return existing.id;
+  const games = JSON.parse(db.prepare('SELECT games FROM matches WHERE id = ?').get(parentId)?.games ?? '[]');
   db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, first_server)
     SELECT tournament_id, id, ?, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, ? FROM matches WHERE id = ? AND game = 0`)
-    .run(game, defaultServer(game), parentId);
+    .run(game, defaultServer(game, games), parentId);
   return db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game)?.id ?? null;
 }
 

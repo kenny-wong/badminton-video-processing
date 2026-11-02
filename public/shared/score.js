@@ -107,8 +107,19 @@ export function startFor(match) {
   return { games: earlier, points: match.startScore?.points ?? [0, 0] };
 }
 
-/** Who serves first by default in a game's own video: A in games 1 and 3, B in game 2. */
-export const defaultServer = (game) => (game === 2 ? 'b' : 'a');
+/** Who won a finished game ([a, b] points): 'a', 'b', or null for a tie or no game. */
+const gameWinnerOf = (g) => (Array.isArray(g) && g[0] !== g[1] ? (g[0] > g[1] ? 'a' : 'b') : null);
+
+/**
+ * Who serves first in a game's own video. The winner of a game serves first in
+ * the next (the Laws), so in games 2 and 3 that is the winner of the game
+ * before in the official result `games`. Game 1 (the toss) is A; without that
+ * result, B in game 2.
+ */
+export function defaultServer(game, games = []) {
+  if (game < 2) return 'a';
+  return gameWinnerOf(Array.isArray(games) ? games[game - 2] : null) ?? (game === 2 ? 'b' : 'a');
+}
 
 /** Replays a match's (or a game's) saved tagging. */
 export const replayMatch = (match, format) => replay(match.rallies, format, match.firstServer, startFor(match), { oneGame: (match.game ?? 0) > 0 });

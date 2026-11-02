@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { createApp } from '../server.js';
@@ -47,6 +48,26 @@ test('re-importing keeps game rows and brings their time and result up to date',
   const g = matchFromRow(db.prepare('SELECT * FROM matches WHERE parent_id = ? AND game = 2').get(parent));
   assert.deepEqual([g.time, g.games[1], g.rallies.length], ['10:15', [21, 16], 1]);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM matches WHERE tournament_id = ? AND game = 0').get(tid).n, 3);
+});
+
+test('an untagged game row has the winner of the game before serving first, following the result', () => {
+  const db = openDb();
+  const tid = saveTournament(db, fetched());
+  const parent = db.prepare("SELECT id FROM matches WHERE draw = 'OS U15 - Group B'").get().id; // 19-21 21-15 12-21
+  const addGame = (game, rallies = '[]', server = 'a') => db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, draw, round, team_a, team_b, games, rallies, first_server)
+    SELECT tournament_id, id, ?, match_date, match_time, draw, round, team_a, team_b, games, ?, ? FROM matches WHERE id = ?`).run(game, rallies, server, parent);
+  addGame(2, '[]', 'a');
+  addGame(3, '[{"start":1,"end":2,"winner":"a"}]', 'b');
+  const servers = () => db.prepare('SELECT game, first_server AS s FROM matches WHERE parent_id = ? ORDER BY game').all(parent).map((r) => r.s);
+  // The migration's SQL puts the untagged game 2 right (B won game 1); tagged game 3 keeps the user's choice.
+  db.exec(readFileSync(new URL('../migrations/0021_winner_serves.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(servers(), ['b', 'b']);
+  // A changed result moves the untagged game's server with it.
+  const again = fetched();
+  again.matches[1] = { ...again.matches[1], games: [[21, 19], [21, 15]] };
+  saveTournament(db, again);
+  assert.equal(tid, saveTournament(db, again));
+  assert.deepEqual(servers(), ['a', 'b']);
 });
 
 test('linking a video to one game gives that game its own row and status', async () => {

@@ -245,6 +245,7 @@ input[type="url"], input.grow { flex: 1 1 320px; min-width: 0; }
 textarea { width: 100%; min-height: 96px; resize: vertical; line-height: 1.45; }
 label.field { display: block; font-weight: 650; margin: 18px 0 6px; }
 .hint { color: var(--muted); font-size: var(--fs-sm); margin: 4px 0 0; }
+.hint.warn-text { color: var(--warn); }
 
 .notice { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--radius-sm); margin: 10px 0; border: 1px solid transparent; }
 .notice.ok { background: var(--yes-bg); color: var(--yes); border-color: color-mix(in srgb, var(--yes) 20%, transparent); }
