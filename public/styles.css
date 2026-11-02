@@ -363,9 +363,8 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
 .step-progress { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mini-bar { width: 72px; height: 6px; border-radius: 3px; background: var(--border-strong); overflow: hidden; display: inline-block; }
 .mini-bar > span { display: block; height: 100%; background: var(--accent); }
-/* A failed render or upload: beside its button, the reason in the tooltip (and a short form when there's room). */
+/* A failed render or upload: "Failed" beside its button, the reason in the tooltip. */
 .step-failed { display: inline-flex; align-items: center; gap: 4px; color: var(--no); font-weight: 650; cursor: help; min-width: 0; }
-.step-failed-why { font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 16em; }
 /* A linked video: its next step at the left, centred; the video and its buttons as one block at the right. */
 .video-link { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
 .video-link .video-main { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }

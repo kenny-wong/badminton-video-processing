@@ -573,12 +573,12 @@ async function renderTournament(id, notice = null, who = null) {
   const progressNote = (job, doing) => h('span', { class: 'step-progress' },
     job.status === 'queued' ? h('span', { class: 'muted' }, 'Waiting for the jobs before it')
       : [h('span', { class: 'mini-bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${percent(job)}%` } })), h('span', { class: 'muted' }, `${doing} ${percent(job)}%`)]);
-  // "Failed" beside a button, the reason (and its details) in the tooltip.
+  // "Failed" beside a button, the reason (and its details) only in the tooltip.
   const failedNote = (key) => {
     const f = stepFailures.get(key);
     if (!f) return null;
     const tip = [f.message, readableDetail(f.detail), 'Click the button to try again; the Jobs page has the log.'].filter(Boolean).join('\n\n');
-    return h('span', { class: 'step-failed', title: tip, tabindex: 0, 'aria-label': `Failed: ${f.message}` }, icon('alert', 13), 'Failed', h('span', { class: 'step-failed-why' }, f.message));
+    return h('span', { class: 'step-failed', title: tip, tabindex: 0, 'aria-label': `Failed: ${f.message}` }, icon('alert', 13), 'Failed');
   };
   const remember = (key, err) => stepFailures.set(key, { message: err?.message ?? String(err), detail: err?.detail ?? null });
   // A reply from Google comes as JSON: its own message reads better than the whole of it.
