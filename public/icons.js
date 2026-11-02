@@ -8,6 +8,7 @@ const PATHS = {
   play: 'M7 4l13 8-13 8z',
   pause: 'M7 4h4v16H7zM13 4h4v16h-4z',
   stop: 'M6 6h12v12H6z',
+  alert: 'M12 3 22 20H2zM12 10v4M12 17v.5',
   hourglass: 'M6 3h12M6 21h12M7 3v2a5 5 0 0 0 5 5 5 5 0 0 0 5-5V3M7 21v-2a5 5 0 0 1 5-5 5 5 0 0 1 5 5v2',
   volume: 'M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
   mute: 'M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6',

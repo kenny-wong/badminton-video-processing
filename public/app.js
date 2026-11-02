@@ -408,6 +408,10 @@ function videoLabel(v) {
   return `${v.name} · ${when(v.recordedAt, { date: false })} · ${clock(v.duration ?? 0)}`;
 }
 
+// A render or upload started from the tournament page that failed: shown beside its button, the reason in
+// a tooltip, until tried again. Keyed 'render:<unit id>' / 'upload:<unit id>'; outlives redraws of the page.
+const stepFailures = new Map(); // key -> { message, detail }
+
 // The tournament page's list/grid choice and filters, per device.
 const PREFS_KEY = 'badminton-video:tournament-view:v1';
 // Where the tournament page was when a match or game was opened in the editor: that match or game
@@ -569,12 +573,30 @@ async function renderTournament(id, notice = null, who = null) {
   const progressNote = (job, doing) => h('span', { class: 'step-progress' },
     job.status === 'queued' ? h('span', { class: 'muted' }, 'Waiting for the jobs before it')
       : [h('span', { class: 'mini-bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${percent(job)}%` } })), h('span', { class: 'muted' }, `${doing} ${percent(job)}%`)]);
+  // "Failed" beside a button, the reason (and its details) in the tooltip.
+  const failedNote = (key) => {
+    const f = stepFailures.get(key);
+    if (!f) return null;
+    const tip = [f.message, readableDetail(f.detail), 'Click the button to try again; the Jobs page has the log.'].filter(Boolean).join('\n\n');
+    return h('span', { class: 'step-failed', title: tip, tabindex: 0, 'aria-label': `Failed: ${f.message}` }, icon('alert', 13), 'Failed', h('span', { class: 'step-failed-why' }, f.message));
+  };
+  const remember = (key, err) => stepFailures.set(key, { message: err?.message ?? String(err), detail: err?.detail ?? null });
+  // A reply from Google comes as JSON: its own message reads better than the whole of it.
+  const readableDetail = (detail) => {
+    if (!detail) return null;
+    try {
+      const j = JSON.parse(detail);
+      const m = j?.error?.message ?? j?.error_description ?? j?.message;
+      if (m) return String(m);
+    } catch { /* plain text */ }
+    return String(detail).slice(0, 400);
+  };
   const renderControl = (uid) => {
     const job = renderJobs.get(uid);
     return h('div', { class: 'row tight small step-row', 'data-render': uid },
       job
         ? [h('button', { class: 'small danger', title: 'Stop this render', onclick: () => stopJob(uid, renderJobs, 'Stop this render? What it has made so far is thrown away.') }, icon('stop', 13), 'Stop render'), progressNote(job, 'Rendering')]
-        : h('button', { class: 'small', title: 'Render with the options in Settings (the editor’s Export tab has more)', onclick: () => startRender(uid) }, icon('export', 13), 'Render'));
+        : [h('button', { class: 'small', title: 'Render with the options in Settings (the editor’s Export tab has more)', onclick: () => startRender(uid) }, icon('export', 13), 'Render'), failedNote(`render:${uid}`)]);
   };
   const uploadControl = (u) => {
     const job = uploadJobs.get(u.id);
@@ -582,10 +604,10 @@ async function renderTournament(id, notice = null, who = null) {
     return h('div', { class: 'row tight small step-row', 'data-upload': u.id },
       job
         ? [h('button', { class: 'small danger', title: 'Stop this upload', onclick: () => stopJob(u.id, uploadJobs, 'Stop this upload? YouTube gets nothing; you can upload again later.') }, icon('stop', 13), 'Stop upload'), progressNote(job, 'Uploading')]
-        : h('button', {
+        : [h('button', {
           class: 'small', onclick: () => startUpload(u),
           title: rendered ? 'Upload the rendered video to YouTube, with the privacy and playlist last chosen in a YouTube box' : 'Upload the original video, as it is, to YouTube (not rendered yet), with the privacy and playlist last chosen in a YouTube box',
-        }, icon('youtube', 13), rendered ? 'Upload (rendered)' : 'Upload (original)'));
+        }, icon('youtube', 13), rendered ? 'Upload (rendered)' : 'Upload (original)'), failedNote(`upload:${u.id}`)]);
   };
   const unitById = (uid) => matches.flatMap((m) => [m, ...m.units]).find((x) => x.id === uid);
   const show = (uid) => {
@@ -593,8 +615,9 @@ async function renderTournament(id, notice = null, who = null) {
     const u = unitById(uid);
     if (u) document.querySelectorAll(`[data-upload="${uid}"]`).forEach((el) => el.replaceWith(uploadControl(u)));
   };
-  const follow = async (uid, job, jobsOf, done) => {
+  const follow = async (uid, job, jobsOf, done, kind) => {
     jobsOf.set(uid, job);
+    stepFailures.delete(`${kind}:${uid}`);
     show(uid);
     try {
       const finished = await waitJob(job, (j) => { jobsOf.set(uid, j); if (table.isConnected) show(uid); });
@@ -602,20 +625,20 @@ async function renderTournament(id, notice = null, who = null) {
       if (table.isConnected) renderTournament(id, done(finished));
     } catch (err) {
       jobsOf.delete(uid);
-      if (!table.isConnected) return;
-      show(uid);
-      if (err.code !== 'stopped') fill(msg, errorNotice(err));
+      if (err.code !== 'stopped') remember(`${kind}:${uid}`, err); // stays beside the button, even after a redraw
+      if (table.isConnected) show(uid);
     }
   };
-  const followRender = (uid, job) => follow(uid, job, renderJobs, () => h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'));
+  const followRender = (uid, job) => follow(uid, job, renderJobs, () => h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'), 'render');
   // waitJob gives the job's result: the upload's { url, locked, … }.
   const followUpload = (uid, job) => follow(uid, job, uploadJobs, (r) => h('div', { class: 'notice ok' }, 'Uploaded to YouTube',
-    r?.url ? [': ', h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.url)] : '', r?.locked ? ' (YouTube keeps it private for now)' : '', '.'));
+    r?.url ? [': ', h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.url)] : '', r?.locked ? ' (YouTube keeps it private for now)' : '', '.'), 'upload');
   const startRender = async (uid) => {
     try {
       followRender(uid, await api(`/api/matches/${uid}/render`, { method: 'POST', body: {} }));
     } catch (err) {
-      fill(msg, errorNotice(err));
+      remember(`render:${uid}`, err);
+      show(uid);
     }
   };
   const startUpload = async (u) => {
@@ -625,7 +648,8 @@ async function renderTournament(id, notice = null, who = null) {
     try {
       followUpload(u.id, await api(`/api/matches/${u.id}/youtube`, { method: 'POST', body: { file, privacy: prefs.privacy, playlist: prefs.playlist } }));
     } catch (err) {
-      fill(msg, err.code === 'signin' ? h('div', { class: 'notice warn' }, 'Sign in to YouTube first: open any video’s editor, Export tab, YouTube box.') : errorNotice(err));
+      remember(`upload:${u.id}`, err.code === 'signin' ? { message: 'Not signed in to YouTube', detail: 'Sign in first: open any video’s editor, Export tab, YouTube box, Sign in to YouTube.' } : err);
+      show(u.id);
     }
   };
   const stopJob = async (uid, jobsOf, question) => {
@@ -1100,6 +1124,17 @@ async function renderTournament(id, notice = null, who = null) {
   // Renders and uploads of this tournament's videos still waiting or running (from the editor, Render all, Upload all or this page) show here too.
   const unitIds = new Set(matches.flatMap((m) => [m.id, ...m.units.map((u) => u.id)]).filter(Boolean));
   api('/api/jobs').then(({ jobs }) => {
+    // The latest job of each unit and kind: failed ones (this server run) show beside their button.
+    const latest = new Map();
+    for (const j of jobs) if (['render', 'upload'].includes(j.kind)) {
+      const k = `${j.kind}:${Number(j.key.split(':')[1])}`;
+      if (!latest.has(k) || (j.startedAt ?? 0) >= (latest.get(k).startedAt ?? 0)) latest.set(k, j);
+    }
+    for (const [k, j] of latest) {
+      if (j.status !== 'failed' || !unitIds.has(Number(k.split(':')[1]))) continue;
+      remember(k, { message: j.error ?? 'Failed', detail: j.detail });
+      show(Number(k.split(':')[1]));
+    }
     for (const j of jobs) {
       const uid = Number(j.key.split(':')[1]);
       const live = unitIds.has(uid) && (j.status === 'queued' || j.status === 'running');
