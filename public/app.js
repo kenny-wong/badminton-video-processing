@@ -410,7 +410,7 @@ function videoLabel(v) {
 
 // A render or upload started from the tournament page that failed: shown beside its button, the reason in
 // a tooltip, until tried again. Keyed 'render:<unit id>' / 'upload:<unit id>'; outlives redraws of the page.
-const stepFailures = new Map(); // key -> { message, detail }
+const stepFailures = new Map(); // key -> { message, detail, retryAt }
 
 // The tournament page's list/grid choice and filters, per device.
 const PREFS_KEY = 'badminton-video:tournament-view:v1';
@@ -548,10 +548,9 @@ async function renderTournament(id, notice = null, who = null) {
 
   const linkedCell = (u) => {
     const v = byId.get(u.videoIds[0]);
-    // Its next step (Render, Upload) on the left, centred in the row; at the right the video (name, length)
-    // with Open editor and Unlink under it, as one block: both act on this video.
+    // The video (name, length) with Open editor and Unlink under it, as one block at the right: both act on
+    // this video. Its next steps (Render, Upload) sit after its status labels instead (stepsOf).
     return h('div', { class: 'video-link' },
-      nextStep(u),
       h('div', { class: 'video-main' },
         v ? h('div', { class: 'video-file small', title: v.name },
           icon('film', 14), h('span', { class: 'video-name' }, v.name),
@@ -570,17 +569,28 @@ async function renderTournament(id, notice = null, who = null) {
   const renderJobs = new Map(); // unit id -> its render job while it waits or runs
   const uploadJobs = new Map(); // unit id -> its upload job while it waits or runs
   const percent = (job) => Math.round((job.progress ?? 0) * 100);
-  const progressNote = (job, doing) => h('span', { class: 'step-progress' },
-    job.status === 'queued' ? h('span', { class: 'muted' }, 'Waiting for the jobs before it')
-      : [h('span', { class: 'mini-bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${percent(job)}%` } })), h('span', { class: 'muted' }, `${doing} ${percent(job)}%`)]);
-  // "Failed" beside a button, the reason (and its details) only in the tooltip.
+  // Kept short (the words in the tooltip), so the row stays one line.
+  const progressNote = (job, doing) => (job.status === 'queued'
+    ? h('span', { class: 'step-progress muted', title: 'Waiting for the jobs before it' }, 'Waiting…')
+    : h('span', { class: 'step-progress', title: `${doing} ${percent(job)}%${job.message ? `: ${job.message}` : ''}` },
+      h('span', { class: 'mini-bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${percent(job)}%` } })), h('span', { class: 'muted' }, `${percent(job)}%`)));
+  // A time to try again, in the viewer's own clock: 'Try again at 16:21 (Tue)'.
+  const retryText = (iso) => {
+    const t = new Date(iso);
+    if (Number.isNaN(t.getTime())) return null;
+    return `Try again at ${t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} (${t.toLocaleDateString('en-GB', { weekday: 'short' })})`;
+  };
+  // "Failed" beside a button, the reason (and its details) only in the tooltip; when YouTube's limit is
+  // the reason, when it can go again, highlighted.
   const failedNote = (key) => {
     const f = stepFailures.get(key);
     if (!f) return null;
-    const tip = [f.message, readableDetail(f.detail), 'Click the button to try again; the Jobs page has the log.'].filter(Boolean).join('\n\n');
-    return h('span', { class: 'step-failed', title: tip, tabindex: 0, 'aria-label': `Failed: ${f.message}` }, icon('alert', 13), 'Failed');
+    const retry = f.retryAt && Date.parse(f.retryAt) > Date.now() ? retryText(f.retryAt) : null;
+    const tip = [f.message, readableDetail(f.detail), retry ? `${retry}.` : 'Click the button to try again; the Jobs page has the log.'].filter(Boolean).join('\n\n');
+    return h('span', { class: 'step-failed', title: tip, tabindex: 0, 'aria-label': `Failed: ${f.message}${retry ? `. ${retry}` : ''}` }, icon('alert', 13), 'Failed',
+      retry ? h('span', { class: 'retry-at' }, retry) : null);
   };
-  const remember = (key, err) => stepFailures.set(key, { message: err?.message ?? String(err), detail: err?.detail ?? null });
+  const remember = (key, err) => stepFailures.set(key, { message: err?.message ?? String(err), detail: err?.detail ?? null, retryAt: err?.job?.retryAt ?? err?.retryAt ?? null });
   // A reply from Google comes as JSON: its own message reads better than the whole of it.
   const readableDetail = (detail) => {
     if (!detail) return null;
@@ -642,9 +652,9 @@ async function renderTournament(id, notice = null, who = null) {
     }
   };
   const startUpload = async (u) => {
+    // No question: the privacy and playlist last chosen in a YouTube box (Unlisted, into the playlist, at first).
     const prefs = readUploadPrefs();
     const file = u.outputPath ? 'video' : 'original';
-    if (!confirm(`Upload the ${file === 'video' ? 'rendered video' : 'original video (not rendered)'} of ${unitName(u)} to YouTube as ${prefs.privacy}${prefs.playlist ? ', into the tournament’s playlist' : ''}?`)) return;
     try {
       followUpload(u.id, await api(`/api/matches/${u.id}/youtube`, { method: 'POST', body: { file, privacy: prefs.privacy, playlist: prefs.playlist } }));
     } catch (err) {
@@ -663,6 +673,8 @@ async function renderTournament(id, notice = null, who = null) {
     if (!render && !upload) return null;
     return h('div', { class: 'next-step' }, render ? renderControl(u.id) : null, upload ? uploadControl(u) : null);
   };
+  // A filmed video's next steps, after its status labels; nothing for one without a video.
+  const stepsOf = (u) => (u.videoIds?.length ? nextStep(u) : null);
 
   const perGame = (m) => m.units.length >= 2 || m.units.some((u) => u.videoIds.length);
   const gamesLinked = (m) => m.units.some((u) => u.videoIds.length);
@@ -795,10 +807,12 @@ async function renderTournament(id, notice = null, who = null) {
     h('span', { class: 'event-label' }, m.draw || 'Match'), h('span', { class: 'muted' }, m.round),
     !m.games?.length ? h('span', { class: 'muted result-pending', title: 'No result is recorded: not played yet, or played but its result isn’t in yet (Update results)' }, 'No result yet') : null);
 
-  // One game: its thumbnail when filmed, its name and score, progress, and its video (Open, a suggestion or the chooser).
+  // One game: its thumbnail when filmed, its name and score, progress, its next steps (Render, Upload) and
+  // its video (Open, a suggestion or the chooser).
   const gameRow = (u) => h('div', { class: 'game-video-row', 'data-anchor': u.id ? `u${u.id}` : null, ...dropOn(u) },
     u.videoIds.length ? thumbOf(u, lengthOf(u), false) : null,
     h('div', { class: 'game-video-heading' }, h('div', { class: 'small game-name' }, gameLabel(u)), statusCell(u)),
+    u.videoIds.length ? h('div', { class: 'game-video-steps' }, stepsOf(u)) : null,
     h('div', { class: 'game-video-controls' }, unitVideoCell(u)));
 
   // A match filmed game by game: its filmed games always show; the games still without a video
@@ -830,7 +844,7 @@ async function renderTournament(id, notice = null, who = null) {
         h('td', { class: 'match-details' }, eventLine(m), teams(m), custom ? custom.actions(m) : null),
         h('td', { class: 'match-chance', 'data-label': 'Win chance' }, chanceCell(m)),
         h('td', { class: 'match-video', 'data-label': 'Video' }, m.videoIds.length ? thumbOf(m, lengthOf(m), false) : null, videoCell(m)),
-        h('td', { class: 'match-progress', 'data-label': 'Progress' }, statusCell(m))),
+        h('td', { class: 'match-progress', 'data-label': 'Progress' }, statusCell(m), stepsOf(m))),
       // Game by game, unless one video covers the whole match.
       perGame(m) && !m.videoIds.length ? h('tr', { class: 'match-games-row' }, h('td', { colspan: 5 }, gameDetails(m))) : null))));
 
@@ -854,6 +868,7 @@ async function renderTournament(id, notice = null, who = null) {
         teams(m),
         typeof m.people?.chance === 'number' ? h('div', { class: 'match-card-chance' }, h('div', { class: 'small muted' }, 'Win chance'), chanceCell(m)) : null,
         statusCell(m),
+        stepsOf(m),
         custom ? custom.actions(m) : null,
         h('div', { class: 'match-card-video' }, videoCell(m)),
         games ? gameDetails(m) : null));
@@ -1132,7 +1147,7 @@ async function renderTournament(id, notice = null, who = null) {
     }
     for (const [k, j] of latest) {
       if (j.status !== 'failed' || !unitIds.has(Number(k.split(':')[1]))) continue;
-      remember(k, { message: j.error ?? 'Failed', detail: j.detail });
+      remember(k, { message: j.error ?? 'Failed', detail: j.detail, retryAt: j.retryAt });
       show(Number(k.split(':')[1]));
     }
     for (const j of jobs) {

@@ -32,7 +32,7 @@ function setUp() {
   return { app: { db, dataDir }, id };
 }
 
-/** A pretend YouTube: records each call; `uploadFails` makes the upload itself fail. */
+/** A pretend YouTube: records each call; `uploadFails` makes the upload itself fail (true, or Google's error reply). */
 function fakeYouTube({ uploadFails = false } = {}) {
   const calls = [];
   const fetch = async (url, opts = {}) => {
@@ -40,7 +40,7 @@ function fakeYouTube({ uploadFails = false } = {}) {
     const u = String(url);
     calls.push(`${method} ${u.replace('https://www.googleapis.com', '')}`);
     if (u.includes('uploadType=resumable')) return new Response(null, { status: 200, headers: { Location: 'https://upload.test/session' } });
-    if (u === 'https://upload.test/session') return uploadFails ? jsonRes({ error: { code: 400, message: 'Bad video' } }, 400) : jsonRes({ id: 'NEW0000000b', status: { privacyStatus: 'unlisted', uploadStatus: 'uploaded' } });
+    if (u === 'https://upload.test/session') return uploadFails ? jsonRes(uploadFails === true ? { error: { code: 400, message: 'Bad video' } } : uploadFails, 400) : jsonRes({ id: 'NEW0000000b', status: { privacyStatus: 'unlisted', uploadStatus: 'uploaded' } });
     if (u.includes('/videos?part=status')) return jsonRes({ items: [{ status: { privacyStatus: 'unlisted', uploadStatus: 'processed' } }] });
     if (u.includes('/playlistItems?part=snippet&playlistId=')) return jsonRes({ items: [{ snippet: { position: 1 } }] });
     if (u.includes('/playlists?part=snippet&id=')) return jsonRes({ items: [{ id: 'PL1', snippet: { title: 'Example' } }] });
@@ -164,4 +164,15 @@ test('Upload all: the rendered whole videos, or the originals of the ones not re
   assert.equal((await uploadAll({ ...all('original'), request: new Request('http://x', { method: 'POST', body: '{}' }) })).status, 400);
   rmSync(join(app.dataDir, 'youtube', 'token.json'));
   assert.equal((await uploadAll(all('rendered'))).status, 401); // signed out: nothing queued
+});
+
+test('an upload refused for the channel’s limit says when it can go again: a day after the oldest upload of the last day', async () => {
+  const { app, id } = setUp();
+  const earlier = new Date(Date.now() - 5 * 3600_000).toISOString().replace(/\.\d+Z$/, 'Z');
+  app.db.prepare('UPDATE matches SET uploaded_at = ? WHERE id = ?').run(earlier, id);
+  const yt = fakeYouTube({ uploadFails: { error: { code: 400, message: 'The user has exceeded the number of videos they may upload.', errors: [{ reason: 'uploadLimitExceeded' }] } } });
+  const job = await withFetch(yt.fetch, async () => finished(await upload({ ...post(id, { privacy: 'unlisted' }), app })));
+  assert.equal(job.status, 'failed');
+  assert.match(job.error, /upload limit/);
+  assert.equal(job.retryAt, new Date(Date.parse(earlier) + 86400_000).toISOString());
 });

@@ -38,6 +38,7 @@
   --tag-render: #4338ca;  --tag-render-bg: #e4e3fb;
   --tag-youtube: #b42318; --tag-youtube-bg: #fde4e1;
   --tag-highlight: #8a5a00; --tag-highlight-bg: #fdf0c8;
+  --retry: #3d2a00; --retry-bg: #ffd84d;
   --fav-bg: #ffeaa0;
   --radius: 12px;
   --radius-sm: 8px;
@@ -85,7 +86,7 @@
     --tag-rallies: #5eead4; --tag-rallies-bg: #10302c;
     --tag-render: #a5b4fc;  --tag-render-bg: #23234a;
     --tag-youtube: #ff8a80; --tag-youtube-bg: #3a1714;
-    --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c;
+    --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c; --retry: #261a00; --retry-bg: #fcd34d;
     --fav-bg: #4d3d00;
     --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 20%);
     --shadow-lg: 0 6px 24px rgb(0 0 0 / 40%);
@@ -125,7 +126,7 @@
   --tag-rallies: #5eead4; --tag-rallies-bg: #10302c;
   --tag-render: #a5b4fc;  --tag-render-bg: #23234a;
   --tag-youtube: #ff8a80; --tag-youtube-bg: #3a1714;
-  --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c;
+  --tag-highlight: #fcd34d; --tag-highlight-bg: #3a2f0c; --retry: #261a00; --retry-bg: #fcd34d;
   --fav-bg: #4d3d00;
   --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 2px 8px rgb(0 0 0 / 20%);
   --shadow-lg: 0 6px 24px rgb(0 0 0 / 40%);
@@ -359,14 +360,18 @@ button.tournament-metric:hover { background: var(--surface); border-color: var(-
 button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 /* A video's next steps: one row each (Render, Upload), the progress beside. */
 .next-step { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.step-row { flex-wrap: nowrap; }
+.step-row { flex-wrap: wrap; row-gap: 4px; }
+.step-row > button { white-space: nowrap; }
 .step-progress { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .mini-bar { width: 72px; height: 6px; border-radius: 3px; background: var(--border-strong); overflow: hidden; display: inline-block; }
 .mini-bar > span { display: block; height: 100%; background: var(--accent); }
 /* A failed render or upload: "Failed" beside its button, the reason in the tooltip. */
-.step-failed { display: inline-flex; align-items: center; gap: 4px; color: var(--no); font-weight: 650; cursor: help; min-width: 0; }
+.step-failed { display: inline-flex; align-items: center; gap: 4px; color: var(--no); font-weight: 650; cursor: help; min-width: 0; flex-wrap: wrap; row-gap: 4px; }
+/* When YouTube's limit lets it go again: the thing to act on, so it stands out. */
+.step-failed .retry-at { margin-left: 4px; padding: 2px 8px; border-radius: 4px; background: var(--retry-bg); color: var(--retry); font-weight: 700; white-space: nowrap; }
+.match-progress .next-step, .match-card .match-body > .next-step { margin-top: 8px; }
 /* A linked video: its next step at the left, centred; the video and its buttons as one block at the right. */
-.video-link { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
+.video-link { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
 .video-link .video-main { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
 .tournament-toolbar { margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .tournament-toolbar h2 { margin: 0; font-size: var(--fs-lg); }
@@ -441,7 +446,8 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
 .game-video-controls { min-width: 0; }
 .game-video-row.drop-on { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
 /* A filmed game shows its thumbnail first; the games still without a video fold below the filmed ones. */
-.game-video-row:has(> .thumb) { grid-template-columns: 128px minmax(180px, 1fr) minmax(240px, 1fr); }
+.game-video-row:has(> .thumb) { grid-template-columns: 128px minmax(180px, max-content) max-content minmax(240px, 1fr); }
+.game-video-steps:empty { display: none; }
 .match-games-filmed { border-top: 1px solid var(--border); }
 .match-games-filmed > .match-games > summary { padding-left: 36px; }
 .match-video .thumb { width: 160px; margin-bottom: 8px; }
@@ -454,7 +460,7 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
 .match-card .match-body > :is(.match-games, .match-games-filmed) { margin: 0 -16px -16px; }
 .match-card .game-video-row { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; }
 .match-card .game-video-row:has(> .thumb) { grid-template-columns: 112px minmax(0, 1fr); }
-.match-card .game-video-row > .thumb { grid-row: span 2; align-self: start; }
+.match-card .game-video-row > .thumb { grid-row: span 3; align-self: start; }
 .match-card .match-games-filmed > .match-games > summary { padding-left: 16px; }
 @media (max-width: 760px) {
   .tournament-overview { gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -480,7 +486,7 @@ button.tournament-metric[aria-pressed="true"] { background: var(--accent-soft); 
   .tournament-table tbody.match-group + tbody.match-group tr:first-child td { border-top: 0; }
   .game-video-row { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; }
   .game-video-row:has(> .thumb) { grid-template-columns: 112px minmax(0, 1fr); }
-  .game-video-row > .thumb { grid-row: span 2; align-self: start; }
+  .game-video-row > .thumb { grid-row: span 3; align-self: start; }
   .match-games-filmed > .match-games > summary { padding-left: 16px; }
 }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 6px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }

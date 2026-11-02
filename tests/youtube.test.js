@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, deleteVideo, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistPosition, playlistTitle, readClient, tournamentPlaylistTitle, tournamentPlaylistUrls,
+  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, deleteVideo, knownPlaylist, nextOffset, nextPacificMidnight, retryAfter, parseDescribed, pkce, playlistInfo, playlistPosition, playlistTitle, readClient, tournamentPlaylistTitle, tournamentPlaylistUrls,
   uploadVideo, videoResource,
 } from '../lib/youtube.js';
 
@@ -268,4 +268,19 @@ test('a tournament’s playlist starts with the year, unless its name has it alr
   assert.equal(tournamentPlaylistTitle({ name: '2026 Junior Gold', start: '2026-10-04' }), '2026 Junior Gold');
   assert.equal(tournamentPlaylistTitle({ name: 'Autumn Open 2026', start: '2026-10-04' }), 'Autumn Open 2026');
   assert.equal(tournamentPlaylistTitle({ name: 'No Date Open' }), 'No Date Open');
+});
+
+test('retryAfter: when an upload refused for a limit can go again', () => {
+  const now = Date.parse('2026-11-02T22:00:00Z');
+  // The channel's limit is a rolling day: 24 h after the oldest upload of the last day.
+  assert.equal(retryAfter('uploadLimitExceeded', { now, recentUploads: ['2026-11-02T18:12:00Z', '2026-11-02T16:21:00Z', '2026-11-01T10:00:00Z'] }), '2026-11-03T16:21:00.000Z');
+  assert.equal(retryAfter('uploadLimitExceeded', { now }), '2026-11-03T22:00:00.000Z');
+  // The project's quota: midnight Pacific (PST in November, 08:00 UTC; PDT in July, 07:00 UTC).
+  assert.equal(retryAfter('quotaExceeded', { now }), '2026-11-03T08:00:00.000Z');
+  assert.equal(new Date(nextPacificMidnight(Date.parse('2026-07-10T06:30:00Z'))).toISOString(), '2026-07-10T07:00:00.000Z');
+  assert.equal(new Date(nextPacificMidnight(Date.parse('2026-07-10T07:30:00Z'))).toISOString(), '2026-07-11T07:00:00.000Z');
+  // The day the clocks go back (1 Nov 2026 there): the next midnight is PST.
+  assert.equal(new Date(nextPacificMidnight(Date.parse('2026-11-01T12:00:00Z'))).toISOString(), '2026-11-02T08:00:00.000Z');
+  assert.equal(retryAfter('rateLimitExceeded', { now }), '2026-11-02T22:05:00.000Z');
+  assert.equal(retryAfter('forbidden', { now }), null);
 });

@@ -26,7 +26,7 @@ import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
 import {
-  accessToken, addToTournamentPlaylist, authUrl, deleteVideo, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistPosition, playlistUrl, PRIVACY, readClient, readToken,
+  accessToken, addToTournamentPlaylist, authUrl, deleteVideo, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistPosition, playlistUrl, PRIVACY, readClient, readToken, retryAfter,
   signOut as forget, tournamentPlaylistTitle, tournamentPlaylistUrls, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
@@ -187,6 +187,11 @@ function queueUpload(app, loaded, { key, file, privacy, playlist = true, old = n
         j.progress = size ? sent / size : 0;
         j.message = `${mb(sent)} of ${mb(size)} MB sent`;
       },
+    }).catch((err) => {
+      // Refused for a limit: when it can go again, for the page to suggest.
+      const recentUploads = app.db.prepare("SELECT uploaded_at FROM matches WHERE uploaded_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')").all().map((r) => r.uploaded_at);
+      err.retryAt = retryAfter(err.reason, { recentUploads });
+      throw err;
     });
     const url = youtubeUrl(video.id);
     j.log(`Uploaded: ${url} (YouTube replied ${video.status?.privacyStatus ?? '?'})`);
