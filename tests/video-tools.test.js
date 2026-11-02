@@ -132,7 +132,7 @@ test('originals stay when something went wrong, when linked to a match, or when 
   db.close();
 });
 
-test('refreshing from the folders finds new videos and counts the ones that have gone', { skip: !tools && 'FFmpeg not found' }, async () => {
+test('refreshing from the folders finds new videos and drops the ones that have gone, unless a match uses them', { skip: !tools && 'FFmpeg not found' }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'bv-scan-'));
   const db = openDb(':memory:');
   try {
@@ -140,9 +140,18 @@ test('refreshing from the folders finds new videos and counts the ones that have
     await makeVideo(dir, '20261101_130000.mp4');
     const first = await scanFolders(db, tools, { folders: [dir] });
     assert.deepEqual([first.found, first.added, first.failed, first.missing], [2, 2, 0, 0]);
+    // One gone file with nothing on it, one linked to a match, one on a drive that isn't there.
+    db.prepare("INSERT INTO tournaments (be_id, name) VALUES ('t', 'T')").run();
+    db.prepare("INSERT INTO matches (tournament_id, match_date, match_time, draw, round, team_a, team_b) VALUES (1, '2026-11-01', '09:00', 'WS', 'R1', '[]', '[]')").run();
+    const b = await makeVideo(dir, '20261101_140000.mp4');
+    await scanFolders(db, tools, { folders: [dir] });
+    db.prepare('UPDATE videos SET match_id = 1 WHERE path = ?').run(b);
+    db.prepare("INSERT INTO videos (path, size, modified_at) VALUES ('Q:\\nowhere\\x.mp4', 1, '2026-11-01T00:00:00Z')").run();
     rmSync(a);
+    rmSync(b);
     const second = await scanFolders(db, tools, { folders: [dir] });
-    assert.deepEqual([second.found, second.added, second.missing], [1, 0, 1]);
+    assert.deepEqual([second.found, second.added, second.removed, second.missing], [1, 0, 1, 2]);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM videos WHERE path = ?').get(a).n, 0);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });

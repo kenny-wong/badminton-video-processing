@@ -25,6 +25,7 @@ import { renderPlayer, renderPlayers } from './players-page.js';
 import { percents } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
 import { renderTools } from './tools-page.js';
+import { matchStar } from './match-star.js';
 import { versionAdvice } from './shared/version.js';
 
 const main = document.getElementById('app');
@@ -623,7 +624,7 @@ async function renderTournament(id, notice = null, who = null) {
     h('thead', {}, h('tr', {}, ['Time', 'Court', 'Event', 'Match', 'Result', 'Win chance', 'Video', 'Status'].map((x) => h('th', {}, x)))),
     list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, ...dropOn(m) },
       h('tr', { class: m.mine ? 'mine' : '' },
-        h('td', { class: 'nowrap' }, m.time, m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
+        h('td', { class: 'nowrap' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), ' ', m.time, m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
         h('td', { class: 'small' }, m.court),
         h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round), custom ? custom.actions(m) : null),
         h('td', {}, teams(m)),
@@ -654,7 +655,7 @@ async function renderTournament(id, notice = null, who = null) {
         : games && gamesLinked(m) ? null
           : h('div', { class: 'thumb empty' }, suggestionOf(m) || gameSuggestions(m).length ? 'Video suggested' : 'No video'),
       h('div', { class: 'match-body stack' },
-        h('div', { class: 'small muted' }, [m.time, m.court, `${m.draw}${m.round ? ` · ${m.round}` : ''}`].filter(Boolean).join(' · ')),
+        h('div', { class: 'row spread small muted' }, h('span', {}, [m.time, m.court, `${m.draw}${m.round ? ` · ${m.round}` : ''}`].filter(Boolean).join(' · ')), matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } })),
         h('div', { class: 'teams' }, teams(m)),
         h('div', { class: 'small' }, 'Result ', m.games?.length ? h('span', {}, gamesView(m.games)) : '—', m.duration ? h('span', { class: 'muted' }, ` · ${m.duration} min`) : null),
         typeof m.people?.chance === 'number' ? h('div', { class: 'row small' }, h('span', { class: 'muted' }, 'Win chance'), chanceCell(m)) : null,
@@ -861,7 +862,7 @@ async function renderTournament(id, notice = null, who = null) {
 
 /** What a folder scan found, in a sentence. */
 function scanText(r) {
-  return `Found ${r.found} video${r.found === 1 ? '' : 's'}; ${r.added} new or changed.${r.failed ? ` ${r.failed} couldn't be read.` : ''}${r.missing ? ` ${r.missing} no longer in ${r.missing === 1 ? 'its folder' : 'their folders'}.` : ''}`;
+  return `Found ${r.found} video${r.found === 1 ? '' : 's'}; ${r.added} new or changed.${r.failed ? ` ${r.failed} couldn't be read.` : ''}${r.removed ? ` ${r.removed} gone from ${r.removed === 1 ? 'its folder was' : 'their folders were'} taken off the list.` : ''}${r.missing ? ` ${r.missing} missing ${r.missing === 1 ? 'one is' : 'ones are'} kept (linked to a match, or the folder can't be reached).` : ''}`;
 }
 
 let scanned = null; // the last refresh's outcome, shown once by the page that is drawn after it

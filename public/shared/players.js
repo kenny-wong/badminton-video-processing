@@ -2,12 +2,31 @@
 // and grade that go with it, badminfo's win chance for a match, and upsets.
 // No DOM code here; tested in tests/players.test.js.
 
-/** 'singles', 'doubles' or 'mixed' from a draw name ("WS U15", "XD U17 - Group A"), else null. */
+const CODES = /^(WS|WD|XD|MS|MD|BS|BD|GS|GD|OS|OD|MX)$/;
+const WHO = { MEN: 'M', MENS: 'M', WOMEN: 'W', WOMENS: 'W', LADIES: 'W', BOYS: 'B', BOY: 'B', GIRLS: 'G', GIRL: 'G', OPEN: 'O', MIX: 'X', MIXED: 'X' };
+const KIND = { SINGLES: 'S', SINGLE: 'S', S: 'S', DOUBLES: 'D', DOUBLE: 'D', D: 'D' };
+
+/**
+ * The event's code from its draw name, however the tournament wrote it:
+ * "WS U15 - Group A", "U15 GS", "BS*" -> the code; "Girl's Singles" -> "GS",
+ * "Mixed Doubles", "Mix Doubles" -> "XD", "Open D" -> "OD". "—" when it can't tell.
+ */
+export function eventCode(draw) {
+  const words = String(draw ?? '').toUpperCase().split(/[\s\-/]+/).map((w) => w.replace(/[^A-Z]/g, '')).filter(Boolean);
+  const code = words.find((w) => CODES.test(w));
+  if (code) return code === 'MX' ? 'XD' : code;
+  const who = words.map((w) => WHO[w] ?? WHO[w.replace(/S$/, '')]).find(Boolean);
+  const kind = words.map((w) => KIND[w]).find(Boolean);
+  if (who === 'X') return 'XD';
+  return who && kind ? `${who}${kind}` : '—';
+}
+
+/** 'singles', 'doubles' or 'mixed' from a draw name ("WS U15", "U15 GS", "Mixed Doubles - Group A"), else null. */
 export function disciplineOf(draw) {
-  const code = String(draw ?? '').trim().split(/[\s-]+/)[0].toUpperCase();
-  if (/^(XD|MX)/.test(code)) return 'mixed';
-  if (/^[A-Z]{1,2}D$/.test(code)) return 'doubles';
-  if (/^[A-Z]{1,2}S$/.test(code)) return 'singles';
+  const code = eventCode(draw);
+  if (code === 'XD') return 'mixed';
+  if (/^[A-Z]D$/.test(code)) return 'doubles';
+  if (/^[A-Z]S$/.test(code)) return 'singles';
   return null;
 }
 
@@ -94,4 +113,27 @@ export const percent = (x) => `${Math.round(x * 100)}%`;
 export function percents(a) {
   const x = Math.round(a * 100);
   return [`${x}%`, `${100 - x}%`];
+}
+
+/**
+ * Whether one of a player's matches (as GET /api/players/:id lists them) passes the player
+ * page's filters: { year, event, result: won|lost|none, video: filmed|not|rendered|youtube, fav, text }.
+ */
+export function matchPasses(m, f) {
+  if (f.year && !String(m.date ?? '').startsWith(f.year)) return false;
+  if (f.event && m.event !== f.event) return false;
+  if (f.result === 'won' && m.won !== true) return false;
+  if (f.result === 'lost' && m.won !== false) return false;
+  if (f.result === 'none' && m.won !== null) return false;
+  if (f.video === 'filmed' && !m.filmed) return false;
+  if (f.video === 'not' && m.filmed) return false;
+  if (f.video === 'rendered' && !m.rendered) return false;
+  if (f.video === 'youtube' && !m.youtubeUrl) return false;
+  if (f.fav && !m.favourite) return false;
+  const words = String(f.text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length) {
+    const text = [m.tournament, m.draw, m.round, ...m.teamA, ...m.teamB].join(' ').toLowerCase();
+    if (!words.every((w) => text.includes(w))) return false;
+  }
+  return true;
 }

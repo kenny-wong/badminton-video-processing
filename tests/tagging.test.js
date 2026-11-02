@@ -133,3 +133,18 @@ test('a comment is saved on its own, tagging untouched, and cleared with an empt
     assert.equal(db.prepare('SELECT comment FROM matches WHERE id = ?').get(first).comment, null);
   });
 });
+
+test('starring a match, also from one of its games, marks the whole match', async () => {
+  await withServer(async ({ db, call, matches: [first] }) => {
+    const r = await call(`/api/matches/${first}/favourite`, 'PUT', { favourite: true });
+    assert.deepEqual(r.body, { ok: true, id: first, favourite: true });
+    assert.equal(db.prepare('SELECT favourite FROM matches WHERE id = ?').get(first).favourite, 1);
+    // A game's row, made when a video is linked to it, stars its parent.
+    await call(`/api/matches/${first}/games/1/videos`, 'PUT', { videoIds: [1] });
+    const game = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = 1').get(first).id;
+    const off = await call(`/api/matches/${game}/favourite`, 'PUT', { favourite: false });
+    assert.equal(off.body.id, first);
+    assert.equal(db.prepare('SELECT favourite FROM matches WHERE id = ?').get(first).favourite, null);
+    assert.equal((await call(`/api/matches/${first}/favourite`, 'PUT', { favourite: 'yes' })).status, 400);
+  });
+});

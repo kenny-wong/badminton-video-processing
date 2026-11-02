@@ -3,6 +3,7 @@
 //   saves tagging, the score the video starts at, where the match starts and
 //   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
 //   own scoreboard preset and corner (null uses Settings).
+// PUT /api/matches/:id/favourite { favourite }: stars the match (a game's row stars its whole match).
 // PUT /api/matches/:id/videos { videoIds }: links this video ([] unlinks; a match or game takes one
 //   video, so two games filmed separately go to the game rows below). A match
 //   left with no video is cleared and its tagging goes with the video, arriving on the
@@ -66,6 +67,8 @@ export function onRequestGet({ params, app }) {
     format: matchFormat(match),
     tracking: { ready: tracker().ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
     findPlayers: { ready: peopleFinder().ready },
+    // ★ is kept on the whole match, also when this is one game of it.
+    starredMatch: match.parentId ? app.db.prepare('SELECT favourite FROM matches WHERE id = ?').get(match.parentId)?.favourite === 1 : match.favourite,
     formatChosen: Boolean(match.format),
     mine: { a: sides(match.teamA).length > 0, b: sides(match.teamB).length > 0 },
     nameStyle: settings.nameStyle,
@@ -150,6 +153,16 @@ export async function onRequestPut({ request, params, app }) {
   if (typeof body.comment === 'string') app.db.prepare('UPDATE matches SET comment = ?, updated_at = ? WHERE id = ?').run(comment || null, nowIso(), match.id);
   return json({ ok: true, comment, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle,
     board: resolveBoard(readSettings(app.db).board, boardStyle) });
+}
+
+export async function setFavourite({ request, params, app }) {
+  const loaded = load(app, params);
+  if (!loaded) return fail(404, 'notFound', 'No such match');
+  const body = await readJson(request);
+  if (typeof body?.favourite !== 'boolean') return fail(400, 'badInput', 'Send favourite: true or false');
+  const id = loaded.match.parentId ?? loaded.match.id;
+  app.db.prepare('UPDATE matches SET favourite = ? WHERE id = ?').run(body.favourite ? 1 : null, id);
+  return json({ ok: true, id, favourite: body.favourite });
 }
 
 export async function linkVideos({ request, params, app }) {

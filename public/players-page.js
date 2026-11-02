@@ -9,6 +9,8 @@ import { icon } from './icons.js';
 import { errorNotice } from './notice.js';
 import { teamName } from './shared/names.js';
 import { lineChart } from './chart.js';
+import { matchStar } from './match-star.js';
+import { matchPasses } from './shared/players.js';
 
 const DISCIPLINES = [['singles', 'Singles'], ['doubles', 'Doubles'], ['mixed', 'Mixed']];
 
@@ -250,17 +252,141 @@ export async function renderPlayers(main) {
       h('p', { class: 'hint' }, `${data.known} player${data.known === 1 ? '' : 's'} from imported badminfo tournaments.`), results));
 }
 
-/** One match in a player's list: date, event, the other side, result from the player's side. */
-function matchRow(m) {
+/** One match in a player's list: ★, time, draw and round, the other side, result from the player's side, video. */
+function matchRow(m, onStar) {
   const theirs = m.side === 'b' ? m.teamA : m.teamB;
   const games = m.side === 'b' ? m.games.map(([x, y]) => [y, x]) : m.games;
   return h('tr', {},
+    h('td', { class: 'star-cell' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; onStar(); } })),
     h('td', { class: 'nowrap' }, day(m.date), h('div', { class: 'small muted' }, m.time)),
-    h('td', { class: 'small' }, h('a', { href: `#/t/${m.tournamentId}` }, m.tournament), h('div', { class: 'muted' }, [m.draw, m.round].filter(Boolean).join(' · '))),
+    h('td', { class: 'small' }, m.draw, h('div', { class: 'muted' }, m.round)),
     h('td', {}, m.partners.length ? h('div', { class: 'small muted' }, `with ${m.partners.join(' / ')}`) : null, h('div', {}, 'v ', teamName(theirs))),
     h('td', { class: 'nowrap' }, m.won === true ? h('span', { class: 'pill ok' }, 'Won') : m.won === false ? h('span', { class: 'pill bad' }, 'Lost') : null, ' ', gamesView(games)),
     h('td', {}, m.filmed ? openButtons(m.units) : h('span', { class: 'small muted' }, 'not filmed'),
       m.youtubeUrl ? [' ', h('a', { class: 'pill ok', href: m.youtubeUrl, target: '_blank', rel: 'noopener' }, 'YouTube ↗')] : null));
+}
+
+// The matches list's filters, per device; which groups are open, for this window.
+const FILTERS_KEY = 'badminton-video:player-matches:v1';
+const NO_FILTERS = { year: '', event: '', result: '', video: '', fav: false, text: '' };
+const readFilters = () => {
+  try {
+    return { ...NO_FILTERS, ...JSON.parse(localStorage.getItem(FILTERS_KEY) || '{}') };
+  } catch {
+    return { ...NO_FILTERS };
+  }
+};
+const writeFilters = (f) => {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+  } catch { /* storage blocked: the filters last until the page is left */ }
+};
+const openGroups = new Map(); // group key -> open, as the user left it
+
+/**
+ * A player's matches grouped by year, tournament and event (WS, WD, XD…), the
+ * latest tournament open and the rest folded, with filters above.
+ */
+function matchesSection(matches) {
+  const f = readFilters();
+  const box = h('div', { class: 'stack' });
+  const count = h('span', { class: 'small muted' });
+  const years = [...new Set(matches.map((m) => String(m.date ?? '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const events = [...new Set(matches.map((m) => m.event))].sort();
+  const select = (key, label, options) => {
+    const el = h('select', { class: 'small', 'aria-label': label, onchange: () => { f[key] = el.value; changed(); } },
+      options.map(([value, text]) => h('option', { value, selected: f[key] === value }, text)));
+    return el;
+  };
+  const favBox = h('input', { type: 'checkbox', checked: f.fav, onchange: () => { f.fav = favBox.checked; changed(); } });
+  const search = h('input', { type: 'search', value: f.text, placeholder: 'Opponent, partner or tournament', 'aria-label': 'Find a match' });
+  let typing = null;
+  search.addEventListener('input', () => {
+    clearTimeout(typing);
+    typing = setTimeout(() => { f.text = search.value; changed(); }, 250);
+  });
+  const controls = [
+    select('year', 'Year', [['', 'Every year'], ...years.map((y) => [y, y])]),
+    select('event', 'Event', [['', 'Every event'], ...events.map((e) => [e, e])]),
+    select('result', 'Result', [['', 'Won or lost'], ['won', 'Won'], ['lost', 'Lost'], ['none', 'No result yet']]),
+    select('video', 'Video', [['', 'Filmed or not'], ['filmed', 'Filmed'], ['not', 'Not filmed'], ['rendered', 'Rendered'], ['youtube', 'On YouTube']]),
+    h('label', { class: 'row small' }, favBox, '★ favourites only'),
+  ];
+  const clear = h('button', { class: 'small ghost', type: 'button', onclick: () => {
+    Object.assign(f, NO_FILTERS);
+    for (const el of controls.filter((c) => c.tagName === 'SELECT')) el.value = '';
+    favBox.checked = false;
+    search.value = '';
+    changed();
+  } }, 'Clear filters');
+  const filtering = () => Object.entries(NO_FILTERS).some(([k, v]) => f[k] !== v);
+  function changed() {
+    writeFilters(f);
+    draw();
+  }
+
+  const record = (list) => {
+    const won = list.filter((m) => m.won === true).length;
+    const lost = list.filter((m) => m.won === false).length;
+    const filmed = list.filter((m) => m.filmed).length;
+    const stars = list.filter((m) => m.favourite).length;
+    return `${list.length} match${list.length === 1 ? '' : 'es'} · ${won}–${lost}${filmed ? ` · ${filmed} filmed` : ''}${stars ? ` · ★ ${stars}` : ''}`;
+  };
+  // A folding group that remembers being opened or closed in this window.
+  const group = (key, openByDefault, summary, ...body) => {
+    const el = h('details', { class: `match-group-fold level-${key.split(':')[0]}`, open: openGroups.get(key) ?? openByDefault }, h('summary', {}, summary), body);
+    el.addEventListener('toggle', () => openGroups.set(key, el.open));
+    return el;
+  };
+
+  function draw() {
+    const list = matches.filter((m) => matchPasses(m, f));
+    count.textContent = `${list.length} of ${matches.length} matches`;
+    clear.hidden = !filtering();
+    if (!list.length) {
+      fill(box, h('p', { class: 'hint' }, 'No match fits the filters.'));
+      return;
+    }
+    // Newest tournament first; inside a tournament, events and their matches in time order.
+    // The latest tournament already started (matches come newest first; upcoming draws don't count).
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+    const latest = (matches.find((m) => m.date && m.date <= today) ?? matches[0])?.tournamentId;
+    const all = filtering(); // filtering opens every group, so what's found shows
+    const byYear = new Map();
+    for (const m of list) {
+      const y = String(m.date ?? '').slice(0, 4) || 'Undated';
+      if (!byYear.has(y)) byYear.set(y, new Map());
+      const ts = byYear.get(y);
+      if (!ts.has(m.tournamentId)) ts.set(m.tournamentId, []);
+      ts.get(m.tournamentId).push(m);
+    }
+    const redraw = () => draw();
+    fill(box, [...byYear].map(([year, ts]) => {
+      const inYear = [...ts.values()].flat();
+      return group(`year:${year}`, all || inYear.some((m) => m.tournamentId === latest), h('span', {}, h('b', {}, year), h('span', { class: 'muted small' }, ` · ${record(inYear)}`)),
+        [...ts].map(([tid, ms]) => {
+          const first = ms[0];
+          const byEvent = new Map();
+          for (const m of [...ms].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))) {
+            if (!byEvent.has(m.event)) byEvent.set(m.event, []);
+            byEvent.get(m.event).push(m);
+          }
+          return group(`tournament:${tid}`, all || tid === latest,
+            h('span', {}, h('b', {}, first.tournament), h('span', { class: 'muted small' }, ` · ${day(first.tournamentStart)} · ${record(ms)} `),
+              h('a', { class: 'small', href: `#/t/${tid}`, onclick: (e) => e.stopPropagation() }, 'Open tournament')),
+            [...byEvent].map(([event, em]) => group(`event:${tid}:${event}`, true,
+              h('span', {}, h('span', { class: 'event-code' }, event), h('span', { class: 'muted small' }, ` ${record(em)}`)),
+              h('div', { class: 'table-scroll' }, h('table', { class: 'player-matches' },
+                h('thead', {}, h('tr', {}, ['', 'Date', 'Draw', 'Opponents', 'Result', 'Video'].map((x) => h('th', {}, x)))),
+                h('tbody', {}, em.map((m) => matchRow(m, redraw))))))));
+        }));
+    }));
+  }
+
+  draw();
+  return h('div', { class: 'stack' },
+    h('div', { class: 'row filters' }, controls, search, count, clear),
+    box);
 }
 
 export async function renderPlayer(main, id) {
@@ -310,7 +436,7 @@ export async function renderPlayer(main, id) {
     chartBox,
     h('div', { class: 'section-title' }, icon('film', 15), 'Matches in imported tournaments'),
     data.matches.length
-      ? h('div', { class: 'table-scroll' }, h('table', {}, h('thead', {}, h('tr', {}, ['Date', 'Event', 'Opponents', 'Result', 'Video'].map((x) => h('th', {}, x)))), h('tbody', {}, data.matches.map(matchRow))))
+      ? matchesSection(data.matches)
       : h('div', { class: 'empty' }, 'No matches in imported tournaments.'));
   // Their profile (rating history, win chances) is read from badminfo now and then; the page shows what's there meanwhile.
   try {

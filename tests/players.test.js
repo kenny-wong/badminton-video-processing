@@ -123,3 +123,24 @@ test('the YouTube description can add badminfo pages, the win chance and an upse
   assert.match(full, new RegExp(`Amy Lee \\(Exampleshire\\): https://badminfo.com/Player/${AMY}`));
   assert.match(videoTitle({ tournament, match, games: [[21, 19]], upset: true }), / · 21-19 · \(upset\)$/);
 });
+
+test('event codes come from the draw name', async () => {
+  const { eventCode } = await import('../public/shared/players.js');
+  assert.deepEqual(['WS U15 - Group A', 'XD U15', 'wd u13-Round 1', ''].map(eventCode), ['WS', 'XD', 'WD', '—']);
+  // However a tournament writes it: the age first, words, stray marks.
+  assert.deepEqual(['U15 GS - Group A', "Girl's Singles", 'Mix Doubles', 'Over 40s - Mixed Doubles - Group A', 'Open D', 'BS*', 'Womens Doubles', 'MX U17', 'Plate'].map(eventCode),
+    ['GS', 'GS', 'XD', 'XD', 'OD', 'BS', 'WD', 'XD', '—']);
+});
+
+test('the player page’s filters: year, event, result, video, favourites and words', async () => {
+  const { matchPasses } = await import('../public/shared/players.js');
+  const NONE = { year: '', event: '', result: '', video: '', fav: false, text: '' };
+  const m = { date: '2026-11-01', event: 'WS', won: false, filmed: true, rendered: false, youtubeUrl: null, favourite: true,
+    tournament: 'TheDKWay U15 Silver', draw: 'WS U15 - Group A', round: 'Round 1', teamA: ['Amy Lee'], teamB: ['Bea Ng'] };
+  assert.ok(matchPasses(m, NONE));
+  assert.ok(matchPasses(m, { ...NONE, year: '2026', event: 'WS', result: 'lost', video: 'filmed', fav: true, text: 'bea silver' }));
+  for (const f of [{ year: '2025' }, { event: 'XD' }, { result: 'won' }, { result: 'none' }, { video: 'not' }, { video: 'rendered' }, { video: 'youtube' }, { text: 'gold' }]) {
+    assert.equal(matchPasses(m, { ...NONE, ...f }), false, JSON.stringify(f));
+  }
+  assert.equal(matchPasses({ ...m, favourite: false }, { ...NONE, fav: true }), false);
+});

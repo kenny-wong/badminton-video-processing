@@ -19,13 +19,13 @@ import { loadMatch } from '../lib/pipeline.js';
 import { importPlayerTournaments } from '../lib/player-import.js';
 import { filmedUnits } from '../lib/overview.js';
 import { jobView, startJob } from '../lib/jobs.js';
-import { disciplineOf, ratingSeries, record, resultWinner } from '../public/shared/players.js';
+import { disciplineOf, eventCode, ratingSeries, record, resultWinner } from '../public/shared/players.js';
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Every main match (not game rows) a player is in, newest first, with their side and whether it was filmed. */
 function matchesOf(db, id) {
-  const rows = db.prepare(`SELECT m.*, tp.name AS entry_name, t.name AS tournament_name, t.badminfo_id,
+  const rows = db.prepare(`SELECT m.*, tp.name AS entry_name, t.name AS tournament_name, t.badminfo_id, t.start_date AS tournament_start,
       EXISTS (SELECT 1 FROM videos v JOIN matches g ON g.id = v.match_id WHERE g.id = m.id OR g.parent_id = m.id) AS filmed
     FROM tournament_players tp JOIN matches m ON m.tournament_id = tp.tournament_id AND m.game = 0
     JOIN tournaments t ON t.id = m.tournament_id
@@ -43,7 +43,8 @@ function matchesOf(db, id) {
 
 /** A match as the player pages list it. */
 const view = (m, r, side = null) => ({
-  id: m.id, tournamentId: m.tournamentId, tournament: r.tournament_name, date: m.date, time: m.time, draw: m.draw, round: m.round,
+  id: m.id, tournamentId: m.tournamentId, tournament: r.tournament_name, tournamentStart: r.tournament_start ?? m.date, date: m.date, time: m.time, draw: m.draw, round: m.round,
+  event: eventCode(m.draw), favourite: m.favourite,
   teamA: m.teamA, teamB: m.teamB, games: m.games, side, winner: resultWinner(m),
   won: side && resultWinner(m) ? resultWinner(m) === side : null,
   filmed: Boolean(r.filmed), youtubeUrl: m.youtubeUrl, rendered: Boolean(m.outputPath),

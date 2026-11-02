@@ -712,3 +712,18 @@ table.parts .part-pick { white-space: nowrap; }
 a.tag:hover { filter: brightness(0.95); }
 /* Not done yet: greyed, with a dashed outline. */
 .tag.off { background: transparent; color: var(--faint); border-color: var(--border-strong); border-style: dashed; font-weight: 550; }
+
+/* Player page: matches by year, tournament and event, with filters */
+.row.filters { gap: 8px; }
+.row.filters input[type="search"] { flex: 1 1 220px; }
+.match-group-fold > summary { cursor: pointer; padding: 6px 4px; list-style-position: outside; }
+.match-group-fold > summary:hover { background: var(--surface-2); border-radius: var(--radius-sm); }
+.match-group-fold.level-year { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.match-group-fold.level-year > summary { font-size: var(--fs-lg); }
+.match-group-fold.level-tournament { margin-left: 14px; }
+.match-group-fold.level-event { margin-left: 14px; }
+.event-code { display: inline-block; min-width: 2.6em; text-align: center; font-weight: 750; font-size: var(--fs-xs); padding: 1px 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+table.player-matches .star-cell { width: 28px; padding-right: 0; }
+.match-star { border: 0; background: transparent; box-shadow: none; padding: 0 2px; min-height: 0; font-size: 1.15rem; line-height: 1; color: var(--faint); cursor: pointer; }
+.match-star:hover { background: transparent; color: var(--focus); }
+.match-star.on { color: var(--focus); }

@@ -17,6 +17,7 @@ import { percent, percents } from './shared/players.js';
 import { landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 import { youtubePanel } from './youtube-panel.js';
+import { matchStar } from './match-star.js';
 
 const TAB_KEY = 'badminton-video:editor-tab:v1';
 const readTab = () => {
@@ -151,7 +152,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const header = h('div', { class: 'editor-head' },
     h('div', {},
       h('a', { class: 'crumb', href: `#/t/${tournament.id}` }, icon('back', 15), tournament.name),
-      h('h1', {}, h('span', { class: 'side-a' }, teamName(match.teamA)), h('span', { class: 'vs' }, 'v'), h('span', { class: 'side-b' }, teamName(match.teamB))),
+      h('h1', {}, matchStar(match.id, data.starredMatch), ' ', h('span', { class: 'side-a' }, teamName(match.teamA)), h('span', { class: 'vs' }, 'v'), h('span', { class: 'side-b' }, teamName(match.teamB))),
       h('div', { class: 'meta' },
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
         match.games.length ? h('span', { class: 'result' }, ['Result ', gamesView(match.games)]) : null),
