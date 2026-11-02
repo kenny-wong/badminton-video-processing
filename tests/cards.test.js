@@ -15,17 +15,18 @@ const match = { date: '2026-10-24', draw: 'WS U15', round: 'Final', game: 0, tea
 
 test('cleanCards keeps on/off and a sensible length', () => {
   assert.deepEqual(cleanCards(null), DEFAULT_CARDS);
-  assert.deepEqual(cleanCards({ title: false, end: 'yes', seconds: 30, stats: true }), { title: false, end: true, seconds: 8, stats: true });
+  assert.deepEqual(cleanCards({ title: false, end: 'yes', seconds: 30, stats: false }), { title: false, end: true, seconds: 8, stats: false });
 });
 
-test('title and end cards are on by default, and saved settings that had them off are turned on once', () => {
-  assert.deepEqual([DEFAULT_CARDS.title, DEFAULT_CARDS.end], [true, true]);
-  assert.deepEqual([readSettings(openDb()).cards.title, readSettings(openDb()).cards.end], [true, true]);
+test('title and end cards (with the stats line) are on by default, and saved settings that had them off are turned on once', () => {
+  assert.deepEqual([DEFAULT_CARDS.title, DEFAULT_CARDS.end, DEFAULT_CARDS.stats], [true, true, true]);
+  const { cards } = readSettings(openDb());
+  assert.deepEqual([cards.title, cards.end, cards.stats], [true, true, true]);
   const db = new DatabaseSync(':memory:');
   const dir = new URL('../migrations/', import.meta.url);
   for (const f of readdirSync(dir).filter((x) => x < '0019').sort()) db.exec(readFileSync(new URL(f, dir), 'utf8'));
   db.exec('PRAGMA user_version = 18');
-  db.prepare("INSERT INTO settings (key, value) VALUES ('cards', ?)").run(JSON.stringify({ title: false, end: false, seconds: 5, stats: true }));
+  db.prepare("INSERT INTO settings (key, value) VALUES ('cards', ?)").run(JSON.stringify({ title: false, end: false, seconds: 5, stats: false }));
   migrate(db);
   assert.deepEqual(JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'cards'").get().value), { title: true, end: true, seconds: 5, stats: true });
 });
