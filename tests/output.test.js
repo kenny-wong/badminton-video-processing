@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { encoderArgs, hdrFilter, musicArgs, outputLength, outputSize, partArgs, plan, SDR_TAGS, toOutput, withReplays } from '../lib/render.js';
 import { clipArgs } from '../lib/clip.js';
 import { labelScript } from '../lib/cards.js';
-import { cleanMusic, cleanOutput, DEFAULT_MUSIC, DEFAULT_OUTPUT, hdrNpl } from '../lib/settings.js';
+import { cleanMusic, cleanOutput, DEFAULT_MUSIC, DEFAULT_OUTPUT, hdrNpl, hdrPlayback } from '../lib/settings.js';
 import { audioKind } from '../api/settings.js';
 import { musicFor } from '../lib/pipeline.js';
 import { DEFAULT_BOARD } from '../public/shared/board.js';
@@ -32,6 +32,10 @@ test('HDR video is tone mapped at the chosen brightness, in renders and clips', 
   assert.equal(hdrNpl({ hdrLook: 'normal' }), 200);
   assert.equal(hdrNpl({ hdrLook: 'darker' }), 300);
   assert.equal(hdrNpl(undefined), 200); // settings from before 1.49.0
+  // The editor shows an HDR original through the matching filter (darker looks get a lower brightness).
+  const brightness = (look) => Number(/brightness\(([\d.]+)\)/.exec(hdrPlayback({ hdrLook: look }))[1]);
+  assert.ok(brightness('bright') > brightness('normal') && brightness('normal') > brightness('darker'));
+  assert.equal(hdrPlayback(undefined), hdrPlayback({ hdrLook: 'normal' }));
   assert.equal(cleanOutput({ hdrLook: 'glaring' }).hdrLook, 'normal');
   assert.equal(cleanOutput({ hdrLook: 'darker' }).hdrLook, 'darker');
   const vf = (args) => args[args.indexOf('-vf') + 1];

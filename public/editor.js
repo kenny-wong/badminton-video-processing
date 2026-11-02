@@ -235,6 +235,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
 
   // ---- player ----
   const video = h('video', { src: data.source.url, preload: 'auto', playsinline: true });
+  // An HDR (phone) original is shown as the render will look at the brightness chosen in Settings
+  // (lib/settings.js HDR_LOOKS playback); a finished file is already standard video, shown as it is.
+  const showAsRendered = (original) => { video.style.filter = original && data.hdrPlayback ? data.hdrPlayback : ''; };
+  showAsRendered(true);
   if (data.source.width && data.source.height) video.style.aspectRatio = `${data.source.width} / ${data.source.height}`;
   const flash = h('div', { class: 'flash', hidden: true });
   const openBadge = h('div', { class: 'open-rally', hidden: true }, '● Rally running');
@@ -543,6 +547,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
       showTime();
       if (play) video.play().catch(() => {});
     }, { once: true });
+    showAsRendered(!file);
     video.src = file ? file.url : data.source.url;
   }
   const resized = new ResizeObserver(() => {
@@ -1827,7 +1832,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar,
         h('div', { class: 'legend' },
           h('span', {}, h('i', { class: 'a' }), 'A won'), h('span', {}, h('i', { class: 'b' }), 'B won'), h('span', {}, h('i', { class: 'let' }), 'let'),
           h('span', {}, h('i', { class: 'none' }), 'no winner yet'), h('span', {}, '★ favourite')),
-        data.source.hdr ? h('div', { class: 'notice info small' }, 'Filmed in HDR: colours are converted to standard video when rendering.') : null,
+        data.source.hdr ? h('div', { class: 'notice info small' }, data.hdrPlayback ? 'Filmed in HDR: shown here as the render will look (brightness: Settings → HDR phone videos).' : 'Filmed in HDR: colours are converted to standard video when rendering.') : null,
         h('details', { class: 'keys-box', open: readKeysOpen(), ontoggle: (e) => writeKeysOpen(e.target.open) }, h('summary', {}, icon('keyboard', 16), 'Keyboard shortcuts'), h('div', { class: 'keys' }, KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t))))),
       h('div', {},
         h('div', { class: 'card scorecard' },

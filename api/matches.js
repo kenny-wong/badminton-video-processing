@@ -25,7 +25,7 @@ import { existsSync } from 'node:fs';
 import { normalize } from 'node:path';
 import { fail, idParam, json, readJson } from '../lib/http.js';
 import { nowIso } from '../lib/db.js';
-import { readSettings } from '../lib/settings.js';
+import { hdrPlayback, readSettings } from '../lib/settings.js';
 import { findTools } from '../lib/ffmpeg.js';
 import { findJob, jobView, startJob } from '../lib/jobs.js';
 import { describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
@@ -75,6 +75,8 @@ export function onRequestGet({ params, app }) {
     playerCountries: matchCountries(app.db, match, loaded.tournament),
     cards: settings.cards,
     replays: settings.output.replays,
+    // An HDR original is shown through this filter, so it looks as the render will (Settings, HDR phone videos).
+    hdrPlayback: source.hdr ? hdrPlayback(settings.output) : null,
     voices: { remove: settings.output.removeVoices, ready: voiceRemover().ready },
     output: { ...describeOutput(loaded, null, described), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
     highlights: { ...describeOutput(loaded, null, { ...described, highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
