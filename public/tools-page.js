@@ -50,8 +50,8 @@ const folderOf = (path) => path.split(/[\\/]/).slice(0, -1).join('\\');
 const reveal = (v) => api(`/api/videos/${v.id}/reveal`, { method: 'POST' }).catch(() => {});
 
 /** The "Remove the original" tick box (ticked unless you untick it this session). */
-const removeBox = (text) => {
-  const box = h('input', { type: 'checkbox', checked: memory.removeOriginal, onchange: () => { memory.removeOriginal = box.checked; } });
+const removeBox = (text, onChange = () => {}) => {
+  const box = h('input', { type: 'checkbox', checked: memory.removeOriginal, onchange: () => { memory.removeOriginal = box.checked; onChange(); } });
   return { box, label: h('label', { class: 'tool-check' }, box, text) };
 };
 
@@ -59,7 +59,12 @@ function notesView(notes) {
   return notes?.length ? h('div', { class: 'notice warn small' }, h('div', { class: 'stack' }, notes.map((n) => h('div', {}, n)))) : null;
 }
 
-const removedView = (removed) => (removed?.length ? h('div', { class: 'small' }, icon('trash', 14), ` Moved to the Recycle Bin: ${removed.map((v) => v.name).join(', ')}`) : null);
+/** The "merged" mark on a video made by merging. */
+const mergedPill = (v) => (v.madeFrom?.kind === 'merge'
+  ? [' ', h('span', { class: 'pill ok', title: `Merged from ${v.madeFrom.from.map((x) => x.name).join(' + ')}` }, 'merged')]
+  : null);
+
+const removedView =(removed) => (removed?.length ? h('div', { class: 'small' }, icon('trash', 14), ` Moved to the Recycle Bin: ${removed.map((v) => v.name).join(', ')}`) : null);
 
 /** Takes removed originals ([{ id }]) off the page's lists. */
 function forget(library, byId, removed) {
@@ -120,7 +125,7 @@ function mergeView(box, library, byId, runJob) {
   const summary = h('div');
   const jobBox = h('div');
   const result = h('div');
-  const { box: removeTick, label: removeLabel } = removeBox('Remove the original videos once the merged video is made and checked (they go to the Recycle Bin)');
+  const { box: removeTick, label: removeLabel } = removeBox('Remove the original videos once the merged video is made and checked (they go to the Recycle Bin)', () => drawSummary());
   const mergeBtn = h('button', { class: 'primary', type: 'button' }, icon('link', 16), 'Merge');
   let dragFrom = null;
 
@@ -137,7 +142,7 @@ function mergeView(box, library, byId, runJob) {
           onclick: () => { memory.order.push(v.id); draw(); },
         }, added ? icon('check', 14) : icon('plus', 14), added ? 'Added' : 'Add'),
         h('div', { class: 'grow' },
-          h('div', { class: 'ellipsis', title: v.path }, v.name),
+          h('div', { class: 'ellipsis', title: v.path }, v.name, mergedPill(v)),
           h('div', { class: 'small muted' }, `${when(v.recordedAt)} · ${clock(v.duration ?? 0)} · ${megabytes(v.size)} · ${v.width}×${v.height} ${v.codec ?? ''}`)));
     }) : h('p', { class: 'muted small pad' }, 'No video matches that.'));
   }
@@ -160,7 +165,7 @@ function mergeView(box, library, byId, runJob) {
     },
     h('span', { class: 'n', title: 'Drag to change the order' }, String(i + 1)),
     h('div', { class: 'grow' },
-      h('div', { class: 'ellipsis', title: v.path }, v.name),
+      h('div', { class: 'ellipsis', title: v.path }, v.name, mergedPill(v)),
       h('div', { class: 'small muted ellipsis', title: v.path }, `${when(v.recordedAt)} · ${clock(v.duration ?? 0)} · ${megabytes(v.size)} · ${folderOf(v.path)}`)),
     h('button', { class: 'small ghost icon-only', type: 'button', title: 'Earlier', 'aria-label': `Move ${v.name} earlier`, disabled: i === 0, onclick: () => move(i, i - 1) }, '↑'),
     h('button', { class: 'small ghost icon-only', type: 'button', title: 'Later', 'aria-label': `Move ${v.name} later`, disabled: i === list.length - 1, onclick: () => move(i, i + 1) }, '↓'),
@@ -182,7 +187,8 @@ function mergeView(box, library, byId, runJob) {
         list.length > 1 ? h('button', { class: 'small', type: 'button', onclick: () => { memory.order.sort((a, b) => String(byId.get(a).recordedAt).localeCompare(String(byId.get(b).recordedAt))); draw(); } }, 'Sort by recording time') : null,
         h('button', { class: 'small ghost', type: 'button', onclick: () => { memory.order = []; draw(); } }, 'Clear')),
       problems.length ? h('div', { class: 'notice warn small' }, h('div', { class: 'stack' }, problems.map((p) => h('div', {}, p)))) : null,
-      list.length > 1 && !problems.length ? h('p', { class: 'hint' }, 'Saved as ', h('b', {}, mergedName(list[0].name)), ` next to ${list[0].name}. It starts with ${list[0].name}’s details and start time and ends with ${list.at(-1).name}’s end time; nothing is re-encoded.`) : null) : null);
+      list.length > 1 && !problems.length ? h('p', { class: 'hint' }, 'Saved as ', h('b', {}, removeTick.checked ? list[0].name : mergedName(list[0].name)),
+        removeTick.checked ? ` in place of ${list[0].name} once the originals are in the Recycle Bin (marked “merged” in the lists). It starts with` : ` next to ${list[0].name}. It starts with ${list[0].name}’s details and start time and ends with ${list.at(-1).name}’s end time; nothing is re-encoded.`) : null) : null);
   }
 
   function draw() {
@@ -230,7 +236,7 @@ function mergeView(box, library, byId, runJob) {
 function splitView(box, library, byId, runJob) {
   const picker = h('select', { class: 'video-pick', 'aria-label': 'Video to split' },
     h('option', { value: '' }, 'Choose a video…'),
-    library.map((v) => h('option', { value: String(v.id) }, `${when(v.recordedAt)} · ${v.name} · ${clock(v.duration ?? 0)}`)));
+    library.map((v) => h('option', { value: String(v.id) }, `${when(v.recordedAt)} · ${v.name}${v.madeFrom?.kind === 'merge' ? ' (merged)' : ''} · ${clock(v.duration ?? 0)}`)));
   const area = h('div');
   let leave = null;
   picker.addEventListener('change', () => {

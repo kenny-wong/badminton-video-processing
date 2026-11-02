@@ -846,6 +846,7 @@ async function renderVideos() {
       h('tbody', {}, videos.map((v) => h('tr', {},
         h('td', { class: 'nowrap' }, when(v.recordedAt), h('div', { class: 'small muted' }, SOURCE[v.recordedSource] ?? '')),
         h('td', {}, v.name, v.missing ? [' ', h('span', { class: 'pill bad' }, 'missing')] : null,
+          v.madeFrom?.kind === 'merge' ? [' ', h('span', { class: 'pill ok', title: `Merged from ${v.madeFrom.from.map((x) => x.name).join(' + ')}` }, 'merged')] : null,
           h('div', { class: 'small muted' }, megabytes(v.size), madeFromText(v.madeFrom))),
         h('td', { class: 'nowrap' }, clock(v.duration ?? 0)),
         h('td', { class: 'small' }, `${v.width}×${v.height}`, h('div', { class: 'muted' }, `${Math.round(v.fps ?? 0)} fps · ${v.codec ?? '?'}${v.hdr ? ' · HDR' : ''}`)),

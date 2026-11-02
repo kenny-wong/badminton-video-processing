@@ -99,9 +99,13 @@ test('a video is split losslessly into parts with their own names and times, and
     assert.ok(existsSync(merged.path) && existsSync(other)); // nothing removed when nothing was made
 
     const again = await mergeVideos(db, tools, { ids: [p1.video.id, p2.video.id], removeOriginal: true, remove, job });
-    assert.equal(again.video.name, '20261101_121208 part 1 merged (2).mp4');
     assert.deepEqual(again.removed.map((v) => v.name), ['20261101_121208 part 1.mp4', '20261101_121210 part 2.mp4']);
-    assert.ok(!existsSync(p1.path) && !existsSync(p2.path));
+    assert.equal(again.video.name, '20261101_121208 part 1.mp4'); // the first one's name, now it's in the bin
+    assert.equal(again.path, p1.path);
+    assert.ok(existsSync(p1.path) && !existsSync(p2.path) && !existsSync(join(dir, '20261101_121208 part 1 merged (2).mp4')));
+    assert.equal(again.video.madeFrom.kind, 'merge');
+    assert.equal(again.video.recordedAt, '2026-11-01T12:12:08Z');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM videos WHERE path = ?').get(p1.path).n, 1);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });
