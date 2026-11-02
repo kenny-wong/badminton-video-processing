@@ -11,6 +11,8 @@ import { teamName } from './shared/names.js';
 import { lineChart } from './chart.js';
 import { matchStar } from './match-star.js';
 import { matchPasses } from './shared/players.js';
+import { COUNTRIES } from './shared/flags.js';
+import { flagIcon } from './flag-icon.js';
 
 const DISCIPLINES = [['singles', 'Singles'], ['doubles', 'Doubles'], ['mixed', 'Mixed']];
 
@@ -145,11 +147,40 @@ export async function renderPlayers(main) {
     },
   }, icon('trash', 14), 'Remove');
 
+  // The flag for them on the scoreboard: badminfo's nation (England unless badminfo says another
+  // federation), none for a player added by name, or one chosen here (lib/nations.js).
+  const byName = Object.entries(COUNTRIES).sort((a, b) => a[1].localeCompare(b[1]));
+  const nationPick = (f) => {
+    const badminfo = f.id ? f.player?.nation || 'ENG' : '';
+    const showFlag = (code) => flagIcon(code, { title: COUNTRIES[code] ?? 'No flag' });
+    const flag = h('span', { class: 'nation-flag' }, showFlag(f.nation));
+    const chosen = (code) => (f.id ? f.nationChosen : true) && f.nation === code;
+    const sel = h('select', {
+      'aria-label': `${f.name}’s flag on the scoreboard`, title: 'Their flag on the scoreboard',
+      onchange: async () => {
+        sel.disabled = true;
+        try {
+          const r = await api(`/api/favourites/${f.key}`, { method: 'PUT', body: { nation: sel.value === 'auto' ? null : sel.value } });
+          Object.assign(f, { nation: r.nation, nationChosen: r.nationChosen });
+          fill(flag, showFlag(r.nation));
+        } catch (err) {
+          fill(msg, errorNotice(err));
+        } finally {
+          sel.disabled = false;
+        }
+      },
+    },
+    f.id ? h('option', { value: 'auto', selected: !f.nationChosen }, `badminfo: ${COUNTRIES[badminfo] ?? 'no flag'}`) : null,
+    h('option', { value: '', selected: chosen('') }, 'No flag'),
+    byName.map(([code, label]) => h('option', { value: code, selected: chosen(code) }, label)));
+    return h('label', { class: 'nation-pick' }, flag, sel);
+  };
+
   const card = (f, grip = null) => h('div', { class: `card stack player-card${f.starred ? '' : ' unstarred'}`, 'data-key': f.key },
     h('div', { class: 'row spread' },
       h('h3', { class: 'card-title' }, grip, starButton({ id: f.id, key: f.starred ? f.key : null, listed: f.key }, refreshCards, (err) => fill(msg, errorNotice(err))),
         f.id ? h('a', { href: `#/p/${f.id}` }, f.player?.name ?? f.name) : f.name),
-      h('span', { class: 'row' }, f.player?.county ? h('span', { class: 'pill' }, f.player.county) : null, removeBtn(f))),
+      h('span', { class: 'row' }, nationPick(f), f.player?.county ? h('span', { class: 'pill' }, f.player.county) : null, removeBtn(f))),
     f.id
       ? [standings(f.player),
         h('div', { class: 'small muted' }, `${f.tournaments} tournament${f.tournaments === 1 ? '' : 's'}, ${f.matches} match${f.matches === 1 ? '' : 'es'} (${recordText(f.record)}), ${f.filmed} filmed`),

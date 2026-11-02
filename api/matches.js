@@ -41,8 +41,9 @@ import { applyCarried, detachVideo, endsFromOtherGames, followEnds, hasTagging, 
 import { teamName } from '../public/shared/names.js';
 import { cleanComment } from '../lib/naming.js';
 import { favouriteMatcher, favourites } from '../lib/favourites.js';
-import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
+import { cleanBoardOverride } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
+import { matchBoard, matchCountries } from '../lib/nations.js';
 
 function load(app, params) {
   const id = idParam(params.id);
@@ -69,7 +70,9 @@ export function onRequestGet({ params, app }) {
     formatChosen: Boolean(match.format),
     mine: { a: sides(match.teamA).length > 0, b: sides(match.teamB).length > 0 },
     nameStyle: settings.nameStyle,
-    board: resolveBoard(settings.board, match.boardStyle),
+    board: matchBoard(app.db, settings.board, match, loaded.tournament),
+    // The flags its players' nations give (the editor's "From the Players list"), whatever this match chose.
+    playerCountries: matchCountries(app.db, match, loaded.tournament),
     cards: settings.cards,
     replays: settings.output.replays,
     voices: { remove: settings.output.removeVoices, ready: voiceRemover().ready },
@@ -151,7 +154,7 @@ export async function onRequestPut({ request, params, app }) {
   const comment = typeof body.comment === 'string' ? cleanComment(body.comment) : match.comment;
   if (typeof body.comment === 'string') app.db.prepare('UPDATE matches SET comment = ?, updated_at = ? WHERE id = ?').run(comment || null, nowIso(), match.id);
   return json({ ok: true, comment, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle,
-    board: resolveBoard(readSettings(app.db).board, boardStyle) });
+    board: matchBoard(app.db, readSettings(app.db).board, { ...match, boardStyle }, loaded.tournament) });
 }
 
 export async function setFavourite({ request, params, app }) {

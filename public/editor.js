@@ -1329,9 +1329,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     h('option', { value: '' }, 'Look from Settings'), Object.entries(PRESETS).map(([k, p]) => h('option', { value: k, selected: boardStyle?.preset === k }, p.label)));
   const cornerSel = h('select', { 'aria-label': 'Scoreboard corner for this match' },
     h('option', { value: '' }, 'Corner from Settings'), Object.entries(CORNERS).map(([k, label]) => h('option', { value: k, selected: boardStyle?.corner === k }, label)));
+  // Flags come from the players' nations (Players page) unless chosen for this match.
+  const playerCountries = data.playerCountries ?? ['', ''];
   const countrySelects = ['A', 'B'].map((side, k) => h('select', { 'aria-label': `Team ${side} country` },
-    h('option', { value: '' }, 'No flag'), Object.entries(COUNTRIES).sort((a,b) => a[1].localeCompare(b[1])).map(([code, label]) =>
-      h('option', { value: code, selected: (boardStyle?.countries ?? data.board.countries)?.[k] === code }, label))));
+    h('option', { value: 'auto', selected: !boardStyle?.countries }, `From the Players list: ${COUNTRIES[playerCountries[k]] ?? 'no flag'}`),
+    h('option', { value: '', selected: boardStyle?.countries?.[k] === '' }, 'No flag'), Object.entries(COUNTRIES).sort((a,b) => a[1].localeCompare(b[1])).map(([code, label]) =>
+      h('option', { value: code, selected: boardStyle?.countries?.[k] === code }, label))));
   const countryControls = h('div', { class: 'board-countries' }, countrySelects.map((el,k) => h('label', { class: 'cf-field' }, h('span', { class: 'small muted' }, `Team ${k ? 'B' : 'A'} country`), el)));
   const showCountryControls = () => { countryControls.hidden = data.board.layout !== 'international'; };
   showCountryControls();
@@ -1345,9 +1348,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let lookRevision = 0;
   const lookChanged = async () => {
     const revision = ++lookRevision;
-    const countries = countrySelects.map(el => el.value);
+    // Both on "From the Players list": no countries of its own, so the players' nations keep applying.
+    const picked = countrySelects.map(el => el.value);
+    const countries = picked.map((v, k) => (v === 'auto' ? playerCountries[k] : v));
     boardStyle = { ...(lookSel.value ? { preset: lookSel.value } : {}), ...(cornerSel.value ? { corner: cornerSel.value } : {}),
-      ...(countries.some(Boolean) || boardStyle?.countries ? { countries } : {}) };
+      ...(picked.some((v) => v !== 'auto') ? { countries } : {}) };
     const next = boardStyle;
     try {
       // Keep rapid changes to the two countries in order, and display the latest choice.

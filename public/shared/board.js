@@ -42,7 +42,7 @@ export const DEFAULT_BOARD = {
   flags: true,       // GAME POINT / MATCH POINT beside the board
   banners: true,     // INTERVAL, GAME TO …, MATCH TO … for a few seconds after
   heading: 'off',
-  nationalFlags: true, // countries are chosen for each team in the editor, never guessed from names
+  nationalFlags: true, // flags from the players' nations (Players page, lib/nations.js), or chosen for a match in the editor
   longRally: 0,      // a banner after rallies of at least this many shots (from the hit sounds); 0 for none
 };
 

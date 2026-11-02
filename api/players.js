@@ -22,6 +22,7 @@ import { filmedUnits } from '../lib/overview.js';
 import { tournamentPlaylists } from './youtube.js';
 import { jobView, startJob } from '../lib/jobs.js';
 import { disciplineOf, eventCode, ratingSeries, record, resultWinner } from '../public/shared/players.js';
+import { setNation } from '../lib/nations.js';
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -143,6 +144,13 @@ export async function linkFavouriteRoute({ request, params, app }) {
   const key = idParam(params.key);
   if (!key || !app.db.prepare('SELECT 1 FROM favourites WHERE id = ?').get(key)) return fail(404, 'notFound', 'No such player on the list');
   const body = (await readJson(request)) ?? {};
+  // The flag for them: a country code, '' for none, null to follow badminfo again.
+  if (body.nation !== undefined && body.link === undefined) {
+    if (body.nation !== null && typeof body.nation !== 'string') return fail(400, 'badInput', 'nation must be a country code, "" or null');
+    setNation(app.db, key, body.nation);
+    const f = favourites(app.db, { all: true }).find((x) => x.key === key);
+    return json({ key, nation: f?.nation ?? '', nationChosen: f?.nationChosen ?? false });
+  }
   if (typeof body.starred === 'boolean' && body.link === undefined) {
     setStarred(app.db, key, body.starred);
     return json({ key, starred: body.starred });

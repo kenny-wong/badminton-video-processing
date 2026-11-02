@@ -822,6 +822,11 @@ table.parts .part-pick { white-space: nowrap; }
 /* International board (timings from public/shared/international-board.js SCORE_MOTION): the old number speeds
    out to the right, the tile is empty a moment, the new one slides in from the left and settles; the serve
    marker grows in on its new row. */
+/* A player's flag (Players page): the scoreboard's own vector flags. */
+.nation-pick { display: inline-flex; align-items: center; gap: 6px; }
+.nation-pick select { max-width: 11rem; }
+.flag-icon { display: block; flex: none; border-radius: 2px; box-shadow: 0 0 0 1px var(--border); }
+.flag-icon.none { box-shadow: none; outline: 1px dashed var(--border-strong); outline-offset: -1px; }
 .board-slide-out { animation: board-slide-out var(--out) ease-in both; }
 .board-slide-in { animation: board-slide-in var(--in) ease-in-out var(--in-start) both; }
 .board-serve-in { animation: board-serve-in var(--serve-grow) ease-out var(--serve-in) both; }
