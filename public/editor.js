@@ -131,7 +131,7 @@ const KEYS = [
   ['A / B', 'rally ends now, won by A / B (no S: it began the Settings gap after the last one)'],
   ['Shift+A / Shift+B', 'mark the winner and ★ favourite together'],
   ['L', 'let (replayed, no point)'],
-  ['↑ / ↓', 'previous / next rally'],
+  ['↑ / ↓', 'previous / next rally (from the playhead when it has moved away from the selected rally)'],
   ['← / →', 'back / on 2 s (Shift: 10 s)'],
   [', / .', 'one frame back / on'],
   ['[ / ]', 'slower / faster'],
@@ -1599,6 +1599,22 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     return found;
   }
 
+  // The selected rally counts only while the playhead is at it (from the 1 s lead-in picking it seeks to, to
+  // 1.5 s after its end): moved away (scrolled, sought, played on), the keys work from where the playhead is.
+  const atSelected = (t = video.currentTime) => sel >= 0 && Boolean(rallies[sel]) && t >= rallies[sel].start - 1.5 && t <= rallies[sel].end + 1.5;
+
+  // ↑ / ↓: the rally before / after the selected one while at it, else the one before / after the playhead
+  // (↑ from inside a rally goes to its start).
+  function stepRally(dir) {
+    if (!rallies.length) return;
+    const t = video.currentTime;
+    let i;
+    if (atSelected(t)) i = sel + dir;
+    else if (dir < 0) i = rallyAtOrBefore(t - 0.01);
+    else i = rallies.findIndex((r) => r.start > t);
+    if (i >= 0 && i < rallies.length) select(i);
+  }
+
   // Every key in a box over the editor (? opens it, Esc or ? closes it).
   const keysDialog = h('dialog', { class: 'keys-dialog', 'aria-label': 'Keyboard shortcuts' },
     h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('keyboard'), 'Keyboard shortcuts'), h('button', { class: 'small', onclick: () => keysDialog.close() }, 'Close')),
@@ -1661,29 +1677,33 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         if (openStart !== null) {
           const end = Math.max(now(), openStart + 0.5);
           remember();
+          const kept = rallies[sel] ?? null; // a selected rally stays selected
           const r = { start: openStart, end, winner: w, ...(favourite || openFavourite ? { fav: true } : {}) };
           rallies.push(r);
           const i = sortKeep(r);
           openStart = null;
           openFavourite = false;
           openBadge.hidden = true;
-          sel = -1;
+          sel = kept ? rallies.indexOf(kept) : -1;
           changed();
           const after = steps[i]?.after;
           say(`Rally ${i + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}${r.fav ? ' · ★ favourite' : ''}`);
-        } else if (sel >= 0) {
+        } else if (atSelected()) {
           setWinner(sel, w, { favourite });
         } else {
           // Inside (or just after) a rally without a winner: say who won it. Otherwise a new
           // rally ending now, taken to have started the Settings gap (rallyGap, 5 s by default) after the one before.
+          // A selected rally the playhead has moved away from stays selected and keeps its winner.
           const t = now();
           const i = rallies.findIndex((r) => t >= r.start && t <= r.end + 1.5);
           if (i >= 0) setWinner(i, w, { favourite });
           else {
             remember();
+            const kept = rallies[sel] ?? null;
             const r = { start: assumedStart(rallies, t, { matchStart, gap: data.rallyGap }), end: Math.max(t, 1), winner: w, ...(favourite ? { fav: true } : {}) };
             rallies.push(r);
             const k = sortKeep(r);
+            sel = kept ? rallies.indexOf(kept) : -1;
             changed();
             const after = steps[k]?.after;
             say(`Rally ${k + 1}: ${w === 'let' ? 'let' : `${w.toUpperCase()} wins`}${after ? ` · ${after.points.join('-')}` : ''}${r.fav ? ' · ★ favourite' : ''}`);
@@ -1698,8 +1718,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       case '-': zoomBy(2); break;
       case '0': setView(0, duration()); break;
       case '?': keysDialog.showModal(); break;
-      case 'ArrowUp': if (rallies.length) select(Math.max(0, sel < 0 ? rallyAtOrBefore(video.currentTime) : sel - 1)); break;
-      case 'ArrowDown': if (rallies.length) select(Math.min(rallies.length - 1, sel + 1)); break;
+      case 'ArrowUp': stepRally(-1); break;
+      case 'ArrowDown': stepRally(1); break;
       case 'q': case 'e':
         if (sel >= 0) {
           remember();
