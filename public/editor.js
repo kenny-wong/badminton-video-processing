@@ -14,7 +14,7 @@ import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { percent, percents } from './shared/players.js';
-import { landings, matchStats } from './shared/stats.js';
+import { landingNote, landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 import { youtubePanel } from './youtube-panel.js';
 import { matchStar } from './match-star.js';
@@ -1414,9 +1414,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     }
     const colours = { a: css('--side-a'), b: css('--side-b'), text: css('--muted'), grid: css('--border-strong') };
     const chart = momentumChart(s, [nameA, nameB], { colours });
-    const map = corners && shuttle.length ? landingMap(landings(rallies, shuttle, courtMapping(corners)?.toCourt), { colours: { ...colours, court: '#2f6d4f' } }) : null;
+    const spots = corners && shuttle.length ? landings(rallies, shuttle, courtMapping(corners)?.toCourt) : null;
+    const map = spots && landingMap(spots, { colours: { ...colours, court: '#2f6d4f' }, onRally: playRally });
+    const withWinner = rallies.filter((r) => r.winner === 'a' || r.winner === 'b').length;
     fill(statsBox,
-      statsTables(s, [nameA, nameB]),
+      statsTables(s, [nameA, nameB], { onRally: playRally }),
       levels?.hits ? null : h('p', { class: 'hint' }, 'Shot counts come from the hit sounds, worked out when the sound strip under the timeline is drawn.'),
       chart ? [h('div', { class: 'row spread' }, h('div', { class: 'subhead' }, 'Momentum'),
         h('button', {
@@ -1425,7 +1427,15 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
             `${nameA} v ${nameB} momentum.png`.replace(/[\\/:*?"<>|]/g, ' ')),
         }, 'Save as picture')), chart] : null,
       h('div', { class: 'subhead' }, 'Where rallies ended'),
-      map ?? h('p', { class: 'hint' }, 'Mark the court and track the shuttle (Tracking tab) to see where each rally ended. Only as good as the tracking: from a low camera the last sighting is often in the air.'));
+      map ? [map, h('p', { class: 'hint' }, landingNote(spots.length, withWinner))]
+        : h('p', { class: 'hint' }, 'Mark the court and track the shuttle (Tracking tab) to see where each rally ended. Only as good as the tracking: from a low camera the last sighting is often in the air.'));
+  }
+
+  // Plays rally i from a second before it starts (the stats' "rally n" links and the landing map's dots).
+  function playRally(i) {
+    if (!rallies[i]) return;
+    select(i);
+    video.play().catch(() => {});
   }
 
   // ---- players: badminfo ratings, win chance, earlier meetings ----

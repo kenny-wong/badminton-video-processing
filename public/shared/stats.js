@@ -130,3 +130,19 @@ export function landings(rallies, points, toCourt, { after = 0.6 } = {}) {
   return out;
 }
 
+/**
+ * The line under the landing map: how many of the rallies with a winner got a
+ * dot, and why the others didn't. The map treats the last sighting as a point
+ * on the floor, so a shuttle last seen in the air lands far off the court
+ * (or behind the camera) and is left out.
+ */
+export function landingNote(placed, withWinner) {
+  if (!withWinner) return 'No rally has a winner yet.';
+  const of = `${placed} of ${withWinner} ${withWinner === 1 ? 'rally' : 'rallies'}`;
+  if (placed === withWinner) return `All ${of} placed, at the last place the shuttle was seen. Click a dot to play its rally.`;
+  const rest = withWinner - placed;
+  return `${of} placed. ${rest === 1 ? 'The other one was' : `The other ${rest} were`} last seen in the air or not seen at all: `
+    + 'the map reads the last sighting as a spot on the floor, which only works when the shuttle was seen landing (best with a camera high behind a baseline). '
+    + (placed ? 'Click a dot to play its rally.' : '');
+}
+

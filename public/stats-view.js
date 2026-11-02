@@ -15,10 +15,13 @@ const el = (tag, attrs = {}, ...children) => {
 
 const pct = (won, of) => (of ? `${won}/${of} (${Math.round((won / of) * 100)}%)` : '—');
 
-/** The summary and per-game tables. */
-export function statsTables(s, [nameA, nameB]) {
+/** The summary and per-game tables. `onRally(i)`, when given, makes "rally n" a link that plays that rally. */
+export function statsTables(s, [nameA, nameB], { onRally = null } = {}) {
   const row = (label, a, b) => h('tr', {}, h('th', {}, label), h('td', { class: 'side-a' }, a), h('td', { class: 'side-b' }, b));
   const runOf = (side) => (s.longestRun?.side === side ? `${s.longestRun.points} (game ${s.longestRun.game})` : '');
+  const rally = (i) => (onRally
+    ? h('button', { type: 'button', class: 'rally-link', title: `Play rally ${i + 1}`, onclick: () => onRally(i) }, `rally ${i + 1}`)
+    : `rally ${i + 1}`);
   return [
     h('table', { class: 'stats-table' },
       h('thead', {}, h('tr', {}, h('th', {}), h('th', { class: 'side-a' }, nameA), h('th', { class: 'side-b' }, nameB))),
@@ -29,9 +32,9 @@ export function statsTables(s, [nameA, nameB]) {
         row('Longest run', runOf('a'), runOf('b')))),
     h('div', { class: 'stats summary small-stats' },
       h('div', { class: 'stat' }, h('b', {}, s.averageRally === null ? '—' : `${s.averageRally} s`), h('span', {}, 'average rally')),
-      h('div', { class: 'stat' }, h('b', {}, s.longestRally ? `${Math.round(s.longestRally.seconds)} s` : '—'), h('span', {}, s.longestRally ? `longest (rally ${s.longestRally.index + 1})` : 'longest rally')),
+      h('div', { class: 'stat' }, h('b', {}, s.longestRally ? `${Math.round(s.longestRally.seconds)} s` : '—'), h('span', {}, ...(s.longestRally ? ['longest (', rally(s.longestRally.index), ')'] : ['longest rally']))),
       h('div', { class: 'stat' }, h('b', {}, s.averageShots ?? '—'), h('span', {}, 'shots a rally')),
-      h('div', { class: 'stat' }, h('b', {}, s.mostShots?.shots ?? '—'), h('span', {}, s.mostShots ? `most shots (rally ${s.mostShots.index + 1})` : 'most shots'))),
+      h('div', { class: 'stat' }, h('b', {}, s.mostShots?.shots ?? '—'), h('span', {}, ...(s.mostShots ? ['most shots (', rally(s.mostShots.index), ')'] : ['most shots'])))),
     s.games.length ? h('table', { class: 'stats-table' },
       h('thead', {}, h('tr', {}, ['Game', 'Score', 'Time', 'Biggest lead', 'Best run', 'Comeback'].map((x) => h('th', {}, x)))),
       h('tbody', {}, s.games.map((g) => h('tr', {},
@@ -107,8 +110,11 @@ export async function saveSvgAsPng(svg, fileName) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-/** The court from above, far end at the top, with a dot where each rally ended (coloured by who won it). */
-export function landingMap(list, { colours }) {
+/**
+ * The court from above, far end at the top, with a dot where each rally ended
+ * (coloured by who won it). `onRally(i)`, when given, plays a dot's rally on click.
+ */
+export function landingMap(list, { colours, onRally = null }) {
   const m = 20; // pixels per metre
   const pad = 30;
   const w = COURT.width * m + pad * 2;
@@ -121,8 +127,13 @@ export function landingMap(list, { colours }) {
   svg.append(el('text', { x: w / 2, y: 18, 'text-anchor': 'middle', fill: colours.text, 'font-size': 11 }, 'far end'),
     el('text', { x: w / 2, y: hgt - 8, 'text-anchor': 'middle', fill: colours.text, 'font-size': 11 }, 'near end (camera)'));
   for (const p of list) {
-    svg.append(el('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: p.winner === 'a' ? colours.a : colours.b, stroke: '#000', 'stroke-opacity': 0.5 },
-      el('title', {}, `Rally ${p.index + 1}: won by ${p.winner.toUpperCase()}`)));
+    const dot = el('circle', { cx: X(p.x), cy: Y(p.y), r: 5, fill: p.winner === 'a' ? colours.a : colours.b, stroke: '#000', 'stroke-opacity': 0.5 },
+      el('title', {}, `Rally ${p.index + 1}: won by ${p.winner.toUpperCase()}${onRally ? ' (click to play)' : ''}`));
+    if (onRally) {
+      dot.classList.add('rally-dot');
+      dot.addEventListener('click', () => onRally(p.index));
+    }
+    svg.append(dot);
   }
   return svg;
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { landings, matchStats, shotsIn, statsLine } from '../public/shared/stats.js';
+import { landingNote, landings, matchStats, shotsIn, statsLine } from '../public/shared/stats.js';
 import { replay } from '../public/shared/score.js';
 import { courtMapping } from '../public/shared/court.js';
 import { assScript, scoreSpans } from '../lib/overlay.js';
@@ -50,6 +50,17 @@ test('landings put the last sighting of each rally on the court', () => {
     { index: 1, winner: 'b', x: 4.57, y: 3.35 },
   ]);
   assert.deepEqual(landings(rallies, points, null), []);
+});
+
+test('the landing note says how many rallies got a dot and why the others did not', () => {
+  assert.equal(landingNote(0, 0), 'No rally has a winner yet.');
+  assert.match(landingNote(3, 3), /^All 3 of 3 rallies placed/);
+  assert.match(landingNote(1, 1), /^All 1 of 1 rally placed/);
+  const some = landingNote(2, 27);
+  assert.match(some, /^2 of 27 rallies placed\. The other 25 were last seen in the air or not seen at all/);
+  assert.match(some, /Click a dot/);
+  assert.match(landingNote(26, 27), /The other one was last seen/);
+  assert.doesNotMatch(landingNote(0, 5), /Click a dot/);
 });
 
 test('a long rally gets a banner when chosen, and the end card can carry a stats line', () => {
