@@ -72,7 +72,7 @@ test('the API serves settings, tournaments and match tagging', async () => {
     assert.equal(m.match.firstServer, 'b');
     assert.equal(m.source.ready, true);
     assert.equal(m.source.url, `/media/match/${mid}`);
-    assert.match(m.output.title, /^Example · XD U15 - Group A Round 1 · Lee\/Ng v Ho\/Wu · 21-13$/);
+    assert.match(m.output.title, /^Example · XD U15 - Group A Round 1 · Amy Lee \/ Ben Ng v Cat Ho \/ Dan Wu · 21-13$/);
 
     // Start score, match bounds and the YouTube link.
     const putMatch = (body) => fetch(`${base}/api/matches/${mid}`, { method: 'PUT', headers: { Origin: base }, body: JSON.stringify(body) });

@@ -31,7 +31,7 @@ test('a game’s video starts after the earlier games and ends with its own game
 
 test('a game’s title and file name say which game', () => {
   const m = { date: '2026-10-24', time: '09:00', draw: 'OS U15', round: 'Final', teamA: ['Eli Ma'], teamB: ["Fin O'Neil"], game: 2 };
-  assert.equal(videoTitle({ tournament: { name: 'Example' }, match: m, games: [[19, 21], [21, 15], [12, 21]] }), "Example · OS U15 Final Game 2 · Ma v O'Neil · 21-15");
+  assert.equal(videoTitle({ tournament: { name: 'Example' }, match: m, games: [[19, 21], [21, 15], [12, 21]] }), "Example · OS U15 Final Game 2 · Eli Ma v Fin O'Neil · 21-15");
   assert.equal(outputPath({ tournament: { name: 'Example', start: '2026-10-24' }, match: m })[2], "0900 OS U15 Final - Ma v O'Neil - Game 2.mp4");
 });
 
@@ -89,7 +89,7 @@ test('linking a video to one game gives that game its own row and status', async
     const tagged = t.matches.find((x) => x.id === m.id).units;
     assert.deepEqual([tagged[0].rallyCount, tagged[1].rallyCount, tagged[1].check.ok], [0, 36, true]);
     const g2view = (await call(`/api/matches/${g2.id}`)).body;
-    assert.match(g2view.output.title, /Game 2 · Ma v O'Neil · 21-15$/);
+    assert.match(g2view.output.title, /Game 2 · Eli Ma v Fin O'Neil · 21-15$/);
     // Its start score can only change the points; earlier games stay the official ones.
     const s = await call(`/api/matches/${g2.id}`, 'PUT', { startScore: { games: [[1, 21]], points: [3, 1] } });
     assert.deepEqual(s.body.startScore, { games: [[19, 21]], points: [3, 1] });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { cleanComment, COMMENT_MAX, DESCRIPTION_MAX, outputPath, safeName, TITLE_MAX, videoDescription, videoTitle, withComment } from '../lib/naming.js';
+import { cleanComment, COMMENT_MAX, DESCRIPTION_MAX, outputPath, safeName, TITLE_MAX, videoDescription, videoTitle, withComment, withFullNames } from '../lib/naming.js';
 import { parseTournamentLink } from '../lib/links.js';
 import { boardNames, cleanNameStyle, namesMatch, teamName } from '../public/shared/names.js';
 
@@ -9,11 +9,25 @@ const tournament = { name: 'Example Junior Gold', start: '2026-10-24' };
 const match = { date: '2026-10-24', time: '09:40', draw: 'XD U15 - Group A', round: 'Round 1', court: 'Example School - 3', teamA: ['Amy Lee', 'Ben Ng'], teamB: ['Cat Ho', 'Dan Wu'] };
 
 test('the title names the tournament, event, players and result, within YouTube’s limit', () => {
+  assert.equal(videoTitle({ tournament, match, games: [[21, 18]] }),
+    'Example Junior Gold · XD U15 - Group A Round 1 · Amy Lee / Ben Ng v Cat Ho / Dan Wu · 21-18');
+  // Full names would make this one 103 characters: surnames keep the score in.
   assert.equal(videoTitle({ tournament, match, games: [[21, 18], [15, 21], [21, 19]] }),
     'Example Junior Gold · XD U15 - Group A Round 1 · Lee/Ng v Ho/Wu · 21-18 15-21 21-19');
   const long = videoTitle({ tournament: { name: 'X'.repeat(150) }, match, games: [] });
   assert.equal(long.length, TITLE_MAX);
   assert.ok(long.endsWith('…'));
+});
+
+test('a title saved with surnames only gets the full names, when they fit', () => {
+  const singles = { teamA: ['Amy Lee'], teamB: ['Cat Hoang'] };
+  assert.equal(withFullNames('Example U15 Silver · WS U15 - Group A Round 1 Game 1 · Lee v Hoang · 10-15', singles),
+    'Example U15 Silver · WS U15 - Group A Round 1 Game 1 · Amy Lee v Cat Hoang · 10-15');
+  assert.equal(withFullNames('Highlights: Example · WS U15 · Lee v Hoang', singles), 'Highlights: Example · WS U15 · Amy Lee v Cat Hoang');
+  assert.equal(withFullNames('Example · WS U15 · Amy Lee v Cat Hoang · 10-15', singles), 'Example · WS U15 · Amy Lee v Cat Hoang · 10-15');
+  assert.equal(withFullNames('Example · WS U15 · Lee v Hoangs · 10-15', singles), 'Example · WS U15 · Lee v Hoangs · 10-15');
+  const long = `${'X'.repeat(80)} · Lee/Ng v Ho/Wu · 21-18`;
+  assert.equal(withFullNames(long, match), long);
 });
 
 test('the description has the match, result, chapters and links', () => {
