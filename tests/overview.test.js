@@ -50,7 +50,7 @@ test('jobs on a queue run one at a time, in order; a waiting one can be stopped'
   const order = [];
   let release;
   const gate = new Promise((r) => { release = r; });
-  const first = startJob('render', 'render:q1', async () => { order.push('1 start'); await gate; order.push('1 end'); return 1; }, { queue: 'test-gpu', label: 'First' });
+  const first = startJob('render', 'render:q1', async (j) => { order.push('1 start'); j.message = 'Joining'; await gate; order.push('1 end'); return 1; }, { queue: 'test-gpu', label: 'First' });
   const second = startJob('render', 'render:q2', async () => { order.push('2 start'); return 2; }, { queue: 'test-gpu' });
   const third = startJob('render', 'render:q3', async () => { order.push('3 start'); }, { queue: 'test-gpu' });
   await new Promise((r) => setTimeout(r, 20));
@@ -66,6 +66,7 @@ test('jobs on a queue run one at a time, in order; a waiting one can be stopped'
   await settled(third);
   assert.deepEqual(order, ['1 start', '1 end', '2 start']);
   assert.equal(second.result, 2);
+  assert.equal(first.message, 'Finished'); // not its last step's "Joining"
   assert.equal(third.status, 'stopped');
   assert.ok(listJobs().indexOf(third) < listJobs().indexOf(first)); // newest first
 });

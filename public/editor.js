@@ -1142,19 +1142,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('button', {
           class: people ? 'small' : 'small primary',
           title: 'Find and follow everyone in the video with YOLO on the graphics card (a few minutes), then name the players on the court',
-          onclick: async (e) => {
-            e.target.disabled = true;
-            try {
-              const r = await runJob(peopleJobBox, () => api(`/api/matches/${id}/detections`, { method: 'POST' }));
-              fill(peopleJobBox, h('div', { class: 'notice ok small' }, `Found people in ${r.frames.toLocaleString('en-GB')} frames.`));
-              showPlayers = true;
-              writeShow(PLAYERS_KEY, true);
-              await loadPeople();
-            } catch (err) {
-              fill(peopleJobBox, errorNotice(err));
-            }
-            e.target.disabled = false;
-          },
+          disabled: peopleBusy,
+          onclick: () => followPeople(() => api(`/api/matches/${id}/detections`, { method: 'POST' })),
         }, people ? 'Find players again' : 'Find players'),
         people ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showPlayers, onchange: (e) => { showPlayers = e.target.checked; writeShow(PLAYERS_KEY, showPlayers); drawOverlay(); } }), 'Show players and their names') : null,
         pair('a'), pair('b')),
@@ -1182,27 +1171,52 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('div', { class: 'row small' },
         h('button', {
           class: tracked ? 'small' : 'small primary',
-          onclick: async (e) => {
-            e.target.disabled = true;
-            try {
-              const r = await runJob(trackJobBox, () => api(`/api/matches/${id}/track`, { method: 'POST' }));
-              tracked = true;
-              fill(trackJobBox, h('div', { class: 'notice ok small' }, `Shuttle seen in ${Math.round((r.seen / Math.max(1, r.frames)) * 100)}% of ${r.frames} frames.`));
-              await loadShuttle();
-              drawTrackingPanel();
-            } catch (err) {
-              fill(trackJobBox, errorNotice(err));
-            }
-            e.target.disabled = false;
-          },
+          disabled: trackBusy,
+          onclick: () => followTrack(() => api(`/api/matches/${id}/track`, { method: 'POST' })),
         }, tracked ? 'Track again' : 'Track the shuttle'),
         tracked ? h('label', { class: 'row' }, h('input', { type: 'checkbox', checked: showShuttle, onchange: (e) => { showShuttle = e.target.checked; writeShow(SHUTTLE_KEY, showShuttle); drawOverlay(); } }), 'Show the shuttle on the video') : null),
       trackJobBox,
       playersControls());
   }
+  // Tracking and finding players run as jobs: followed here when started, or when the editor opens while one
+  // is still queued or running, with the button off until it ends (the panel is redrawn often, so a flag keeps it).
+  let trackBusy = false;
+  let peopleBusy = false;
+  async function followTrack(start) {
+    trackBusy = true;
+    drawTrackingPanel();
+    try {
+      const r = await runJob(trackJobBox, start);
+      tracked = true;
+      fill(trackJobBox, h('div', { class: 'notice ok small' }, `Shuttle seen in ${Math.round((r.seen / Math.max(1, r.frames)) * 100)}% of ${r.frames} frames.`));
+      await loadShuttle();
+    } catch (err) {
+      fill(trackJobBox, errorNotice(err));
+    }
+    trackBusy = false;
+    drawTrackingPanel();
+  }
+  async function followPeople(start) {
+    peopleBusy = true;
+    drawTrackingPanel();
+    try {
+      const r = await runJob(peopleJobBox, start);
+      fill(peopleJobBox, h('div', { class: 'notice ok small' }, `Found people in ${r.frames.toLocaleString('en-GB')} frames.`));
+      showPlayers = true;
+      writeShow(PLAYERS_KEY, true);
+      await loadPeople();
+    } catch (err) {
+      fill(peopleJobBox, errorNotice(err));
+    }
+    peopleBusy = false;
+    drawTrackingPanel();
+  }
+  const stillRunning = (job) => job && (job.status === 'queued' || job.status === 'running');
   drawTrackingPanel();
   if (tracked) loadShuttle();
   loadPeople();
+  if (stillRunning(data.jobs?.track)) followTrack(async () => data.jobs.track);
+  if (stillRunning(data.jobs?.people)) followPeople(async () => data.jobs.people);
 
   // Sliders for the black space on each side, applied as they move and remembered.
   const padInputs = PAD_SIDES.map(([k, label, max]) => {
@@ -1387,21 +1401,27 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       const untagged = rallies.filter((r) => !r.winner).length;
       if (highlightsBox.checked && !rallies.some((r) => r.fav)) return say('Mark some favourite rallies first (☆ or H)');
       if (overlayBox.checked && untagged && !confirm(`${untagged} rallies have no winner, so the scoreboard will skip them. Render anyway?`)) return;
-      renderBtn.disabled = true;
-      const jobBox = h('div');
-      renderBox.replaceChildren(jobBox);
-      try {
-        const r = await runJob(jobBox, () => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked, replays: replaysBox.checked, removeVoices: voicesBox.checked } }));
-        fill(jobBox, h('div', { class: 'notice ok' }, `Done: ${clock(r.seconds)} of ${r.highlights ? 'highlights' : 'video'} in ${r.parts} part${r.parts === 1 ? '' : 's'}.`), h('div', { class: 'small muted' }, r.path));
-        if (r.highlights) showHighlights(true);
-        else showOutput(r, true);
-        loadFiles();
-      } catch (err) {
-        fill(jobBox, errorNotice(err));
-      }
-      renderBtn.disabled = false;
+      followRender(() => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked, replays: replaysBox.checked, removeVoices: voicesBox.checked } }));
     },
   }, 'Render video');
+  // Shows a render's progress (one just asked for, or one still queued or running from before
+  // the editor was opened) with the button off until it ends.
+  async function followRender(start) {
+    renderBtn.disabled = true;
+    const jobBox = h('div');
+    renderBox.replaceChildren(jobBox);
+    try {
+      const r = await runJob(jobBox, start);
+      fill(jobBox, h('div', { class: 'notice ok' }, `Done: ${clock(r.seconds)} of ${r.highlights ? 'highlights' : 'video'} in ${r.parts} part${r.parts === 1 ? '' : 's'}.`), h('div', { class: 'small muted' }, r.path));
+      if (r.highlights) showHighlights(true);
+      else showOutput(r, true);
+      loadFiles();
+    } catch (err) {
+      fill(jobBox, errorNotice(err));
+    }
+    renderBtn.disabled = false;
+  }
+  if (stillRunning(data.jobs?.render)) followRender(async () => data.jobs.render);
 
   // ---- statistics: serve and receive, runs, rally lengths and shots, momentum, where rallies ended ----
   const statsBox = h('div', { class: 'stack' });
