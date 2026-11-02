@@ -72,11 +72,12 @@ const writePad = (pad) => {
 // tracked shuttle, on every tab; per device, on unless turned off.
 const PLAYERS_KEY = 'badminton-video:show-players:v1';
 const SHUTTLE_KEY = 'badminton-video:show-shuttle:v1';
-const readShow = (key) => {
+const readShow = (key, fallback = true) => {
   try {
-    return localStorage.getItem(key) !== '0';
+    const saved = localStorage.getItem(key);
+    return saved === '0' ? false : saved === '1' ? true : fallback;
   } catch {
-    return true;
+    return fallback;
   }
 };
 const writeShow = (key, on) => {
@@ -196,6 +197,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let matchStart = match.matchStart;
   let matchEnd = match.matchEnd;
   let initial = null;
+  // With no manual choice, show the preview only after this video's tagging is complete.
+  const scoreboardKey = `badminton-video:show-scoreboard:v1:${id}`;
+  let scoreboardChoice = readShow(scoreboardKey, null);
+  let showScoreboard = false;
+  let lastVideoBoard = '';
   let corners = match.corners;
   let nearAtStart = match.nearAtStart;
   let shuttle = []; // tracked sightings [t, x, y], once loaded
@@ -221,13 +227,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const flash = h('div', { class: 'flash', hidden: true });
   const openBadge = h('div', { class: 'open-rally', hidden: true }, '● Rally running');
   const overlay = h('canvas', { class: 'overlay' });
+  const videoBoard = h('div', { class: 'video-scoreboard', hidden: true });
   const markTip = h('div', { class: 'mark-tip', hidden: true, role: 'status' });
   // The marked corners, to drag (or nudge with the arrow keys) on the Tracking tab.
   const cornerHandles = CORNER_NAMES.map((name) => h('button', {
     class: 'corner-handle', type: 'button', hidden: true,
     'aria-label': `Move the ${name} corner`, title: `${name} corner: drag to move it (arrow keys nudge it, Shift for 10 px)`,
   }, h('span', {}, name)));
-  const player = h('div', { class: 'player' }, video, overlay, ...cornerHandles, markTip, flash, openBadge);
+  const player = h('div', { class: 'player' }, video, overlay, videoBoard, ...cornerHandles, markTip, flash, openBadge);
   // Which video the player shows: the original (for tagging) or one of the finished files.
   let files = []; // GET /api/matches/:id/rendered
   let showing = ''; // '' = the original, else a finished file's key
@@ -523,6 +530,14 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // ---- right panel ----
   const board = h('div', { class: 'board' });
+  const previewBox = h('input', {
+    type: 'checkbox',
+    onchange: (e) => {
+      scoreboardChoice = showScoreboard = e.target.checked;
+      writeShow(scoreboardKey, scoreboardChoice);
+      drawOverlay();
+    },
+  });
   const checkBox = h('div', { class: 'small' });
   const listBox = h('div', { class: 'rallies' });
   const renderBox = h('div');
@@ -664,6 +679,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   function drawOverlay() {
     const box = pictureBox();
+    drawVideoBoard(box);
     const ratio = window.devicePixelRatio || 1;
     if (overlay.width !== Math.round(box.cw * ratio) || overlay.height !== Math.round(box.ch * ratio)) {
       overlay.width = Math.round(box.cw * ratio);
@@ -758,6 +774,29 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   };
 
   let lastBoard = '';
+  function scoreboardMoment() {
+    const s = scoreAt(rallies, steps, video.currentTime, initial);
+    const i = rallies.findLastIndex((r, j) => r.end <= video.currentTime && steps[j]?.counted);
+    const st = steps[i];
+    const banner = st?.event && video.currentTime - rallies[i].end < 6 ? bannerText({ kind: st.event, winner: rallies[i].winner, before: st.before, after: st.after }, [nameA, nameB], format) : '';
+    return {
+      names: [nameA, nameB], state: s, style: data.board, flags: boardFlags(s, format),
+      heading: boardHeading(data.board, { tournament, match }), banner,
+      width: data.source.width || 1920, height: data.source.height || 1080,
+    };
+  }
+
+  function drawVideoBoard(box) {
+    videoBoard.hidden = !showScoreboard || Boolean(showing);
+    if (videoBoard.hidden) return;
+    Object.assign(videoBoard.style, { left: `${box.x}px`, top: `${box.y}px`, width: `${box.w}px`, height: `${box.h}px` });
+    const moment = scoreboardMoment();
+    const key = JSON.stringify(moment);
+    if (key === lastVideoBoard) return;
+    lastVideoBoard = key;
+    fill(videoBoard, boardPreview({ ...moment, transparent: true }));
+  }
+
   function showTime() {
     drawOverlay();
     const t = video.currentTime;
@@ -784,7 +823,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   }
 
   function recompute() {
-    ({ steps, initial } = replay(rallies, format, firstServer, startFor({ ...match, startScore }), { oneGame: unitGame > 0 }));
+    const result = replay(rallies, format, firstServer, startFor({ ...match, startScore }), { oneGame: unitGame > 0 });
+    ({ steps, initial } = result);
+    showScoreboard = scoreboardChoice ?? Boolean(result.winner && rallies.length && rallies.every((r) => r.winner));
+    previewBox.checked = showScoreboard;
+    lastVideoBoard = '';
   }
 
   function changed() {
@@ -1202,14 +1245,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     h('option', { value: '' }, 'Corner from Settings'), Object.entries(CORNERS).map(([k, label]) => h('option', { value: k, selected: boardStyle?.corner === k }, label)));
   const boardBox = h('div', { class: 'preview-frame small-preview' });
   const drawBoardPreview = () => {
-    const style = data.board;
-    const s = scoreAt(rallies, steps, video.currentTime, initial);
-    const i = rallies.findLastIndex((r, j) => r.end <= video.currentTime && steps[j]?.counted);
-    const st = steps[i];
-    const banner = st?.event && video.currentTime - rallies[i].end < 6 ? bannerText({ kind: st.event, winner: rallies[i].winner, before: st.before, after: st.after }, [nameA, nameB], format) : '';
     fill(boardBox, boardPreview({
-      names: [nameA, nameB], state: s, style, flags: boardFlags(s, format), heading: boardHeading(style, { tournament, match }), banner,
-      background: `/media/thumb/${id}`, width: data.source.width || 1920, height: data.source.height || 1080,
+      ...scoreboardMoment(), background: `/media/thumb/${id}`,
     }));
   };
   const lookChanged = async () => {
@@ -1219,6 +1256,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       boardStyle = r.boardStyle;
       data.board = r.board; // Settings' look with this match's choice on top, as the render will use
       drawBoardPreview();
+      drawOverlay();
       say('Scoreboard look saved');
     } catch (err) {
       say(err.message);
@@ -1640,7 +1678,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         data.source.hdr ? h('div', { class: 'notice info small' }, 'Filmed in HDR: colours are converted to standard video when rendering.') : null,
         h('details', { class: 'keys-box', open: readKeysOpen(), ontoggle: (e) => writeKeysOpen(e.target.open) }, h('summary', {}, icon('keyboard', 16), 'Keyboard shortcuts'), h('div', { class: 'keys' }, KEYS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ' ', t))))),
       h('div', {},
-        h('div', { class: 'card scorecard' }, board, h('div', { class: 'check' }, checkBox)),
+        h('div', { class: 'card scorecard' },
+          h('div', { class: 'row spread small scoreboard-controls' }, h('span', {}, 'Scoreboard'),
+            h('label', { class: 'row' }, previewBox, 'Preview on video')),
+          board, h('div', { class: 'check' }, checkBox)),
         tabBar,
         panel)));
   recompute();

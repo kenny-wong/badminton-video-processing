@@ -16,13 +16,14 @@ function svg(tag, attrs = {}, ...children) {
 /**
  * The SVG for one moment: `names` [A, B], `state` (games, points, won, server),
  * `style` (a board look), `flags`, `heading`, `banner`, `background` (an image URL).
+ * `transparent` omits the backdrop so the board can sit over the playing video.
  */
-export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720 }) {
+export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720, transparent = false }) {
   const { items } = boardLayout({ width, height, names, state, style, flags, heading, banner });
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'board-preview', role: 'img', 'aria-label': 'Scoreboard preview' });
   const defs = svg('defs', {}, svg('linearGradient', { id: 'court-bg', x1: 0, y1: 0, x2: 1, y2: 1 },
     svg('stop', { offset: '0', 'stop-color': '#2d4a3e' }), svg('stop', { offset: '1', 'stop-color': '#16251f' })));
-  root.append(defs, svg('rect', { x: 0, y: 0, width, height, fill: 'url(#court-bg)' }));
+  if (!transparent) root.append(defs, svg('rect', { x: 0, y: 0, width, height, fill: 'url(#court-bg)' }));
   if (background) root.append(svg('image', { href: background, x: 0, y: 0, width, height, preserveAspectRatio: 'xMidYMid slice' }));
   if (logo?.url) {
     // A square box as wide as the logo, the picture kept in its corner of it.
