@@ -128,6 +128,15 @@ export const resultServer = (game, games = []) => (game >= 2 ? gameWinnerOf(Arra
 /** Replays a match's (or a game's) saved tagging. */
 export const replayMatch = (match, format) => replay(match.rallies, format, match.firstServer, startFor(match), { oneGame: (match.game ?? 0) > 0 });
 
+/** The format to score with: the one chosen, else a guess from the official result. */
+export const matchFormat = (match) => cleanFormat(match.format ?? inferFormat(match.games, Boolean(match.winner)));
+
+/** The official games a match's (or a game's) tagging should reach: a game's video, the games up to its own. */
+export const officialFor = (match) => (match.game ? (match.games ?? []).slice(0, match.game) : match.games ?? []);
+
+/** Whether the tagged score differs from the official result (never when there is no result yet). */
+export const scoreDiffers = (match) => !checkResult(replayMatch(match, matchFormat(match)).games, officialFor(match)).ok;
+
 /**
  * Which service court the server stands in: the right when their own score is
  * even, the left when it is odd (singles and doubles alike).

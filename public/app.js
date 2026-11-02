@@ -662,6 +662,10 @@ async function renderTournament(id, notice = null, who = null) {
       show(u.id);
     }
   };
+  // Jobs queued by Render all / Upload all: each video's row follows its own (progress, Stop), as when started there.
+  const followQueued = (jobs, followOne) => {
+    for (const j of jobs ?? []) followOne(Number(j.key.split(':')[1]), j);
+  };
   const stopJob = async (uid, jobsOf, question) => {
     const job = jobsOf.get(uid);
     if (!job || !confirm(question)) return;
@@ -683,7 +687,8 @@ async function renderTournament(id, notice = null, who = null) {
   const filmedUnits = (m) => m.videoIds.length ? [m] : m.units.filter((u) => u.videoIds.length);
   // Tagged: every rally has a winner and who served first is chosen (serverSet false: not yet).
   const isTagged = (u) => u.rallyCount > 0 && u.tagged === u.rallyCount && u.serverSet !== false;
-  const unitStage = (u) => u.youtubeUrl ? 'done' : u.outputPath ? 'upload' : isTagged(u) ? 'render' : 'tag';
+  // A tagged score that differs from the result is still to tag: no Render here until it's fixed (as Render all).
+  const unitStage = (u) => u.youtubeUrl ? 'done' : u.outputPath ? 'upload' : isTagged(u) && u.check?.ok !== false ? 'render' : 'tag';
 
   // A suggested video with its Link button.
   const suggestedCell = (u, s) => {
@@ -752,7 +757,7 @@ async function renderTournament(id, notice = null, who = null) {
       const scoreOk = checks.length === total && !bad;
       return h('div', { class: 'row tags' },
         tag(tagged > 0, tagged < total ? 'rallies part' : 'rallies', `${tagged}/${total} tagged games`, 'Games with every rally tagged and who served first chosen'),
-        tag(bad || scoreOk, bad ? 'score-bad' : scoreOk ? 'score-ok' : 'score', bad ? 'Score ≠' : scoreOk ? 'Score ✓' : 'Score', bad ? 'A game’s tagged score differs from the result' : 'Tagged game scores checked against the result'),
+        tag(bad || scoreOk, bad ? 'score-bad' : scoreOk ? 'score-ok' : 'score', bad ? 'Score ≠' : scoreOk ? 'Score ✓' : 'Score', bad ? 'A game’s tagged score differs from the result: fix its tagging in the editor to render it here or with Render all tagged' : 'Tagged game scores checked against the result'),
         tag(rendered > 0, 'render', `${rendered}/${total} rendered`, 'Rendered game videos'),
         youtubeTag(m, tag));
     }
@@ -764,7 +769,7 @@ async function renderTournament(id, notice = null, who = null) {
         !m.rallyCount ? 'Rallies' : noServer ? `${m.rallyCount} rallies · serve?` : allTagged ? `${m.rallyCount} rallies` : `${m.tagged}/${m.rallyCount} rallies`,
         !m.rallyCount ? 'No rallies yet' : noServer ? 'Every rally has a winner; choose who served first in the editor (Scoring tab)' : allTagged ? 'Every rally has a winner' : `${m.rallyCount - m.tagged} rallies have no winner yet`),
       checked
-        ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result'}`)
+        ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result. Fix the tagging in the editor to render it here or with Render all tagged.'}`)
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
       tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
       youtubeTag(m, tag),
@@ -1070,13 +1075,14 @@ async function renderTournament(id, notice = null, who = null) {
   }, icon('highlights', 16), 'Highlight reel');
 
   const renderAllBtn = h('button', {
-    title: 'Queue a render of every filmed match whose rallies all have a winner and that isn’t rendered yet; they run one after another',
+    title: 'Queue a render of every filmed match whose rallies all have a winner, whose score agrees with the result and that isn’t rendered yet; they run one after another',
     onclick: async () => {
       renderAllBtn.disabled = true;
       try {
         const r = await api(`/api/tournaments/${id}/render-all`, { method: 'POST' });
-        fill(msg, h('div', { class: 'notice ok' }, r.queued ? [`Queued ${r.queued} render${r.queued === 1 ? '' : 's'}. `, h('a', { href: '#/jobs' }, 'Follow them on the Jobs page.')]
-          : 'Nothing to render: no filmed match here has every rally tagged and no video yet.'));
+        followQueued(r.jobs, followRender);
+        fill(msg, h('div', { class: 'notice ok' }, r.queued ? [`Queued ${r.queued} render${r.queued === 1 ? '' : 's'}: each shows its progress below. `, h('a', { href: '#/jobs' }, 'Jobs page')]
+          : 'Nothing to render: no filmed match here has every rally tagged, its score the same as the result and no video yet.'));
       } catch (err) {
         fill(msg, errorNotice(err));
       }
@@ -1096,7 +1102,8 @@ async function renderTournament(id, notice = null, who = null) {
         btn.disabled = true;
         try {
           const r = await api(`/api/tournaments/${id}/upload-all`, { method: 'POST', body: { kind, privacy: prefs.privacy, playlist: prefs.playlist } });
-          fill(msg, h('div', { class: 'notice ok' }, r.queued ? [`Queued ${r.queued} upload${r.queued === 1 ? '' : 's'}. `, h('a', { href: '#/jobs' }, 'Follow them on the Jobs page.')]
+          followQueued(r.jobs, followUpload);
+          fill(msg, h('div', { class: 'notice ok' }, r.queued ? [`Queued ${r.queued} upload${r.queued === 1 ? '' : 's'}: each shows its progress below. `, h('a', { href: '#/jobs' }, 'Jobs page')]
             : kind === 'rendered' ? 'Nothing to upload: every rendered video here is on YouTube already.' : 'Nothing to upload: every filmed video here is rendered or on YouTube already.'));
         } catch (err) {
           fill(msg, errorNotice(err));
