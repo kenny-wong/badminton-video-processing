@@ -72,7 +72,7 @@ function forget(library, byId, removed) {
   }
 }
 
-export async function renderTools(main, { runJob, query }) {
+export async function renderTools(main, { runJob, refresh, query }) {
   document.title = 'Tools · Badminton Video';
   const { videos: all } = await api('/api/videos');
   const library = all.filter((v) => !v.missing);
@@ -104,8 +104,9 @@ export async function renderTools(main, { runJob, query }) {
   fill(main,
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Tools'), h('div', { class: 'sub' }, 'Join videos end to end, or cut one into parts. The picture and sound are copied exactly and the phone’s details and times are kept. The originals are never edited; unless you untick the box, they go to the Recycle Bin once the new files are made.')),
-      h('div', { class: 'segmented', role: 'group', 'aria-label': 'Tool' }, buttons)),
-    library.length ? body : h('div', { class: 'empty' }, icon('match-video', 34), h('div', {}, 'No videos yet. Scan your folders from the ', h('a', { href: '#/' }, 'Tournaments page'), ' first.')));
+      h('div', { class: 'row' }, h('div', { class: 'segmented', role: 'group', 'aria-label': 'Tool' }, buttons), refresh.button)),
+    refresh.notice, refresh.box,
+    library.length ? body : h('div', { class: 'empty' }, icon('match-video', 34), h('div', {}, 'No videos yet. Add your video folders in ', h('a', { href: '#/settings' }, 'Settings'), ', then click Refresh from folders.')));
   if (library.length) show();
   return () => leaveView?.();
 }

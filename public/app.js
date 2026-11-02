@@ -202,7 +202,7 @@ async function renderHome() {
       scanBtn.disabled = true;
       try {
         const r = await runJob(scanBox, () => api('/api/videos/scan', { method: 'POST' }));
-        fill(scanBox, h('div', { class: 'notice ok' }, `Found ${r.found} video${r.found === 1 ? '' : 's'}; ${r.added} new or changed.${r.failed ? ` ${r.failed} couldn't be read.` : ''}`));
+        fill(scanBox, h('div', { class: 'notice ok' }, scanText(r)));
       } catch (err) {
         fill(scanBox, errorNotice(err));
       }
@@ -788,6 +788,41 @@ async function renderTournament(id, notice = null, who = null) {
   drawTable();
 }
 
+// ---------- Refreshing the video list ----------
+
+/** What a folder scan found, in a sentence. */
+function scanText(r) {
+  return `Found ${r.found} video${r.found === 1 ? '' : 's'}; ${r.added} new or changed.${r.failed ? ` ${r.failed} couldn't be read.` : ''}${r.missing ? ` ${r.missing} no longer in ${r.missing === 1 ? 'its folder' : 'their folders'}.` : ''}`;
+}
+
+let scanned = null; // the last refresh's outcome, shown once by the page that is drawn after it
+
+/**
+ * "Refresh from folders" for the Videos and Tools pages: scans the video
+ * folders (progress in `box`), then draws the page again with the outcome
+ * in `notice`.
+ */
+function refreshControls() {
+  const box = h('div');
+  const notice = scanned ? h('div', { class: 'notice ok' }, icon('check', 16), scanText(scanned)) : null;
+  scanned = null;
+  const button = h('button', {
+    type: 'button',
+    title: 'Look in your video folders (set in Settings) for new, changed and deleted videos',
+    onclick: async () => {
+      button.disabled = true;
+      try {
+        scanned = await runJob(box, () => api('/api/videos/scan', { method: 'POST' }));
+        router();
+      } catch (err) {
+        fill(box, errorNotice(err));
+        button.disabled = false;
+      }
+    },
+  }, icon('refresh', 16), 'Refresh from folders');
+  return { button, box, notice };
+}
+
 // ---------- Videos ----------
 
 /** " · merged from 3 videos", " · part 2 of 20261101_121214.mp4" for a video made on the Tools page. */
@@ -802,8 +837,10 @@ async function renderVideos() {
   document.title = 'Videos · Badminton Video';
   const { videos } = await api('/api/videos');
   const SOURCE = { apple: 'iPhone clock', filename: 'file name', creation_time: 'video clock', modified: 'file date (guess)' };
+  const refresh = refreshControls();
   fill(main,
-    pageHead('Videos', 'Every video found in your folders. Files are never moved or changed.'),
+    pageHead('Videos', 'Every video found in your folders. Files are never moved or changed here.', refresh.button),
+    refresh.notice, refresh.box,
     videos.length ? h('div', { class: 'table-scroll' }, h('table', {},
       h('thead', {}, h('tr', {}, ['Recorded', 'File', 'Length', 'Picture', 'Match', ''].map((x) => h('th', {}, x)))),
       h('tbody', {}, videos.map((v) => h('tr', {},
@@ -1106,7 +1143,7 @@ async function router() {
     } else if (section === 'videos') await renderVideos();
     else if (section === 'tools') {
       setTab('tools');
-      leaving = await renderTools(main, { runJob, query: new URLSearchParams(query ?? '') });
+      leaving = await renderTools(main, { runJob, refresh: refreshControls(), query: new URLSearchParams(query ?? '') });
     }
     else if (section === 'settings') await renderSettings();
     else await renderHome();

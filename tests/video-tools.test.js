@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../lib/db.js';
 import { findTools, probe, run } from '../lib/ffmpeg.js';
-import { saveVideo } from '../lib/videos.js';
+import { saveVideo, scanFolders } from '../lib/videos.js';
 import { box, boxes, carryMetadataFile } from '../lib/mp4.js';
 import { fileTimes } from '../lib/filetimes.js';
 import { mergeVideos, packetCounts, removeOriginals, splitVideo, streamProblems } from '../lib/video-tools.js';
@@ -27,6 +27,7 @@ async function makeVideo(dir, name, size = '320x240') {
   const phone = join(dir, 'phone-boxes.mp4');
   writeFileSync(phone, box('moov', box('udta', box('auth', Buffer.from('Galaxy Z Fold7')), box('smta', Buffer.from('mdlnSM-F9660')))));
   await carryMetadataFile(phone, path);
+  rmSync(phone);
   utimesSync(path, new Date(END), new Date(END));
   return path;
 }
@@ -125,6 +126,23 @@ test('originals stay when something went wrong, when linked to a match, or when 
   assert.deepEqual(binned, ['a.mp4']);
   assert.deepEqual(db.prepare('SELECT path FROM videos ORDER BY id').all().map((x) => x.path), ['linked.mp4', 'locked.mp4']);
   db.close();
+});
+
+test('refreshing from the folders finds new videos and counts the ones that have gone', { skip: !tools && 'FFmpeg not found' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bv-scan-'));
+  const db = openDb(':memory:');
+  try {
+    const a = await makeVideo(dir, '20261101_121208.mp4');
+    await makeVideo(dir, '20261101_130000.mp4');
+    const first = await scanFolders(db, tools, { folders: [dir] });
+    assert.deepEqual([first.found, first.added, first.failed, first.missing], [2, 2, 0, 0]);
+    rmSync(a);
+    const second = await scanFolders(db, tools, { folders: [dir] });
+    assert.deepEqual([second.found, second.added, second.missing], [1, 0, 1]);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('streams must match, in the same order, to be joined', () => {
