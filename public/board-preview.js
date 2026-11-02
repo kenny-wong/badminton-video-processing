@@ -25,8 +25,10 @@ function svg(tag, attrs = {}, ...children) {
  * `transparent` omits the backdrop so the board can sit over the playing video.
  * `before` (the moment drawn just before, same fields) makes the numbers that changed flip in (or slide,
  * on the international board, with its serve marker hopping rows: SCORE_MOTION, as the video does).
+ * `crop` cuts the picture down to the board (with its flags and banner) and sizes it one CSS pixel
+ * per video pixel, so a `width` × `height` video's board shows at its real size.
  */
-export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720, transparent = false, before = null }) {
+export function boardPreview({ names, state, style, flags, heading = '', banner = '', background = null, logo = null, width = 1280, height = 720, transparent = false, before = null, crop = false }) {
   const { items } = boardLayout({ width, height, names, state, style, flags, heading, banner });
   const previous = before ? boardLayout({ width, height, ...before, banner: '' }).items : [];
   const flipping = changedNumbers(previous, items);
@@ -82,6 +84,24 @@ export function boardPreview({ names, state, style, flags, heading = '', banner 
       if (it.shadow) into.append(text(1, { fill: '#000', 'fill-opacity': 0.4 * it.opacity }));
       into.append(text(0, { fill: it.colour, 'fill-opacity': it.opacity }));
     }
+  }
+  if (crop) {
+    // Every box and shape (the texts sit inside them), with a little of the picture around.
+    const xs = [];
+    const ys = [];
+    for (const it of items) {
+      if (it.type === 'rect') xs.push(it.x, it.x + it.w), ys.push(it.y, it.y + it.h);
+      else if (it.type === 'poly') for (const [x, y] of it.points) xs.push(x), ys.push(y);
+    }
+    const m = Math.round(height * 0.02);
+    const x0 = Math.max(0, Math.min(...xs) - m);
+    const y0 = Math.max(0, Math.min(...ys) - m);
+    const w = Math.min(width, Math.max(...xs) + m) - x0;
+    const h = Math.min(height, Math.max(...ys) + m) - y0;
+    root.setAttribute('viewBox', `${x0} ${y0} ${w} ${h}`);
+    root.setAttribute('width', w);
+    root.setAttribute('height', h);
+    root.classList.add('actual-size');
   }
   return root;
 }

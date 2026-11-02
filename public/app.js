@@ -1236,6 +1236,8 @@ async function renderSettings() {
     ...Object.fromEntries(Object.entries(ticks).map(([k, c]) => [k, c.input.checked])),
   });
   const preview = h('div', { class: 'preview-frame' });
+  // The same board cut out at its real size: one screen pixel per pixel of a 1080p video.
+  const actual = h('div', { class: 'board-actual' });
   const sample = h('select', { 'aria-label': 'Moment to preview' },
     h('option', { value: 'point' }, 'Game 2, match point'), h('option', { value: 'interval' }, 'Interval'), h('option', { value: 'start' }, 'Start of the match'));
   const showBoard = () => {
@@ -1248,7 +1250,9 @@ async function renderSettings() {
     }[sample.value];
     const flags = boardFlags(moment.state, { points: 21, setting: true, bestOf: 3 });
     const heading = boardHeading(style, { tournament: { name: 'Example Open' }, match: { draw: 'MS U15', round: 'Final' } });
-    fill(preview, boardPreview({ names, ...moment, style: { ...style, countries: ['DEN', 'ENG'] }, flags, heading, background: data.previewThumb, logo: readLogo() }));
+    const look = { names, ...moment, style: { ...style, countries: ['DEN', 'ENG'] }, flags, heading, background: data.previewThumb };
+    fill(preview, boardPreview({ ...look, logo: readLogo() }));
+    fill(actual, boardPreview({ ...look, width: 1920, height: 1080, crop: true }));
   };
   presetSel.addEventListener('change', () => {
     const p = PRESETS[presetSel.value];
@@ -1421,7 +1425,11 @@ async function renderSettings() {
             h('div', { class: 'stack small' }, Object.entries(ticks).map(([k, c]) => h('label', { class: 'row', for: `board-${k}` }, c.input, c.label)),
               h('div', { class: 'row' }, h('label', { for: 'board-long' }, 'Banner after rallies of'), longRally, h('span', {}, 'shots or more (0: none; from the hit sounds)')))),
           h('div', { class: 'stack' }, preview, h('div', { class: 'row small' }, 'Preview:', sample),
-            h('p', { class: 'hint' }, 'Choose each team’s country in the editor’s Export → Scoreboard controls. The International broadcast example uses Denmark and England.')))),
+            h('p', { class: 'hint' }, 'Each player’s flag is chosen on the Players page (a match can choose its own in the editor’s Export tab). The example uses Denmark and England.'))),
+        h('div', { class: 'stack' },
+          h('div', { class: 'subhead' }, 'Actual size'),
+          h('p', { class: 'hint' }, 'The scoreboard as big as it is in a 1080p video watched full screen on a 1080p screen: one pixel of the video per pixel here.'),
+          actual)),
       section('Logo', 'A club or channel logo in a corner of every rendered video. A PNG with a see-through background looks best.',
         h('div', { class: 'row' }, h('label', { class: 'btn small', for: 'logo-file' }, 'Choose picture…'), logoInput, logoState, removeLogo),
         h('div', { class: 'row' }, h('label', { for: 'logo-corner' }, 'Corner'), logoCorner, h('label', { for: 'logo-size' }, 'Size'), logoSize, h('label', { for: 'logo-opacity' }, 'Opacity'), logoOpacity),
