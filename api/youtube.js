@@ -6,8 +6,9 @@
 // GET  /api/youtube/callback, which saves the sign-in and shows a page saying so.
 // POST /api/youtube/signout: forgets the sign-in.
 // POST /api/youtube/open { url }: opens a YouTube or Google page in the normal browser, outside the app's window.
-// POST /api/matches/:id/youtube { file?, privacy?, playlist? }: uploads one of the match's finished files ('video' by default,
-//      'highlights' or 'clip:<name>'; a job, one upload at a time) and marks the match with its link.
+// POST /api/matches/:id/youtube { file?, privacy?, playlist?, replace? }: uploads one of the match's finished files ('video' by default,
+//      'highlights' or 'clip:<name>'; a job, one upload at a time) and marks the match with its link. With `replace`, the
+//      video the match links to now is deleted from YouTube once the upload is done, and the new one takes its place in the playlist.
 // GET  /api/matches/:id/rendered: the finished files, with URLs to play them.
 // DELETE /api/matches/:id/rendered?key=<key>: deletes one finished file (the original video can't be: it isn't one).
 
@@ -21,11 +22,11 @@ import { nowIso } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
 import { matchPeople } from '../lib/players.js';
 import { deleteRendered, renderedFile, renderedFiles } from '../lib/rendered.js';
-import { youtubeUrl } from '../lib/links.js';
+import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
 import {
-  accessToken, addToTournamentPlaylist, authUrl, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistUrl, PRIVACY, readClient, readToken,
+  accessToken, addToTournamentPlaylist, authUrl, deleteVideo, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistPosition, playlistUrl, PRIVACY, readClient, readToken,
   signOut as forget, tournamentPlaylistTitle, tournamentPlaylistUrls, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
@@ -48,6 +49,7 @@ export async function onRequestGet({ request, app }) {
     channel: token?.channel ?? null,
     uploading: id ? jobView(listJobs().find((j) => j.key.startsWith(jobKey(id, '')) && (j.status === 'running' || j.status === 'queued'))) ?? null : null,
     playlist: id && token?.refreshToken ? await playlistFor(dir, loadMatch(app.db, id)?.tournament) : null,
+    current: id ? currentVideo(loadMatch(app.db, id)?.match) : null, // what Replace would delete
   });
 }
 
@@ -129,6 +131,12 @@ export async function signOutRoute({ app }) {
 
 const mb = (n) => (n / 1048576).toFixed(n < 1048576 * 10 ? 1 : 0);
 
+/** The video a match (or game) links to now: { url, videoId }, or null. */
+const currentVideo = (match) => {
+  const videoId = match?.youtubeUrl ? youtubeId(match.youtubeUrl) : null;
+  return videoId ? { url: youtubeUrl(videoId), videoId } : null;
+};
+
 export async function upload({ request, params, app }) {
   const loaded = loadMatch(app.db, idParam(params.id));
   if (!loaded) return fail(404, 'notFound', 'No such match');
@@ -141,11 +149,17 @@ export async function upload({ request, params, app }) {
   if (!(await readClient(dir))) return fail(409, 'noClient', 'YouTube upload isn’t set up: the OAuth client file is missing');
   if (!(await readToken(dir))?.refreshToken) return fail(401, 'signin', 'Sign in to YouTube first');
   const { match, tournament } = loaded;
+  const old = body.replace === true ? currentVideo(match) : null;
+  if (body.replace === true && !old) return fail(409, 'nothingToReplace', 'This match has no YouTube video to replace');
   const job = startJob('upload', jobKey(match.id, key), async (j, signal) => {
     const resource = videoResource({ title: file.title, description: file.description, privacy, recordedOn: match.date });
     j.log(`Uploading ${file.path} as ${privacy}: ${resource.snippet.title}`);
     j.message = 'Starting the upload';
     const token = () => accessToken(dir);
+    // The old video's place in the tournament's playlist, read before anything changes, for the new one to take.
+    const listId = old && body.playlist !== false && tournament ? await knownPlaylist(dir, tournament.id) : null;
+    const position = listId ? await playlistPosition(listId, old.videoId, await token()).catch((err) => { j.log(`Couldn’t read the old video’s place in the playlist: ${err.message}`); return null; }) : null;
+    if (old) j.log(`Replacing ${old.url}${position === null ? '' : ` (number ${position + 1} in the playlist)`}`);
     const video = await uploadVideo({
       path: file.path, resource, token, signal,
       onProgress: (sent, size) => {
@@ -157,7 +171,7 @@ export async function upload({ request, params, app }) {
     j.log(`Uploaded: ${url} (YouTube replied ${video.status?.privacyStatus ?? '?'})`);
     // The match keeps the link of its latest upload, whichever file it was.
     app.db.prepare('UPDATE matches SET youtube_url = ?, uploaded_at = ?, updated_at = ? WHERE id = ?').run(url, nowIso(), nowIso(), match.id);
-    const result = { videoId: video.id, url, file: key, label: file.label, privacy, privacyNow: video.status?.privacyStatus ?? null, uploadStatus: video.status?.uploadStatus ?? null, playlist: null, playlistError: null };
+    const result = { videoId: video.id, url, file: key, label: file.label, privacy, privacyNow: video.status?.privacyStatus ?? null, uploadStatus: video.status?.uploadStatus ?? null, playlist: null, playlistError: null, replaced: null, replaceError: null };
     // Asked again after the upload: an unaudited Google project's videos may be locked to private.
     const now = await videoStatus(video.id, await token()).catch((err) => { j.log(`Couldn’t read the status: ${err.message}`); return null; });
     if (now) Object.assign(result, { privacyNow: now.privacyStatus ?? result.privacyNow, uploadStatus: now.uploadStatus ?? result.uploadStatus });
@@ -166,7 +180,7 @@ export async function upload({ request, params, app }) {
     if (body.playlist !== false && tournament) {
       j.message = 'Adding to the tournament’s playlist';
       try {
-        const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournamentPlaylistTitle(tournament), privacy }, video.id, await token());
+        const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournamentPlaylistTitle(tournament), privacy, position }, video.id, await token());
         result.playlist = { id, url: playlistUrl(id) };
         playlistCache.delete(id);
       } catch (err) {
@@ -174,8 +188,21 @@ export async function upload({ request, params, app }) {
         j.log(`Playlist: ${err.message}`);
       }
     }
+    // Only now, with the new video safely up: the old one goes (and leaves the playlist with it).
+    if (old && old.videoId !== video.id) {
+      j.message = 'Deleting the old video';
+      try {
+        const deleted = await deleteVideo(old.videoId, await token());
+        result.replaced = { url: old.url, deleted };
+        j.log(deleted ? `Deleted ${old.url}` : `${old.url} was already gone from YouTube`);
+      } catch (err) {
+        result.replaceError = err.message;
+        result.replaced = { url: old.url, deleted: false };
+        j.log(`Deleting ${old.url}: ${err.message}`);
+      }
+    }
     return result;
-  }, { queue: 'upload', label: `YouTube (${file.label}): ${matchLabel(match)}` });
+  }, { queue: 'upload', label: `YouTube${old ? ' replace' : ''} (${file.label}): ${matchLabel(match)}` });
   return json(jobView(job), 202);
 }
 

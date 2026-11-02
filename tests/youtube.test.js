@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistTitle, readClient, tournamentPlaylistTitle, tournamentPlaylistUrls,
+  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, deleteVideo, knownPlaylist, nextOffset, parseDescribed, pkce, playlistInfo, playlistPosition, playlistTitle, readClient, tournamentPlaylistTitle, tournamentPlaylistUrls,
   uploadVideo, videoResource,
 } from '../lib/youtube.js';
 
@@ -200,6 +200,46 @@ test('playlist: a remembered playlist that keeps refusing is reported, not repla
     : jsonRes({ error: { code: 403, message: 'Forbidden', errors: [{ reason: 'playlistContainsMaximumNumberOfVideos' }] } }, 403));
   await assert.rejects(addToTournamentPlaylist(dir, { tournamentId: 7, title: 'x', privacy: 'unlisted' }, 'v1', 'tok', fake, { wait: async () => {} }), /Adding to the playlist failed \(403/);
   assert.deepEqual(JSON.parse(readFileSync(join(dir, 'playlists.json'), 'utf8')), { 7: 'PL1' });
+});
+
+test('replacing: the new video takes the old one’s place in the playlist, at the end when it isn’t sorted by hand', async () => {
+  const dir = scratch();
+  writeFileSync(join(dir, 'playlists.json'), JSON.stringify({ 7: 'PL1' }));
+  const sent = [];
+  let manual = true;
+  const fake = async (url, opts) => {
+    if (opts.method === 'GET' && url.includes('/playlistItems?')) {
+      assert.match(url, /playlistId=PL1&videoId=OLD/);
+      return jsonRes({ items: [{ snippet: { position: 1 } }] });
+    }
+    if (opts.method === 'GET') return jsonRes({ items: [{ id: 'PL1', snippet: { title: 'x' } }] });
+    const { snippet } = JSON.parse(opts.body);
+    sent.push(snippet.position ?? 'end');
+    return 'position' in snippet && !manual
+      ? jsonRes({ error: { code: 400, message: 'Manual sort required', errors: [{ reason: 'manualSortRequired' }] } }, 400)
+      : jsonRes({ id: 'item' });
+  };
+  const position = await playlistPosition('PL1', 'OLD', 'tok', fake);
+  assert.equal(position, 1);
+  await addToTournamentPlaylist(dir, { tournamentId: 7, title: 'x', privacy: 'unlisted', position }, 'NEW', 'tok', fake);
+  manual = false;
+  await addToTournamentPlaylist(dir, { tournamentId: 7, title: 'x', privacy: 'unlisted', position }, 'NEW2', 'tok', fake, { wait: async () => assert.fail('no waiting') });
+  assert.deepEqual(sent, [1, 1, 'end']);
+  assert.equal(await playlistPosition('PL1', 'OLD', 'tok', async () => jsonRes({ items: [] })), null);
+});
+
+test('deleting the old video: done, already gone, or refused with a reason to act on', async () => {
+  const calls = [];
+  const reply = (status, body = null) => async (url, opts) => {
+    calls.push(`${opts.method} ${url} ${opts.headers.Authorization}`);
+    return body ? jsonRes(body, status) : new Response(null, { status });
+  };
+  assert.equal(await deleteVideo('abc', 'tok', reply(204)), true);
+  assert.deepEqual(calls, ['DELETE https://www.googleapis.com/youtube/v3/videos?id=abc Bearer tok']);
+  assert.equal(await deleteVideo('abc', 'tok', reply(404, { error: { code: 404, message: 'Not found', errors: [{ reason: 'videoNotFound' }] } })), false);
+  await assert.rejects(deleteVideo('abc', 'tok', reply(403, { error: { code: 403, message: 'Forbidden', errors: [{ reason: 'forbidden' }] } })), /another channel.*YouTube Studio/);
+  await assert.rejects(deleteVideo('abc', 'tok', reply(403, { error: { code: 403, message: 'Quota', errors: [{ reason: 'quotaExceeded' }] } })), /daily limit/);
+  await assert.rejects(deleteVideo('abc', 'tok', reply(401, { error: { code: 401, message: 'Invalid' } })), (err) => err.code === 'signin');
 });
 
 test('playlist name shown before upload: the tournament name, as the playlist will be made', async () => {

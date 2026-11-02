@@ -23,6 +23,7 @@ const TIPS = {
   privacy: 'Who can watch the upload. Unlisted: only people you send the link to; it doesn’t show on your channel or in search. Private: only you. Public: everyone, in search too. You can change it later in YouTube Studio.',
   playlist: 'Puts the video in a YouTube playlist named after the tournament, so one link shares all its matches. The playlist is made with the first upload (Unlisted, or Public for public videos); later uploads from the tournament join it.',
   upload: 'Uploads the chosen video with its title and description (chapters too when there are at least 3), then saves its link on this match, replacing any earlier one. You can keep working; it shows on the Jobs page.',
+  replace: 'Uploads the chosen video as a new YouTube video, puts it in the old one’s place in the playlist, then deletes the old one. YouTube can’t swap the file inside a video, so the link changes and the old views and comments go.',
   byHand: 'Copies the title, opens YouTube’s upload page in Chrome and shows the file in Explorer, for you to drag across.',
   copyTitle: 'Puts the title on the clipboard again',
   copyDescription: 'Puts the description on the clipboard',
@@ -113,7 +114,9 @@ export function youtubePanel({ id, preview, runJob, errorNotice, say, onUploaded
           h('div', {}, link),
           r.uploadStatus && r.uploadStatus !== 'processed' ? h('div', { class: 'small' }, 'YouTube is still processing it; HD takes a while longer.') : null),
       r.playlist ? h('p', { class: 'small' }, 'Added to the tournament’s playlist: ', h('a', { href: r.playlist.url, target: '_blank', rel: 'noopener' }, 'open playlist ↗')) : null,
-      r.playlistError ? h('div', { class: 'notice warn small' }, `Uploaded, but not added to the tournament’s playlist: ${r.playlistError}. Add it in YouTube Studio (Playlists).`) : null);
+      r.playlistError ? h('div', { class: 'notice warn small' }, `Uploaded, but not added to the tournament’s playlist: ${r.playlistError}. Add it in YouTube Studio (Playlists).`) : null,
+      r.replaceError ? h('div', { class: 'notice warn small' }, `The old video (${r.replaced?.url}) is still on YouTube: ${r.replaceError}`)
+        : r.replaced ? h('p', { class: 'small' }, r.replaced.deleted ? `The old video (${r.replaced.url}) was deleted.` : `The old video (${r.replaced.url}) was already gone from YouTube.`) : null);
   };
 
   const follow = async (start) => {
@@ -131,9 +134,11 @@ export function youtubePanel({ id, preview, runJob, errorNotice, say, onUploaded
     busy = false;
     refresh(); // the playlist may be new now
   };
-  const upload = () => {
+  const upload = ({ replace = false } = {}) => {
     const f = current();
-    if (f) follow(() => api(`/api/matches/${id}/youtube`, { method: 'POST', body: { file: f.key, privacy: prefs.privacy, playlist: prefs.playlist } }));
+    if (!f) return;
+    if (replace && !confirm(`Replace ${yt.current.url} on YouTube?\n\nThe ${f.label.toLowerCase()} is uploaded as a new video${prefs.playlist ? ' and put in the old one’s place in the playlist' : ''}. Once that’s done, the old video is deleted: its link stops working and its views and comments go. This can’t be undone.`)) return;
+    follow(() => api(`/api/matches/${id}/youtube`, { method: 'POST', body: { file: f.key, privacy: prefs.privacy, playlist: prefs.playlist, replace } }));
   };
 
   const signIn = async () => {
@@ -204,7 +209,10 @@ export function youtubePanel({ id, preview, runJob, errorNotice, say, onUploaded
       h('div', { class: 'row small' }, privacySel),
       h('div', { class: 'small playlist-choice' }, h('label', { class: 'check', title: TIPS.playlist }, playlistBox, h('span', {}, playlistLabel(yt.playlist))),
         yt.playlist?.url ? h('a', { href: yt.playlist.url, target: '_blank', rel: 'noopener', title: 'Open the playlist on YouTube' }, 'open ↗') : null),
-      h('div', { class: 'row small' }, h('button', { class: 'primary', title: TIPS.upload, disabled: busy, onclick: upload }, icon('youtube', 16), 'Upload to YouTube')),
+      h('div', { class: 'row small' },
+        h('button', { class: yt.current ? '' : 'primary', title: TIPS.upload, disabled: busy, onclick: () => upload() }, icon('youtube', 16), yt.current ? 'Upload as another video' : 'Upload to YouTube'),
+        yt.current ? h('button', { class: 'primary', title: TIPS.replace, disabled: busy, onclick: () => upload({ replace: true }) }, icon('youtube', 16), 'Replace on YouTube') : null),
+      yt.current ? h('p', { class: 'hint' }, 'On YouTube now: ', h('a', { href: yt.current.url, target: '_blank', rel: 'noopener' }, `${yt.current.url.replace(/^https:\/\//, '')} ↗`)) : null,
       jobBox, resultBox,
       fold('Upload by hand instead', h('div', { class: 'row small' }, handButton(false)), byHand ? handSteps() : null, texts()));
   };
