@@ -1,5 +1,5 @@
 // GET /api/matches/:id: the match, its videos, tagging and the playable source.
-// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle? }:
+// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle?, comment? }:
 //   saves tagging, the score the video starts at, where the match starts and
 //   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
 //   own scoreboard preset and corner (null uses Settings).
@@ -41,6 +41,7 @@ import { inferWinners, suggestWinners } from '../lib/winners.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { applyCarried, detachVideo, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
 import { teamName } from '../public/shared/names.js';
+import { cleanComment } from '../lib/naming.js';
 import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { cleanBoardOverride, resolveBoard } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
@@ -144,7 +145,10 @@ export async function onRequestPut({ request, params, app }) {
       youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, board_style = ?, updated_at = ? WHERE id = ?`)
     .run(JSON.stringify(rallies), format ? JSON.stringify(format) : null, firstServer, startScore ? JSON.stringify(startScore) : null,
       matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, boardStyle ? JSON.stringify(boardStyle) : null, nowIso(), match.id);
-  return json({ ok: true, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle,
+  // The comment (at the end of its videos' YouTube descriptions) on its own: only when sent.
+  const comment = typeof body.comment === 'string' ? cleanComment(body.comment) : match.comment;
+  if (typeof body.comment === 'string') app.db.prepare('UPDATE matches SET comment = ?, updated_at = ? WHERE id = ?').run(comment || null, nowIso(), match.id);
+  return json({ ok: true, comment, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle,
     board: resolveBoard(readSettings(app.db).board, boardStyle) });
 }
 

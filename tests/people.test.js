@@ -72,3 +72,31 @@ test('two groups of colours: the darker group first', () => {
   assert.deepEqual(twoGroups(items), [1, 1, 0]);
   assert.deepEqual(twoGroups([{ colour: RED, weight: 1 }]), [0]);
 });
+
+test('someone who usually sits off the court is never named, even when one frame puts them on it', () => {
+  const timeline = [{ from: -Infinity, team: 'a' }];
+  const names = { a: ['Near Player'], b: ['Far Player'] };
+  // The umpire (id 7) sits 1.5 m off the sideline by the net; in the last frame the far player
+  // isn't seen and the umpire's feet are misplaced just inside the court.
+  const data = { frames: [
+    [0, [standing(1, [3, 3]), standing(2, [3, 10]), standing(7, [-1.5, 7])]],
+    [0.1, [standing(1, [3, 3]), standing(2, [3, 10]), standing(7, [-1.5, 7.1])]],
+    [0.2, [standing(1, [3, 3]), standing(7, [-0.3, 7.2])]],
+  ] };
+  const named = namePlayers(placePeople(data, toCourt), { timeline, names });
+  assert.deepEqual(named[2].players.map((p) => p.name), ['Near Player']); // no one stands in for the far player
+  assert.ok(named.every((f) => f.players.every((p) => p.id !== 7)));
+});
+
+test('a name stays on its person while they are seen, even if someone else comes nearer the middle', () => {
+  const timeline = [{ from: -Infinity, team: 'a' }];
+  const names = { a: ['Near Player'], b: ['Far Player'] };
+  // Player 1 is named first; person 5 (often on the court too) walks nearer the middle of that half.
+  const data = { frames: [
+    [0, [standing(1, [2.5, 3.5])]],
+    [0.1, [standing(1, [1, 1]), standing(5, [3, 3.3])]],
+    [0.2, [standing(1, [1, 1]), standing(5, [3, 3.3])]],
+  ] };
+  const named = namePlayers(placePeople(data, toCourt), { timeline, names });
+  assert.deepEqual(named.map((f) => f.players.map((p) => p.id)), [[1], [1], [1]]);
+});

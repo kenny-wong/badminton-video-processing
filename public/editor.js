@@ -1346,6 +1346,31 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     id, preview: data.output, runJob, errorNotice, say,
     onUploaded: (url) => { ytInput.value = url; drawYt(url, new Date().toISOString()); },
   });
+  // ---- a comment on this match or game: at the end of its videos' YouTube descriptions ----
+  const commentState = h('span', { class: 'small muted' }, match.comment ? 'Saved' : '');
+  let commentTimer = null;
+  const commentBox = h('textarea', {
+    class: 'comment-box', rows: 4, maxlength: 2000, value: match.comment ?? '',
+    placeholder: 'Anything to say about this game: who played well, what happened, a thank-you…',
+    'aria-label': 'Comment for the YouTube description',
+  });
+  async function saveComment() {
+    clearTimeout(commentTimer);
+    commentTimer = null;
+    try {
+      await api(`/api/matches/${id}`, { method: 'PUT', body: { comment: commentBox.value } });
+      commentState.textContent = 'Saved';
+      loadFiles(); // the YouTube box shows the descriptions with it
+    } catch (err) {
+      commentState.textContent = `Not saved: ${err.message}`;
+    }
+  }
+  commentBox.addEventListener('input', () => {
+    clearTimeout(commentTimer);
+    commentState.textContent = 'Saving…';
+    commentTimer = setTimeout(saveComment, 800);
+  });
+
   /** The finished files, for the player's switch and the YouTube box. */
   async function loadFiles() {
     try {
@@ -1643,6 +1668,11 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         renderBox,
         highlightsResult,
         renderResult),
+      card('Comment', 'edit',
+        commentBox,
+        h('div', { class: 'row spread small' },
+          h('span', { class: 'hint' }, `Goes at the end of the YouTube description of this ${unitGame ? 'game' : 'match'}’s videos (whole video, highlights and clips), including ones already rendered.`),
+          commentState)),
       card('YouTube', 'youtube',
         youtube.el,
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
@@ -1729,6 +1759,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   });
 
   return () => {
+    if (commentTimer) saveComment(); // a comment typed just before leaving is still saved
     window.removeEventListener('keydown', onKey);
     keysDialog.remove();
     clearTimeout(framesTimer);

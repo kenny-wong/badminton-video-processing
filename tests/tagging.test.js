@@ -120,3 +120,16 @@ test('tagging stranded on a match with no video can be brought over', async () =
     assert.equal(get(db, target).rallies.length, 1);
   });
 });
+
+test('a comment is saved on its own, tagging untouched, and cleared with an empty one', async () => {
+  await withServer(async ({ db, call, matches: [first] }) => {
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES });
+    const r = await call(`/api/matches/${first}`, 'PUT', { comment: '  Hayley’s best game.\r\n' });
+    assert.equal(r.body.comment, 'Hayley’s best game.');
+    assert.equal(db.prepare('SELECT comment FROM matches WHERE id = ?').get(first).comment, 'Hayley’s best game.');
+    assert.equal(get(db, first).rallies.length, 2);
+    await call(`/api/matches/${first}`, 'PUT', { comment: '' });
+    assert.equal(db.prepare('SELECT comment FROM matches WHERE id = ?').get(first).comment, null);
+  });
+});

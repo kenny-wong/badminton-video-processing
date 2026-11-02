@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { outputPath, safeName, TITLE_MAX, videoDescription, videoTitle } from '../lib/naming.js';
+import { cleanComment, COMMENT_MAX, DESCRIPTION_MAX, outputPath, safeName, TITLE_MAX, videoDescription, videoTitle, withComment } from '../lib/naming.js';
 import { parseTournamentLink } from '../lib/links.js';
 import { boardNames, cleanNameStyle, namesMatch, teamName } from '../public/shared/names.js';
 
@@ -58,4 +58,14 @@ test('scoreboard names in each style, with an initial when two players would loo
   assert.deepEqual(boardNames([['Sai Pranav Karthik'], ['Amy Lee']], { singles: 'initial' }), ['S. KARTHIK', 'A. LEE']);
   assert.deepEqual(cleanNameStyle({ singles: 'nonsense' }), { singles: 'full', doubles: 'initial' });
   assert.equal(teamName(['Amy Lee', 'Ben Ng']), 'Amy Lee / Ben Ng');
+});
+
+test('a comment goes at the end of the description and is never cut; the description gives way', () => {
+  assert.equal(withComment('Lee v Ho\nResult: 21-18', ''), 'Lee v Ho\nResult: 21-18');
+  assert.equal(withComment('Lee v Ho', '  Well played!\r\nSee you next time.  '), 'Lee v Ho\n\nWell played!\nSee you next time.');
+  const long = withComment('x'.repeat(DESCRIPTION_MAX), 'The end.');
+  assert.ok(long.length <= DESCRIPTION_MAX);
+  assert.ok(long.endsWith('…\n\nThe end.'));
+  assert.equal(cleanComment('y'.repeat(COMMENT_MAX + 50)).length, COMMENT_MAX);
+  assert.equal(cleanComment(null), '');
 });

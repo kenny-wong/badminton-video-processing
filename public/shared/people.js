@@ -3,7 +3,10 @@
 // named. No DOM code here; the editor draws them, tests/people.test.js checks it.
 //
 // - Where: each person's feet go onto the marked court. The players are the
-//   ones on the court, at most a team's worth per end, nearest that half's middle.
+//   ones on the court, at most a team's worth per end, among the people whose
+//   usual place (over all the frames they're seen in) is on the court, so an
+//   umpire by the court never stands in for a player who isn't seen. Whoever
+//   was named a moment ago keeps the name; then the one nearest that half's middle.
 // - Which team: the team at that end at that moment, from the team at the near
 //   end when the video starts and the score (ends change after each game and at
 //   the deciding game's mid-point).
@@ -14,7 +17,8 @@
 import { apply, COURT } from './court.js';
 import { endOf } from './score.js';
 
-const MARGIN = 0.6; // metres outside the lines a player's feet may be
+const MARGIN = 0.6; // metres outside the lines a player's feet may be in one frame
+const USUAL_MARGIN = 0.4; // ... and where they usually are, over all the frames they're seen in
 const NET = COURT.net;
 
 /** Seconds of the video -> frame index (the last frame at or before t), or -1. */
@@ -119,17 +123,44 @@ const median = (list) => {
  */
 export function namePlayers(frames, { timeline, names, swap = {} }) {
   const size = { a: Math.max(1, names.a?.length ?? 1), b: Math.max(1, names.b?.length ?? 1) };
-  // Pick the players: on the court, at most a team's worth per end, nearest the middle of that half.
+  // Who can be a player at all: a followed person whose usual place (the median over all the
+  // frames they're seen in) is on the court. An umpire or coach sitting by the court is seen
+  // inside its edge now and then, when their feet are misplaced, but not usually.
+  const places = new Map();
+  for (const f of frames) {
+    for (const p of f.people) {
+      if (p.id === null || p.id === undefined || !p.at) continue;
+      if (!places.has(p.id)) places.set(p.id, { xs: [], ys: [] });
+      places.get(p.id).xs.push(p.at[0]);
+      places.get(p.id).ys.push(p.at[1]);
+    }
+  }
+  const usual = new Map([...places].map(([id, { xs, ys }]) => [id, [median(xs), median(ys)]]));
+  const canPlay = (p) => {
+    const at = usual.get(p.id);
+    return Boolean(at) && at[0] > -USUAL_MARGIN && at[0] < COURT.width + USUAL_MARGIN && at[1] > -USUAL_MARGIN && at[1] < COURT.length + USUAL_MARGIN;
+  };
+  // Pick the players: on the court, at most a team's worth per end. Whoever was picked a moment
+  // ago comes first, so a name stays on its person; then whoever is nearest the middle of that half.
+  // When a player isn't seen, no one stands in for them.
+  let before = new Set();
+  let beforeT = -Infinity;
   const picked = frames.map((f) => {
     const nearTeam = nearTeamAt(timeline, f.t);
+    const recent = f.t - beforeT <= 1 ? before : new Set();
     const players = [];
     for (const end of ['near', 'far']) {
       const team = end === 'near' ? nearTeam : nearTeam === 'a' ? 'b' : 'a';
       const mid = middleOf(end);
-      f.people.filter((p) => onCourt(p) && endOfPoint(p) === end)
-        .sort((p, q) => Math.hypot(p.at[0] - mid[0], p.at[1] - mid[1]) - Math.hypot(q.at[0] - mid[0], q.at[1] - mid[1]))
+      const fromMid = (p) => Math.hypot(p.at[0] - mid[0], p.at[1] - mid[1]);
+      f.people.filter((p) => onCourt(p) && canPlay(p) && endOfPoint(p) === end)
+        .sort((p, q) => (recent.has(q.id) - recent.has(p.id)) || fromMid(p) - fromMid(q))
         .slice(0, size[team])
         .forEach((p) => players.push({ ...p, team }));
+    }
+    if (players.length) {
+      before = new Set(players.map((p) => p.id));
+      beforeT = f.t;
     }
     return { t: f.t, players };
   });

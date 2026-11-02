@@ -60,6 +60,13 @@ test('finished files: whole video with its .txt, highlights and rally clips, new
   assert.equal(renderedFile(loaded, settings, 'highlights'), null);
   assert.equal(renderedFile(loaded, settings, 'clip:../../secret.mp4'), null);
   assert.equal(renderedFile(loaded, settings, 'video').path, video);
+
+  // A comment typed later goes at the end of every file's description, with no new render.
+  db.prepare('UPDATE matches SET comment = ? WHERE id = ?').run('Great comeback in the second game.', id);
+  loaded = loadMatch(db, id);
+  const commented = renderedFiles(loaded, settings);
+  assert.equal(commented.find((f) => f.key === 'video').description, 'Line 1\nLine 2\n\nGreat comeback in the second game.');
+  assert.ok(commented.every((f) => f.description.endsWith('Great comeback in the second game.')));
 });
 
 test('deleting a finished file: the whole video goes with its .txt and the match forgets it; unknown keys do nothing', async () => {
