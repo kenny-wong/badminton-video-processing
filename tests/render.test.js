@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { chapterLines, chapterMetadata, chapters, concatLine, joinArgs, outputFps, outputLength, partArgs, plan, toOutput } from '../lib/render.js';
+import { chapterLines, chapterMetadata, chapters, concatLine, DEFAULT_CUT, joinArgs, outputFps, outputLength, partArgs, plan, toOutput } from '../lib/render.js';
+import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { replay } from '../public/shared/score.js';
 import { clock } from '../public/shared/time.js';
 
@@ -55,4 +57,13 @@ test('join and concat helpers', () => {
   const j = joinArgs({ list: 'parts.txt', chapters: 'ch.txt', out: 'o.mp4' });
   assert.deepEqual(j.slice(j.indexOf('-f')), ['-f', 'concat', '-safe', '0', '-i', 'parts.txt', '-i', 'ch.txt', '-map_metadata', '1', '-map_chapters', '1', '-map', '0', '-c', 'copy', '-movflags', '+faststart', 'o.mp4']);
   assert.deepEqual([outputFps(59.94), outputFps(29.97), outputFps(24), outputFps(120), outputFps(null)], [60, 30, 24, 30, 30]);
+});
+
+test('cutting keeps 1.5 s before and after each rally by default, and saved settings moved to it once', () => {
+  assert.deepEqual([DEFAULT_CUT.pre, DEFAULT_CUT.post], [1.5, 1.5]);
+  assert.deepEqual(plan([{ start: 10, end: 20 }], 100), [{ start: 8.5, end: 21.5, outStart: 0 }]);
+  const db = new DatabaseSync(':memory:');
+  db.exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT); INSERT INTO settings VALUES ('pre', '2.5'), ('post', '2.5'), ('rallyGap', '5')");
+  db.exec(readFileSync(new URL('../migrations/0024_cut_1_5.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(db.prepare('SELECT key, value FROM settings ORDER BY key').all().map((r) => [r.key, r.value]), [['post', '1.5'], ['pre', '1.5'], ['rallyGap', '5']]);
 });
