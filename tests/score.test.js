@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { checkResult, cleanFormat, cleanRallies, defaultServer, gameOver, gamesText, inferFormat, replay, scoreAt, serviceCourt } from '../public/shared/score.js';
+import { boardAt, checkResult, cleanFormat, cleanRallies, DEFAULT_FORMAT, defaultServer, firstShown, gameOver, gamesText, inferFormat, replay, scoreAt, serviceCourt } from '../public/shared/score.js';
 
 /** Rallies one second apart from a string of winners: 'aab' -> a, a, b. */
 const rallies = (winners) => [...winners].map((w, i) => ({ start: i * 10, end: i * 10 + 5, winner: w === 'a' || w === 'b' ? w : w === 'l' ? 'let' : null }));
@@ -100,4 +100,18 @@ test('the winner of a game serves first in the next game’s own video', () => {
   // Without the result: A in game 1 (the toss) and 3, B in game 2.
   assert.deepEqual([1, 2, 3].map((g) => defaultServer(g)), ['a', 'b', 'a']);
   assert.equal(defaultServer(0), 'a');
+});
+
+test('firstShown: nobody serves on the board before the first rally is won while who serves first isn’t chosen', () => {
+  const rallies = [{ start: 0, end: 10, winner: 'b' }, { start: 20, end: 30, winner: 'a' }];
+  const { steps, initial } = replay(rallies, DEFAULT_FORMAT, 'a');
+  assert.equal(firstShown(initial, steps).server, 'a'); // chosen: as chosen
+  assert.equal(firstShown(initial, steps, true).server, 'a');
+  const unknown = firstShown(initial, steps, false);
+  assert.equal(unknown.server, null);
+  assert.deepEqual(unknown.points, [0, 0]);
+  // The first rally's winner serves next, chosen or not.
+  assert.equal(boardAt(rallies, steps, 5, unknown).server, null);
+  assert.equal(boardAt(rallies, steps, 12, unknown).server, 'b');
+  assert.equal(firstShown(null, [], false), null);
 });

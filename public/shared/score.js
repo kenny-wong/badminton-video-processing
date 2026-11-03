@@ -157,6 +157,15 @@ export function shownAfter(step) {
   return { ...after, games: after.games.slice(0, -1), points: after.games.at(-1), server: null, final: true };
 }
 
+/**
+ * The board before the first rally is won: with who serves first not chosen yet (`serverSet` false), nobody
+ * is marked as serving (a guess would mislead); from the first rally won on, its winner serves anyway.
+ */
+export function firstShown(initial, steps, serverSet = true) {
+  const state = initial ?? steps[0]?.before ?? null;
+  return state && serverSet === false ? { ...state, server: null } : state;
+}
+
 /** What the scoreboard shows at `time` seconds: the score after the last rally that ended by then (see shownAfter). */
 export function boardAt(rallies, steps, time, initial = null) {
   let state = initial ?? steps[0]?.before ?? { games: [], points: [0, 0], won: [0, 0], server: 'a' };

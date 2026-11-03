@@ -5,7 +5,7 @@
 import { h, fill, day, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
-import { assumedStart, boardAt, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
+import { assumedStart, boardAt, firstShown, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
@@ -812,7 +812,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   let lastBoard = '';
   function scoreboardMoment() {
-    const s = boardAt(rallies, steps, video.currentTime, initial);
+    const s = boardAt(rallies, steps, video.currentTime, firstShown(initial, steps, serverChosen));
     const i = rallies.findLastIndex((r, j) => r.end <= video.currentTime && steps[j]?.counted);
     const st = steps[i];
     const banner = st?.event && video.currentTime - rallies[i].end < 6 ? bannerText({ kind: st.event, winner: rallies[i].winner, before: st.before, after: st.after }, [nameA, nameB], format) : '';
@@ -846,7 +846,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (view.to !== null && !video.paused && (t > viewTo() || t < view.from)) setView(t - span() * 0.05, t + span() * 0.95);
     playhead.style.left = `${pct(t)}%`;
     playhead.hidden = t < view.from || t > viewTo();
-    const s = boardAt(rallies, steps, t, initial);
+    const s = boardAt(rallies, steps, t, firstShown(initial, steps, serverChosen));
     const key = JSON.stringify(s);
     if (key !== lastBoard) {
       lastBoard = key;
