@@ -297,7 +297,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // The part of the video the timeline shows: all of it, or a window zoomed into with the mouse wheel or + / −.
   const view = { from: 0, to: null }; // to null: the end of the video
-  const MIN_SPAN = 10;
+  const MIN_SPAN = 2; // zoomed right in: a couple of seconds, the frame strip a tenth of a second apart
   const viewTo = () => view.to ?? duration();
   const span = () => Math.max(1, viewTo() - view.from);
   const pct = (t) => ((t - view.from) / span()) * 100;
@@ -313,21 +313,29 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     drawZoom();
     showTime();
   }
+  // Zooms keeping `at` where it is on the timeline (the time under the mouse, or the playhead for + / −;
+  // a playhead off the timeline comes to the middle). The new length is limited first, so zooming on at the
+  // closest (or widest) view doesn't slide the timeline along.
   const zoomBy = (k, at = video.currentTime) => {
-    const frac = Math.min(1, Math.max(0, (at - view.from) / span()));
-    const len = span() * k;
+    const d = duration();
+    const inView = at >= view.from && at <= viewTo();
+    const frac = inView ? (at - view.from) / span() : 0.5;
+    const len = Math.min(d, Math.max(Math.min(MIN_SPAN, d), span() * k));
     setView(at - frac * len, at - frac * len + len);
   };
-  timeline.addEventListener('wheel', (e) => {
+  // The mouse wheel over the timeline, its sound strip or its frames zooms about the time under the mouse;
+  // Shift+wheel (or sideways) moves along.
+  const onWheel = (e) => {
     e.preventDefault();
-    const box = timeline.getBoundingClientRect();
+    const box = e.currentTarget.getBoundingClientRect();
     if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
       const move = ((e.deltaX || e.deltaY) / box.width) * span();
       setView(view.from + move, viewTo() + move);
       return;
     }
-    zoomBy(e.deltaY < 0 ? 0.75 : 1 / 0.75, view.from + ((e.clientX - box.left) / box.width) * span());
-  }, { passive: false });
+    zoomBy(e.deltaY < 0 ? 0.75 : 1 / 0.75, view.from + Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * span());
+  };
+  for (const el of [timeline, wave, frames]) el.addEventListener('wheel', onWheel, { passive: false });
   function drawZoom() {
     fill(zoomText, view.to === null ? 'Whole video' : `${clock(view.from)}–${clock(viewTo())}`);
   }
@@ -376,11 +384,15 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   function drawFrames() {
     clearTimeout(framesTimer);
     framesTimer = setTimeout(() => {
+      // Whole seconds apart (snapped, so moving along reuses frames), or evenly spaced to a tenth of a second
+      // when zoomed in closer than that.
       const n = Math.max(1, Math.floor(frames.clientWidth / 120));
+      const fine = span() / n < 1;
       const step = Math.max(1, Math.round(span() / n));
       fill(frames, Array.from({ length: n }, (_, k) => {
-        const t = Math.min(duration() - 1, Math.round((view.from + ((k + 0.5) * span()) / n) / step) * step);
-        return h('img', { src: `/media/frame/${id}?t=${Math.max(0, t)}`, alt: '', loading: 'lazy', title: clock(t), onclick: () => { video.currentTime = t; }, onerror: (e) => { e.target.style.visibility = 'hidden'; } });
+        const at = view.from + ((k + 0.5) * span()) / n;
+        const t = Math.min(duration() - 0.5, fine ? Math.round(at * 10) / 10 : Math.round(at / step) * step);
+        return h('img', { src: `/media/frame/${id}?t=${Math.max(0, t)}`, alt: '', loading: 'lazy', title: fine ? clockTenths(t) : clock(t), onclick: () => { video.currentTime = t; }, onerror: (e) => { e.target.style.visibility = 'hidden'; } });
       }));
     }, 250);
   }
