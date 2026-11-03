@@ -779,6 +779,8 @@ a.plain:hover { color: var(--accent); text-decoration: underline; }
 dialog.keys-dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 18px 22px; width: min(860px, calc(100vw - 32px)); box-shadow: var(--shadow-lg); }
 dialog.keys-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 dialog.keys-dialog .keys { margin-top: 12px; font-size: var(--fs-md); gap: 8px 22px; }
+/* Share YouTube links: the text to paste into a message. */
+.share-dialog .share-text { width: 100%; margin: 8px 0 10px; font: inherit; font-size: var(--fs-sm); line-height: 1.45; resize: vertical; }
 .video-tray { display: flex; flex-wrap: wrap; gap: 6px; }
 .video-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px dashed var(--border-strong); cursor: grab; font-size: var(--fs-xs); }
 .video-chip:active { cursor: grabbing; }

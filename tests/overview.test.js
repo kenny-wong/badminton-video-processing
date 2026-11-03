@@ -98,6 +98,9 @@ test('a match’s videos: the match itself, or each game filmed on its own, in g
   assert.deepEqual(filmedUnits(db, whole), []);
   video('g2.mp4', g2);
   video('g1.mp4', g1);
-  assert.deepEqual(filmedUnits(db, whole), [{ id: g1, game: 1 }, { id: g2, game: 2 }]);
+  assert.deepEqual(filmedUnits(db, whole), [{ id: g1, game: 1, youtubeUrl: null }, { id: g2, game: 2, youtubeUrl: null }]);
+  // Each with its own YouTube link, for sharing.
+  db.prepare("UPDATE matches SET youtube_url = 'https://youtu.be/AAAAAAAAAAA' WHERE id = ?").run(g2);
+  assert.equal(filmedUnits(db, whole)[1].youtubeUrl, 'https://youtu.be/AAAAAAAAAAA');
   db.close();
 });

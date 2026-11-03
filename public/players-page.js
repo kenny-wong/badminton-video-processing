@@ -14,6 +14,7 @@ import { matchPasses } from './shared/players.js';
 import { COUNTRIES } from './shared/flags.js';
 import { flagIcon } from './flag-icon.js';
 import { backLinks } from './nav.js';
+import { shareButton } from './share-dialog.js';
 
 const DISCIPLINES = [['singles', 'Singles'], ['doubles', 'Doubles'], ['mixed', 'Mixed']];
 
@@ -367,7 +368,7 @@ const openGroups = new Map(); // group key -> open, as the user left it
  * A player's matches grouped by year, tournament and event (WS, WD, XD…), the
  * latest tournament open and the rest folded, with filters above.
  */
-function matchesSection(matches) {
+function matchesSection(matches, name) {
   const f = readFilters();
   const box = h('div', { class: 'stack' });
   const count = h('span', { class: 'small muted' });
@@ -463,9 +464,21 @@ function matchesSection(matches) {
     }));
   }
 
+  // Share YouTube links: the filtered matches, a tournament at a time (newest first), each in time order.
+  const share = shareButton({
+    title: () => `${name} · YouTube videos`,
+    byTournament: true,
+    matches: () => {
+      const list = matches.filter((m) => matchPasses(m, f));
+      const order = [...new Set(list.map((m) => m.tournamentId))];
+      return list
+        .sort((a, b) => order.indexOf(a.tournamentId) - order.indexOf(b.tournamentId) || `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+        .map((m) => ({ ...m, links: [m.youtubeUrl ? { game: 0, url: m.youtubeUrl } : null, ...(m.units ?? []).filter((u) => u.game && u.youtubeUrl).map((u) => ({ game: u.game, url: u.youtubeUrl }))].filter(Boolean) }));
+    },
+  });
   draw();
   return h('div', { class: 'stack' },
-    h('div', { class: 'row filters' }, controls, search, count, clear),
+    h('div', { class: 'row filters' }, controls, search, count, clear, share),
     box);
 }
 
@@ -516,7 +529,7 @@ export async function renderPlayer(main, id) {
     chartBox,
     h('div', { class: 'section-title' }, icon('film', 15), 'Matches in imported tournaments'),
     data.matches.length
-      ? matchesSection(data.matches)
+      ? matchesSection(data.matches, p.name)
       : h('div', { class: 'empty' }, 'No matches in imported tournaments.'));
   // Their profile (rating history, win chances) is read from badminfo now and then; the page shows what's there meanwhile.
   try {

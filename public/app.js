@@ -30,6 +30,7 @@ import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
 import { backLinks, pageShown } from './nav.js';
 import { readPrefs as readUploadPrefs } from './youtube-panel.js';
+import { shareButton } from './share-dialog.js';
 
 const main = document.getElementById('app');
 let leaving = null; // cleanup for the current view (the editor's key handler, timers)
@@ -918,11 +919,12 @@ async function renderTournament(id, notice = null, who = null) {
   };
   const clearFilterBtn = h('button', { class: 'small ghost', onclick: clearFilters }, 'Clear filters');
 
-  const drawTable = () => {
+  // The matches the filters show (also what Share YouTube links shares).
+  const shownMatches = () => {
     // One favourite: only their matches. All favourites: theirs, and any other match with a video.
     const picked = (m) => (!anyMine || !prefs.who ? true : prefs.who === 'fav' ? m.mine || hasVideo(m) : hasFav(m, Number(prefs.who)));
     const words = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    const shown = matches.filter((m) => {
+    return matches.filter((m) => {
       if (!picked(m) || (prefs.hideNoVideo && !hasVideo(m))) return false;
       const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.court, courtOf(m), m.time, m.date].join(' ').toLowerCase();
       if (!words.every((word) => text.includes(word))) return false;
@@ -930,6 +932,10 @@ async function renderTournament(id, notice = null, who = null) {
       if (progressFilter.value === 'unlinked') return !m.videoIds.length && (!m.units.length || m.units.some((u) => !u.videoIds.length));
       return filmedUnits(m).some((u) => unitPasses(u, progressFilter.value));
     });
+  };
+  const drawTable = () => {
+    const words = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const shown = shownMatches();
     const days = [...new Set(shown.map((m) => m.date))];
     const view = prefs.view === 'grid' ? gridView : listView;
     // A video filter says how many videos it found as well: several can belong to one match.
@@ -985,7 +991,12 @@ async function renderTournament(id, notice = null, who = null) {
   const toolbar = h('div', { class: 'tournament-toolbar' },
     h('div', { class: 'row spread' }, h('h2', {}, 'Matches'), h('div', { class: 'row' }, matchCount, viewButtons)),
     h('div', { class: 'match-filters' }, search, anyMine ? whoSel : null, progressFilter,
-      h('label', { class: 'row small' }, hideNoVideo, 'With video only'), clearFilterBtn),
+      h('label', { class: 'row small' }, hideNoVideo, 'With video only'), clearFilterBtn,
+      shareButton({
+        title: () => `${tournament.name} · YouTube videos`,
+        // In time order, each with its own link and its games' links.
+        matches: () => shownMatches().map((m) => ({ ...m, links: [m.youtubeUrl ? { game: 0, url: m.youtubeUrl } : null, ...m.units.filter((u) => u.youtubeUrl).map((u) => ({ game: u.game, url: u.youtubeUrl }))].filter(Boolean) })),
+      })),
     matches.some((m) => perGame(m) && !hasVideo(m)) ? h('p', { class: 'hint' }, 'A match takes one video for the whole match, or one per game under Game videos.') : null);
 
   const filmed = matches.flatMap(filmedUnits);
