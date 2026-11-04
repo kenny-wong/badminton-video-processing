@@ -74,6 +74,7 @@ const writePad = (pad) => {
 // tracked shuttle, on every tab; per device, on unless turned off.
 const PLAYERS_KEY = 'badminton-video:show-players:v1';
 const SHUTTLE_KEY = 'badminton-video:show-shuttle:v1';
+const EXPANDED_KEY = 'badminton-video:video-expanded:v1'; // the video at full page width, the side panel under it; per device
 const readShow = (key, fallback = true) => {
   try {
     const saved = localStorage.getItem(key);
@@ -110,7 +111,7 @@ function cornerDiagram(active) {
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 16];
 const SAVE_DELAY_MS = 800;
 const UNDO_DEPTH = 100;
-const VIEW_KEYS = new Set([' ', 'ArrowLeft', 'ArrowRight', ',', '.', '[', ']', '?', 'Escape']); // the keys that work on a cut render
+const VIEW_KEYS = new Set([' ', 'ArrowLeft', 'ArrowRight', ',', '.', '[', ']', 'v', '?', 'Escape']); // the keys that work on a cut render
 const FOLDS_KEY = 'badminton-video:export-folds:v1'; // which folding cards on the Export tab are open
 function readFolds() {
   try {
@@ -140,6 +141,7 @@ const KEYS = [
   ['H', 'toggle ★ favourite while a rally is running, or for the selected / just-played rally'],
   ['Delete', 'remove selected rally'],
   ['Ctrl+Z', 'undo'],
+  ['V', 'expand the video / back to the normal size'],
   ['+ / − / 0', 'zoom the timeline in / out / to the whole video (or the mouse wheel; Shift+wheel moves along)'],
   ['?', 'this list of keys'],
 ];
@@ -222,6 +224,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let showCourt = true;
   let people = null; // GET /api/matches/:id/detections: everyone YOLO found, once looked for
   let showPlayers = readShow(PLAYERS_KEY);
+  let expanded = readShow(EXPANDED_KEY, false);
   let named = null; // the players named in each frame, worked out again when what they depend on changes
   let namedKey = '';
   let marking = null; // corners clicked so far while marking the court
@@ -286,6 +289,21 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     SPEEDS.map((s) => h('option', { value: s, selected: s === 1 }, `${s}×`)));
   const muteBtn = h('button', { class: 'ghost icon-only', onclick: () => { video.muted = !video.muted; fill(muteBtn, icon(video.muted ? 'mute' : 'volume')); }, 'aria-label': 'Mute', title: 'Mute' }, icon('volume'));
   const favouriteBtn = h('button', { class: 'small favourite-rally', onclick: () => toggleFavouriteHere() });
+  const expandBtn = h('button', { class: 'ghost icon-only', onclick: () => setExpanded(!expanded) });
+  const drawExpandBtn = () => {
+    const tip = expanded ? 'Back to the normal size (V)' : 'Expand the video (V)';
+    expandBtn.title = tip;
+    expandBtn.setAttribute('aria-label', tip);
+    fill(expandBtn, icon(expanded ? 'shrink' : 'expand'));
+  };
+  drawExpandBtn();
+  function setExpanded(on) {
+    expanded = on;
+    writeShow(EXPANDED_KEY, on);
+    player.closest('.editor')?.classList.toggle('expanded', on);
+    drawExpandBtn();
+    window.scrollTo(0, 0); // the side panel moves, so the page would otherwise land anywhere
+  }
   const timeline = h('div', { class: 'timeline', title: 'Click or drag to move through the video' });
   const playhead = h('div', { class: 'head' });
   const scoreStrip = h('div', { class: 'score-strip' });
@@ -1729,6 +1747,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       case '+': case '=': zoomBy(0.5); break;
       case '-': zoomBy(2); break;
       case '0': setView(0, duration()); break;
+      case 'v': setExpanded(!expanded); break;
       case '?': keysDialog.showModal(); break;
       case 'ArrowUp': stepRally(-1); break;
       case 'ArrowDown': stepRally(1); break;
@@ -1865,12 +1884,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   fill(main,
     header,
-    h('div', { class: 'editor' },
+    h('div', { class: expanded ? 'editor expanded' : 'editor' },
       h('div', { class: 'video-col' },
         player,
         videoError,
         showNote,
-        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, favouriteBtn, showSel, deleteBtn,
+        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, expandBtn, favouriteBtn, showSel, deleteBtn,
           h('span', { class: 'zoom' }, h('button', { class: 'ghost icon-only', title: 'Zoom out (−)', onclick: () => zoomBy(2) }, '−'), zoomText,
             h('button', { class: 'ghost icon-only', title: 'Zoom in (+)', onclick: () => zoomBy(0.5) }, '+'),
             h('button', { class: 'small', title: 'Whole video (0)', onclick: () => setView(0, duration()) }, 'Fit'))),

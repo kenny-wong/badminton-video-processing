@@ -544,6 +544,17 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 .editor { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .editor { grid-template-columns: 1fr; } }
 @media (min-width: 1101px) { .editor > .video-col { position: sticky; top: calc(var(--head-h) + var(--editor-head-h, 0px) + 12px); } }
+/* Expanded (V): the head shrinks to one line, for the video's sake. */
+.editor-head:has(+ .editor.expanded) { flex-wrap: nowrap; align-items: center; padding: 6px 0; }
+.editor-head:has(+ .editor.expanded) > div:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; min-width: 0; }
+.editor-head:has(+ .editor.expanded) h1 { font-size: var(--fs-lg); }
+.editor-head:has(+ .editor.expanded) .crumbs { margin-bottom: 0; }
+.editor-head:has(+ .editor.expanded) .meta { display: none; }
+.editor-head:has(+ .editor.expanded) .unit-switch { margin-top: 0; }
+/* Expanded (V): the video takes the page width and the window's height down to the transport and timeline; the frames, sound and side panel follow below. */
+.editor.expanded { --expanded-h: max(280px, calc(100vh - var(--head-h) - var(--editor-head-h, 0px) - 146px)); grid-template-columns: minmax(0, 1fr); }
+.editor.expanded > .video-col { position: static; display: flex; flex-direction: column; }
+.editor.expanded > .video-col > :has(~ .frame-strip), .editor.expanded > .video-col > .timeline { order: -1; }
 .player { background: #000; border-radius: var(--radius); overflow: hidden; position: relative; box-shadow: var(--shadow-lg); }
 .player video { display: block; width: 100%; max-height: 58vh; background: #000; }
 .player .flash {
@@ -561,6 +572,8 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 .player.padded { padding: var(--pad-top, 50px) var(--pad-right, 300px) var(--pad-bottom, 50px) var(--pad-left, 300px); }
 .player.padded video { max-height: 54vh; }
 .player.padded .flash { top: 8px; }
+.editor.expanded .player video { max-height: var(--expanded-h); }
+.editor.expanded .player.padded video { max-height: max(200px, calc(var(--expanded-h) - var(--pad-top, 50px) - var(--pad-bottom, 50px))); }
 .pad-sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 14px; }
 .pad-sliders label { display: flex; align-items: center; gap: 8px; }
 .pad-sliders label span { min-width: 3.5em; color: var(--muted); }
