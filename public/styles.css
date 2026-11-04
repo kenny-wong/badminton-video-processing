@@ -564,6 +564,9 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 .player .open-rally { position: absolute; top: 14px; left: 14px; padding: 5px 12px; border-radius: 999px; background: var(--no); color: #fff; font-weight: 650; font-size: var(--fs-sm); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { opacity: 0.65; } }
 .player canvas.overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+.player canvas.inset-view { position: absolute; box-sizing: border-box; border: 0 solid #fff; pointer-events: none; }
+.player .area-picker { position: absolute; inset: 0; z-index: 4; cursor: crosshair; touch-action: none; }
+.player .area-outline { position: absolute; box-sizing: border-box; border: 2px dashed #ffd84d; box-shadow: 0 0 0 1px rgb(0 0 0 / 60%); pointer-events: none; }
 .player video { cursor: pointer; } /* a click plays or pauses */
 .player.padded video { cursor: default; } /* Tracking tab: clicks are for the court */
 .player canvas.overlay.marking { pointer-events: auto; cursor: crosshair; }

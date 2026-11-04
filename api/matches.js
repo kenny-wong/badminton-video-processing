@@ -1,5 +1,5 @@
 // GET /api/matches/:id: the match, its videos, tagging and the playable source.
-// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle?, comment? }:
+// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle?, inset?, comment? }:
 //   saves tagging, the score the video starts at, where the match starts and
 //   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
 //   own scoreboard preset and corner (null uses Settings).
@@ -31,6 +31,7 @@ import { findJob, jobView, startJob } from '../lib/jobs.js';
 import { describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
 import { cleanFormat, cleanRallies, cleanStart, defaultServer, resultServer } from '../public/shared/score.js';
 import { cleanCorners } from '../public/shared/court.js';
+import { cleanInset } from '../public/shared/inset.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { findPeople, peopleFinder, readPeople, saveSwap } from '../lib/people.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
@@ -71,6 +72,7 @@ export function onRequestGet({ params, app }) {
     mine: { a: sides(match.teamA).length > 0, b: sides(match.teamB).length > 0 },
     nameStyle: settings.nameStyle,
     rallyGap: settings.rallyGap,
+    logoCorner: settings.logo?.file ? settings.logo.corner : null,
     board: matchBoard(app.db, settings.board, match, loaded.tournament),
     // The flags its players' nations give (the editor's "From the Players list"), whatever this match chose.
     playerCountries: matchCountries(app.db, match, loaded.tournament),
@@ -136,6 +138,11 @@ export async function onRequestPut({ request, params, app }) {
   }
   const nearAtStart = body.nearAtStart === 'a' || body.nearAtStart === 'b' ? body.nearAtStart : body.nearAtStart === null ? null : match.nearAtStart;
   const boardStyle = body.boardStyle !== undefined ? cleanBoardOverride(body.boardStyle) : match.boardStyle;
+  let inset = match.inset;
+  if (body.inset !== undefined) {
+    inset = body.inset === null ? null : cleanInset(body.inset);
+    if (body.inset !== null && !inset) return fail(400, 'badInput', 'That isn’t an area of the picture');
+  }
   let link = match.youtubeUrl;
   let uploadedAt = match.uploadedAt;
   if (body.youtubeUrl !== undefined) {
@@ -150,15 +157,15 @@ export async function onRequestPut({ request, params, app }) {
     }
   }
   app.db.prepare(`UPDATE matches SET rallies = ?, format = ?, first_server = ?, server_set = ?, start_score = ?, match_start = ?, match_end = ?,
-      youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, board_style = ?, updated_at = ? WHERE id = ?`)
+      youtube_url = ?, uploaded_at = ?, court_corners = ?, near_at_start = ?, board_style = ?, inset = ?, updated_at = ? WHERE id = ?`)
     .run(JSON.stringify(rallies), format ? JSON.stringify(format) : null, firstServer, serverSet ? 1 : null, startScore ? JSON.stringify(startScore) : null,
-      matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, boardStyle ? JSON.stringify(boardStyle) : null, nowIso(), match.id);
+      matchStart, matchEnd, link, uploadedAt, corners ? JSON.stringify(corners) : null, nearAtStart, boardStyle ? JSON.stringify(boardStyle) : null, inset ? JSON.stringify(inset) : null, nowIso(), match.id);
   // The match's other game videos change ends with it.
   if (nearAtStart && nearAtStart !== match.nearAtStart) followEnds(app.db, { ...match, format, startScore, nearAtStart });
   // The comment (at the end of its videos' YouTube descriptions) on its own: only when sent.
   const comment = typeof body.comment === 'string' ? cleanComment(body.comment) : match.comment;
   if (typeof body.comment === 'string') app.db.prepare('UPDATE matches SET comment = ?, updated_at = ? WHERE id = ?').run(comment || null, nowIso(), match.id);
-  return json({ ok: true, comment, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle,
+  return json({ ok: true, comment, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle, inset,
     board: matchBoard(app.db, readSettings(app.db).board, { ...match, boardStyle }, loaded.tournament) });
 }
 

@@ -77,6 +77,26 @@ test('team countries save with the scoreboard and follow the video with its tagg
   });
 });
 
+test('the corner view is saved on its own, refused when it isn’t an area, and follows the video', async () => {
+  await withServer(async ({ db, call, matches: [first, second] }) => {
+    const inset = { x: 0.5, y: 0.25, w: 0.2, h: 0.2, corner: 'bl', size: 40 };
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES });
+    const saved = await call(`/api/matches/${first}`, 'PUT', { inset });
+    assert.deepEqual(saved.body.inset, inset);
+    assert.equal(get(db, first).rallies.length, 2, 'the tagging stays');
+    assert.equal((await call(`/api/matches/${first}`, 'PUT', { inset: { ...inset, x: 0.9 } })).status, 400);
+    await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES }); // the editor's autosave leaves it alone
+    assert.deepEqual(get(db, first).inset, inset);
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [] });
+    assert.equal(get(db, first).inset, null);
+    await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [1] });
+    assert.deepEqual(get(db, second).inset, inset);
+    await call(`/api/matches/${second}`, 'PUT', { inset: null });
+    assert.equal(get(db, second).inset, null);
+  });
+});
+
 test('a match with its own tagging keeps it; the video holds on to the other', async () => {
   await withServer(async ({ db, call, matches: [first, second] }) => {
     await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });

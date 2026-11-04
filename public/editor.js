@@ -8,6 +8,7 @@ import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, boardAt, firstShown, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
+import { cleanInset, freeCorner, INSET_SIZE, insetBox } from './shared/inset.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
 import { shuttleInPlay } from './shared/shuttle.js';
 import { icon } from './icons.js';
@@ -229,6 +230,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   let namedKey = '';
   let marking = null; // corners clicked so far while marking the court
   let onTracking = false; // court lines, marking and black space show only on the Tracking tab
+  let onExport = false; // the corner view's area is outlined on the Export tab
   const pad = readPad();
   let sel = -1;
   let openStart = null;
@@ -255,7 +257,12 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     class: 'corner-handle', type: 'button', hidden: true,
     'aria-label': `Move the ${name} corner`, title: `${name} corner: drag to move it (arrow keys nudge it, Shift for 10 px)`,
   }, h('span', {}, name)));
-  const player = h('div', { class: 'player' }, video, overlay, videoBoard, ...cornerHandles, markTip, flash, openBadge);
+  // The corner view: drawn from the video itself, so the two can't drift apart, under the scoreboard as in a render.
+  const insetView = h('canvas', { class: 'inset-view', hidden: true });
+  const areaOutline = h('div', { class: 'area-outline', hidden: true });
+  const areaDrag = h('div', { class: 'area-outline', hidden: true });
+  const areaPicker = h('div', { class: 'area-picker', hidden: true, title: 'Drag over the part of the picture to show in the corner' }, areaDrag);
+  const player = h('div', { class: 'player' }, video, overlay, insetView, videoBoard, areaOutline, areaPicker, ...cornerHandles, markTip, flash, openBadge);
   // Which video the player shows: the original (for tagging) or one of the finished files.
   let files = []; // GET /api/matches/:id/rendered
   let showing = ''; // '' = the original, else a finished file's key
@@ -442,9 +449,59 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   // A click on the picture plays or pauses, except on the Tracking tab, where clicks mark and move the court.
   player.addEventListener('click', (e) => {
-    if (onTracking || marking || e.target.closest('button, a, input, select, .corner-handle')) return;
+    if (onTracking || marking || e.target.closest('button, a, input, select, .corner-handle, .area-picker')) return;
     toggle();
   });
+
+  // ---- the corner view: drag out an area of the picture ----
+  let inset = match.inset;
+  let choosingArea = false;
+  let dragFrom = null;
+  const inPicture = (e) => pictureAt(e).map((n) => Math.min(1, Math.max(0, n)));
+  const areaBetween = ([x1, y1], [x2, y2]) => ({ x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) });
+  const placeArea = (el, area, box) => Object.assign(el.style, { left: `${box.x + area.x * box.w}px`, top: `${box.y + area.y * box.h}px`, width: `${area.w * box.w}px`, height: `${area.h * box.h}px` });
+  function chooseArea() {
+    if (showing) showVideo(''); // the area is of the original's picture
+    video.pause();
+    choosingArea = true;
+    areaPicker.hidden = false;
+    if (expanded) window.scrollTo(0, 0);
+    say('Drag over the part of the picture to show in the corner');
+    drawInsetPanel();
+    drawOverlay();
+  }
+  function stopChoosing() {
+    choosingArea = false;
+    dragFrom = null;
+    areaPicker.hidden = true;
+    areaDrag.hidden = true;
+    drawInsetPanel();
+    drawOverlay();
+  }
+  areaPicker.addEventListener('pointerdown', (e) => {
+    if (e.button) return;
+    e.preventDefault();
+    areaPicker.setPointerCapture(e.pointerId);
+    dragFrom = inPicture(e);
+  });
+  areaPicker.addEventListener('pointermove', (e) => {
+    if (!dragFrom) return;
+    areaDrag.hidden = false;
+    placeArea(areaDrag, areaBetween(dragFrom, inPicture(e)), pictureBox());
+  });
+  areaPicker.addEventListener('pointerup', (e) => {
+    if (!dragFrom) return;
+    const next = cleanInset({ ...areaBetween(dragFrom, inPicture(e)), corner: inset?.corner ?? freeCorner(data.board.corner, data.logoCorner), size: inset?.size ?? INSET_SIZE.normal });
+    dragFrom = null;
+    areaDrag.hidden = true;
+    if (!next) {
+      say('Drag over a bigger area');
+      return;
+    }
+    saveInset(next);
+    setTimeout(stopChoosing); // after this drag's click, which would otherwise reach the video and play it
+  });
+  areaPicker.addEventListener('click', (e) => e.stopPropagation());
 
   let hover = null; // the pointer while marking, in canvas px, for the name of the corner being marked
   overlay.addEventListener('pointerdown', (e) => {
@@ -741,8 +798,35 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     });
   }
 
+  // A rendered file already has its corner view; the Tracking tab needs the whole court in sight.
+  function drawInset(box) {
+    const inner = !showing && !onTracking && !choosingArea ? insetBox(inset, data.source.width, data.source.height) : null;
+    insetView.hidden = !inner;
+    areaOutline.hidden = !inner || !onExport;
+    if (!inner) return;
+    if (onExport) placeArea(areaOutline, inset, box);
+    const { place } = inner;
+    const k = box.w / data.source.width;
+    Object.assign(insetView.style, {
+      left: `${box.x + place.x * k}px`, top: `${box.y + place.y * k}px`, width: `${place.w * k}px`, height: `${place.h * k}px`,
+      borderWidth: `${place.border * k}px`, filter: video.style.filter,
+    });
+    const ratio = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round((place.w - 2 * place.border) * k * ratio));
+    const hgt = Math.max(1, Math.round((place.h - 2 * place.border) * k * ratio));
+    if (insetView.width !== w || insetView.height !== hgt) {
+      insetView.width = w;
+      insetView.height = hgt;
+    }
+    if (video.readyState < 2) return;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    insetView.getContext('2d').drawImage(video, inset.x * vw, inset.y * vh, inset.w * vw, inset.h * vh, 0, 0, w, hgt);
+  }
+
   function drawOverlay() {
     const box = pictureBox();
+    drawInset(box);
     drawVideoBoard(box);
     const ratio = window.devicePixelRatio || 1;
     if (overlay.width !== Math.round(box.cw * ratio) || overlay.height !== Math.round(box.ch * ratio)) {
@@ -1382,6 +1466,39 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     }
   };
 
+  // ---- the corner view's card on the Export tab ----
+  const insetPanel = h('div', { class: 'stack' });
+  let insetSave = Promise.resolve();
+  async function saveInset(next) {
+    inset = next;
+    drawInsetPanel();
+    drawOverlay();
+    try {
+      await (insetSave = insetSave.catch(() => {}).then(() => api(`/api/matches/${id}`, { method: 'PUT', body: { inset: next } })));
+    } catch (err) {
+      say(err.message);
+    }
+  }
+  function drawInsetPanel() {
+    const size = h('input', {
+      type: 'range', min: INSET_SIZE.min, max: INSET_SIZE.max, step: 5, value: inset?.size ?? INSET_SIZE.normal, 'aria-label': 'Size of the corner view',
+      oninput: (e) => { inset = { ...inset, size: Number(e.target.value) }; drawOverlay(); },
+      onchange: () => saveInset(inset),
+    });
+    fill(insetPanel,
+      h('div', { class: 'row' },
+        h('button', { class: choosingArea ? 'small' : 'small primary', onclick: () => (choosingArea ? stopChoosing() : chooseArea()) }, choosingArea ? 'Cancel' : inset ? 'Choose another area' : 'Choose an area'),
+        inset ? h('button', { class: 'small', onclick: () => saveInset(null) }, 'Remove') : null),
+      inset ? h('div', { class: 'row small' },
+        h('select', { 'aria-label': 'Corner for the corner view', onchange: (e) => saveInset({ ...inset, corner: e.target.value }) },
+          Object.entries(CORNERS).map(([k, label]) => h('option', { value: k, selected: inset.corner === k }, label))),
+        h('label', { class: 'row tight' }, 'Size', size)) : null,
+      h('p', { class: 'hint' }, choosingArea
+        ? 'Drag over the part of the picture to show. Esc cancels.'
+        : `Plays part of the picture, enlarged, in a corner of this ${unitGame ? 'game' : 'match'}’s video: in the whole video, highlights, reels and clips as filmed, not upright clips. Render again to get it in a finished file.`));
+  }
+  drawInsetPanel();
+
   // ---- this match's own scoreboard preset and corner, over Settings ----
   let boardStyle = match.boardStyle;
   const lookSel = h('select', { 'aria-label': 'Scoreboard look for this match' },
@@ -1694,7 +1811,10 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         say(`Rally starts ${clock(openStart)}`);
         break;
       case 'Escape':
-        if (marking) {
+        if (choosingArea) {
+          stopChoosing();
+          say('Area not changed');
+        } else if (marking) {
           stopMarking();
           say(corners ? 'Marking stopped: the court is as it was' : 'Marking stopped');
           drawTrackingPanel();
@@ -1843,6 +1963,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         youtube.el,
         h('div', { class: 'row' }, ytInput, h('button', { onclick: saveYt }, 'Save link')),
         ytBox),
+      foldCard('inset', 'Corner view', 'scan', insetPanel),
       foldCard('clip', 'Clip of one rally', 'match-video',
         clipTarget,
         h('div', { class: 'row' }, h('button', { class: 'small primary', onclick: () => makeClip(true) }, 'Upright 9:16 clip'), h('button', { class: 'small', onclick: () => makeClip(false) }, 'Clip as filmed')),
@@ -1866,6 +1987,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     fill(tabBar, TABS.map(([key, label, ic]) => h('button', { role: 'tab', 'aria-selected': String(key === tab), onclick: () => showTab(key) }, icon(ic, 15), label)));
     fill(panel, panels[tab]);
     onTracking = tab === 'tracking';
+    onExport = tab === 'export';
+    if (!onExport && choosingArea) stopChoosing();
     if (!onTracking && marking) {
       stopMarking();
       drawTrackingPanel();
@@ -1919,6 +2042,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   drawZoom();
   drawFrames();
   loadLevels();
+  video.addEventListener('loadeddata', () => drawOverlay()); // the corner view's first picture
   loadFiles();
   // The scoreboard preview follows the video while it is paused.
   video.addEventListener('seeked', () => {
