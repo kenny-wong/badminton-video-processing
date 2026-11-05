@@ -3,7 +3,7 @@
 //   saves tagging, the score the video starts at, where the match starts and
 //   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
 //   own scoreboard preset and corner (null uses Settings).
-// PUT /api/matches/:id/favourite { favourite }: stars the match (a game's row stars its whole match).
+// PUT /api/matches/:id/favourite { favourite }: stars the match, or the game when :id is a game's row.
 // PUT /api/matches/:id/videos { videoIds }: links this video ([] unlinks; a match or game takes one
 //   video, so two games filmed separately go to the game rows below). A match
 //   left with no video is cleared and its tagging goes with the video, arriving on the
@@ -173,7 +173,7 @@ export async function setFavourite({ request, params, app }) {
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const body = await readJson(request);
   if (typeof body?.favourite !== 'boolean') return fail(400, 'badInput', 'Send favourite: true or false');
-  const id = loaded.match.parentId ?? loaded.match.id;
+  const { id } = loaded.match;
   app.db.prepare('UPDATE matches SET favourite = ? WHERE id = ?').run(body.favourite ? 1 : null, id);
   return json({ ok: true, id, favourite: body.favourite });
 }

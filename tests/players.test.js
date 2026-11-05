@@ -5,7 +5,7 @@ import { entrants, playerProfile } from '../lib/badminfo.js';
 import { openDb } from '../lib/db.js';
 import { matchPeople, refreshProfile, saveEntrants, teamIds, tournamentPeople } from '../lib/players.js';
 import { videoDescription, videoTitle } from '../lib/naming.js';
-import { disciplineOf, isUpset, matchChance, percents, ratingSeries, record } from '../public/shared/players.js';
+import { disciplineOf, isUpset, matchChance, passesStars, percents, ratingSeries, record, starredUnits } from '../public/shared/players.js';
 import { playerId } from './fixtures/badminfo-sample.js';
 
 const T = 'c7fa0c7e-1adb-412f-a229-190bd893db4f';
@@ -144,4 +144,16 @@ test('the player page’s filters: year, event, result, video, favourites and wo
   }
   assert.equal(matchPasses({ ...m, favourite: false }, { ...NONE, fav: true }), false);
   assert.ok(matchPasses({ ...m, gamesOnYoutube: true }, { ...NONE, video: 'youtube' })); // filmed game by game, a game uploaded
+});
+
+test('the star filter picks starred matches, or matches with a starred game and only those games', () => {
+  const units = [{ game: 1, favourite: true }, { game: 2, favourite: false }];
+  assert.equal(passesStars({ favourite: true, units: [] }, 'matches'), true);
+  assert.equal(passesStars({ favourite: false, units }, 'matches'), false); // a starred game doesn't star its match
+  assert.equal(passesStars({ favourite: true, units: [] }, 'games'), false);
+  assert.equal(passesStars({ favourite: false, units }, 'games'), true);
+  assert.equal(passesStars({ favourite: false, units: [] }, ''), true);
+  assert.deepEqual(starredUnits(units, 'games'), [units[0]]);
+  assert.deepEqual(starredUnits(units, 'matches'), units); // a favourite match shows all its games
+  assert.deepEqual(starredUnits(units, ''), units);
 });

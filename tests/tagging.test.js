@@ -171,17 +171,26 @@ test('a comment is saved on its own, tagging untouched, and cleared with an empt
   });
 });
 
-test('starring a match, also from one of its games, marks the whole match', async () => {
+test('a match and each of its games have their own star', async () => {
   await withServer(async ({ db, call, matches: [first] }) => {
     const r = await call(`/api/matches/${first}/favourite`, 'PUT', { favourite: true });
     assert.deepEqual(r.body, { ok: true, id: first, favourite: true });
     assert.equal(db.prepare('SELECT favourite FROM matches WHERE id = ?').get(first).favourite, 1);
-    // A game's row, made when a video is linked to it, stars its parent.
+    // A game's row, made when a video is linked to it, is starred on its own.
     await call(`/api/matches/${first}/games/1/videos`, 'PUT', { videoIds: [1] });
     const game = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = 1').get(first).id;
-    const off = await call(`/api/matches/${game}/favourite`, 'PUT', { favourite: false });
-    assert.equal(off.body.id, first);
-    assert.equal(db.prepare('SELECT favourite FROM matches WHERE id = ?').get(first).favourite, null);
+    const star = (id) => db.prepare('SELECT favourite FROM matches WHERE id = ?').get(id).favourite;
+    const on = await call(`/api/matches/${game}/favourite`, 'PUT', { favourite: true });
+    assert.equal(on.body.id, game);
+    await call(`/api/matches/${first}/favourite`, 'PUT', { favourite: false });
+    assert.deepEqual([star(first), star(game)], [null, 1]);
+    // The editor of the game still shows the match's own star, and the tournament page the game's.
+    assert.equal((await call(`/api/matches/${game}`)).body.starredMatch, false);
+    const tid = db.prepare('SELECT tournament_id FROM matches WHERE id = ?').get(game).tournament_id;
+    const listed = (await call(`/api/tournaments/${tid}`)).body.matches.find((m) => m.id === first);
+    assert.deepEqual([listed.favourite, listed.units[0].favourite], [false, true]);
+    await call(`/api/matches/${game}/favourite`, 'PUT', { favourite: false });
+    assert.equal(star(game), null);
     assert.equal((await call(`/api/matches/${first}/favourite`, 'PUT', { favourite: 'yes' })).status, 400);
   });
 });

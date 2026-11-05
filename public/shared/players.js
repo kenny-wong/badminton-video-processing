@@ -137,3 +137,9 @@ export function matchPasses(m, f) {
   }
   return true;
 }
+
+/** The tournament page's star filter: 'matches' keeps starred matches, 'games' matches with a starred game, '' all. */
+export const passesStars = (m, stars) => (stars === 'matches' ? Boolean(m.favourite) : stars === 'games' ? (m.units ?? []).some((u) => u.favourite) : true);
+
+/** The games a match shows under the star filter: only the starred ones while it picks games. */
+export const starredUnits = (units, stars) => (stars === 'games' ? units.filter((u) => u.favourite) : units);

@@ -23,7 +23,7 @@ import { customTournamentPanel } from './custom-tournament.js';
 import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, LAYOUTS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
-import { percents } from './shared/players.js';
+import { passesStars, percents, starredUnits } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
 import { renderTools } from './tools-page.js';
 import { matchStar } from './match-star.js';
@@ -464,7 +464,7 @@ async function renderTournament(id, notice = null, who = null) {
   const free = videos.filter((v) => !v.matchId);
   const anyMine = matches.some((m) => m.mine);
   const saved = readPrefs();
-  if (!tournamentViews.has(String(id))) tournamentViews.set(String(id), { search: '', progress: '', expandedGames: new Set(), notFilmedOpen: new Set() });
+  if (!tournamentViews.has(String(id))) tournamentViews.set(String(id), { search: '', progress: '', stars: '', expandedGames: new Set(), notFilmedOpen: new Set() });
   const viewState = tournamentViews.get(String(id));
   // whose matches: '' everyone's, 'fav' the favourites', or one favourite's key (onlyMine was the old checkbox)
   const prefs = { view: 'list', hideNoVideo: false, ...saved, who: saved.who ?? (saved.onlyMine === false ? '' : 'fav') };
@@ -832,20 +832,26 @@ async function renderTournament(id, notice = null, who = null) {
 
   // One game: its thumbnail when filmed, its name and score, progress, its next steps (Render, Upload) and
   // its video (Open, a suggestion or the chooser).
+  // Unstarring while the star filter is on takes the row away.
+  const starChanged = (item) => (on) => {
+    item.favourite = on;
+    if (viewState.stars) drawTable();
+  };
   const gameRow = (u) => h('div', { class: 'game-video-row', 'data-anchor': u.id ? `u${u.id}` : null, ...dropOn(u) },
     u.videoIds.length ? thumbOf(u, lengthOf(u), false) : null,
-    h('div', { class: 'game-video-heading' }, h('div', { class: 'small game-name' }, gameLabel(u)), statusCell(u)),
+    h('div', { class: 'game-video-heading' }, h('div', { class: 'small game-name' }, u.id ? [matchStar(u.id, u.favourite, { what: 'game', onChange: starChanged(unitById(u.id)) }), ' '] : null, gameLabel(u)), statusCell(u)),
     u.videoIds.length ? h('div', { class: 'game-video-steps' }, stepsOf(u)) : null,
     h('div', { class: 'game-video-controls' }, unitVideoCell(u)));
 
   // A match filmed game by game: its filmed games always show; the games still without a video
   // (all of them, before any is linked) fold away, open or shut as last left in this session.
   const gameDetails = (m) => {
-    const units = unitsOf(m);
+    const units = starredUnits(unitsOf(m), viewState.stars);
     const linked = units.filter((u) => u.videoIds.length);
     const rest = units.filter((u) => !u.videoIds.length);
     const suggested = gameSuggestions(m).length;
-    const fold = rest.length ? h('details', { class: 'match-games', open: expandedGames.has(m.id), ontoggle: (e) => {
+    const fold = rest.length ? h('details', { class: 'match-games', open: viewState.stars === 'games' || expandedGames.has(m.id), ontoggle: (e) => {
+      if (viewState.stars === 'games') return; // opened for the filter: not the user's own choice
       if (e.target.open) expandedGames.add(m.id);
       else expandedGames.delete(m.id);
     } },
@@ -861,7 +867,7 @@ async function renderTournament(id, notice = null, who = null) {
     list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(m) },
       h('tr', { class: `match-main${m.mine ? ' mine' : ''}` },
         h('td', { class: 'match-schedule' },
-          h('div', { class: 'row tight' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), h('strong', {}, m.time)),
+          h('div', { class: 'row tight' }, matchStar(m.id, m.favourite, { onChange: starChanged(m) }), h('strong', {}, m.time)),
           courtOf(m) ? h('div', { class: 'small match-court', title: m.court }, courtOf(m)) : null,
           m.duration ? h('div', { class: 'small muted' }, `${m.duration} min`) : null),
         h('td', { class: 'match-details' }, eventLine(m), teams(m), custom ? custom.actions(m) : null),
@@ -885,7 +891,7 @@ async function renderTournament(id, notice = null, who = null) {
         ? thumbOf(m, lengthOf(m))
         : null,
       h('div', { class: 'match-body' },
-        h('div', { class: 'row tight small match-card-schedule' }, matchStar(m.id, m.favourite, { onChange: (on) => { m.favourite = on; } }), h('strong', {}, m.time),
+        h('div', { class: 'row tight small match-card-schedule' }, matchStar(m.id, m.favourite, { onChange: starChanged(m) }), h('strong', {}, m.time),
           courtOf(m) ? h('span', { title: m.court }, `· ${courtOf(m)}`) : null, m.duration ? h('span', { class: 'muted' }, `· ${m.duration} min`) : null),
         eventLine(m),
         teams(m),
@@ -922,15 +928,19 @@ async function renderTournament(id, notice = null, who = null) {
     viewState.progress = value;
     drawTable();
   };
+  const starFilter = h('select', { 'aria-label': 'Filter by star', onchange: () => { viewState.stars = starFilter.value; drawTable(); } },
+    h('option', { value: '' }, 'Starred or not'), h('option', { value: 'matches' }, '★ Favourite matches'), h('option', { value: 'games' }, '★ Favourite games'));
+  starFilter.value = viewState.stars;
   const matchCount = h('span', { class: 'small muted match-count', role: 'status', 'aria-live': 'polite' });
   const hideNoVideo = h('input', { type: 'checkbox', checked: prefs.hideNoVideo, onchange: (e) => setPref('hideNoVideo', e.target.checked) });
   const clearFilters = () => {
     search.value = '';
     progressFilter.value = '';
+    starFilter.value = '';
     whoSel.value = '';
     hideNoVideo.checked = false;
     Object.assign(prefs, { who: '', hideNoVideo: false });
-    Object.assign(viewState, { search: '', progress: '' });
+    Object.assign(viewState, { search: '', progress: '', stars: '' });
     writePrefs(prefs);
     drawTable();
   };
@@ -945,9 +955,10 @@ async function renderTournament(id, notice = null, who = null) {
       if (!picked(m) || (prefs.hideNoVideo && !hasVideo(m))) return false;
       const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.court, courtOf(m), m.time, m.date].join(' ').toLowerCase();
       if (!words.every((word) => text.includes(word))) return false;
+      if (!passesStars(m, viewState.stars)) return false;
       if (!progressFilter.value) return true;
       if (progressFilter.value === 'unlinked') return !m.videoIds.length && (!m.units.length || m.units.some((u) => !u.videoIds.length));
-      return filmedUnits(m).some((u) => unitPasses(u, progressFilter.value));
+      return starredUnits(filmedUnits(m), viewState.stars).some((u) => unitPasses(u, progressFilter.value));
     });
   };
   const drawTable = () => {
@@ -958,15 +969,15 @@ async function renderTournament(id, notice = null, who = null) {
     // A video filter says how many videos it found as well: several can belong to one match.
     const f = progressFilter.value;
     const what = (DONE[f] ?? NEXT[f])?.[1];
-    const videosFound = what ? `${plural(shown.flatMap(filmedUnits).filter((u) => unitPasses(u, f)).length, 'video')} ${what} · ` : '';
+    const videosFound = what ? `${plural(shown.flatMap((m) => starredUnits(filmedUnits(m), viewState.stars)).filter((u) => unitPasses(u, f)).length, 'video')} ${what} · ` : '';
     matchCount.textContent = `${videosFound}Showing ${shown.length} of ${matches.length} match${matches.length === 1 ? '' : 'es'}`;
     drawOverview();
-    clearFilterBtn.hidden = !search.value && !progressFilter.value && !prefs.hideNoVideo && (!anyMine || !prefs.who);
+    clearFilterBtn.hidden = !search.value && !progressFilter.value && !viewState.stars && !prefs.hideNoVideo && (!anyMine || !prefs.who);
     // Each day: its filmed matches first, then the rest folded under "Not filmed (n)", both in time order.
     // Nothing folds while the tournament has nothing filmed (there's nothing else to see yet). A search or
     // Needs a video opens the folds with results; the folds the user opened or shut come back after.
     const folding = matches.some(hasVideo);
-    const findingVideos = Boolean(words.length || progressFilter.value === 'unlinked');
+    const findingVideos = Boolean(words.length || viewState.stars || progressFilter.value === 'unlinked');
     const notFilmedOpen = viewState.notFilmedOpen;
     fill(table, days.map((d) => {
       const onDay = shown.filter((m) => m.date === d);
@@ -1007,12 +1018,12 @@ async function renderTournament(id, notice = null, who = null) {
   drawViewButtons();
   const toolbar = h('div', { class: 'tournament-toolbar' },
     h('div', { class: 'row spread' }, h('h2', {}, 'Matches'), h('div', { class: 'row' }, matchCount, viewButtons)),
-    h('div', { class: 'match-filters' }, search, anyMine ? whoSel : null, progressFilter,
+    h('div', { class: 'match-filters' }, search, anyMine ? whoSel : null, progressFilter, starFilter,
       h('label', { class: 'row small' }, hideNoVideo, 'With video only'), clearFilterBtn,
       shareButton({
         title: () => `${tournament.name} · YouTube videos`,
         // In time order, each with its own link and its games' links.
-        matches: () => shownMatches().map((m) => ({ ...m, links: [m.youtubeUrl ? { game: 0, url: m.youtubeUrl } : null, ...m.units.filter((u) => u.youtubeUrl).map((u) => ({ game: u.game, url: u.youtubeUrl }))].filter(Boolean) })),
+        matches: () => shownMatches().map((m) => ({ ...m, links: [m.youtubeUrl && viewState.stars !== 'games' ? { game: 0, url: m.youtubeUrl } : null, ...starredUnits(m.units, viewState.stars).filter((u) => u.youtubeUrl).map((u) => ({ game: u.game, url: u.youtubeUrl }))].filter(Boolean) })),
       })),
     matches.some((m) => perGame(m) && !hasVideo(m)) ? h('p', { class: 'hint' }, 'A match takes one video for the whole match, or one per game under Game videos.') : null);
 

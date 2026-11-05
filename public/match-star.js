@@ -1,17 +1,17 @@
 // The ★ that marks a favourite match, the same on the player page, the
-// tournament page and in the editor. A game's row stars its whole match
-// (PUT /api/matches/:id/favourite).
+// tournament page and in the editor, or on the tournament page a favourite
+// game, which has its own star (PUT /api/matches/:id/favourite).
 
 import { h } from './dom.js';
 import { api } from './api.js';
 
-/** A ☆ / ★ button for the match `id`; `onChange(starred)` after it is saved. */
-export function matchStar(id, starred, { onChange } = {}) {
+/** A ☆ / ★ button for the match (or game: `what`) `id`; `onChange(starred)` after it is saved. */
+export function matchStar(id, starred, { onChange, what = 'match' } = {}) {
   const btn = h('button', { type: 'button', class: 'match-star' });
   const show = (on) => {
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-pressed', String(on));
-    btn.title = on ? 'A favourite match: click to unstar' : 'Mark as a favourite match';
+    btn.title = on ? `A favourite ${what}: click to unstar` : `Mark as a favourite ${what}`;
     btn.setAttribute('aria-label', btn.title);
     btn.textContent = on ? '★' : '☆';
   };
