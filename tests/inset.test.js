@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanInset, INSET_SIZE, insetBox, movedInset, resizedInset, zoomedInset, zoomOf } from '../public/shared/inset.js';
+import { cleanInset, INSET_SIZE, insetBox, MAGNIFIER, magnifierArea, magnifierSize, magnifierZoom, movedInset, resizedInset, zoomedInset, zoomOf } from '../public/shared/inset.js';
 import { insetFilter, partArgs } from '../lib/render.js';
 import { clipArgs } from '../lib/clip.js';
 
@@ -123,6 +123,33 @@ test('zoomedInset stops at the picture and at the smallest area', () => {
   const out = zoomedInset({ ...area, w: 0.5, h: 0.5, x: 0.2, y: 0.2, size: 10 }, 0.01);
   assert.ok(out.w <= 1 && out.h <= 1);
   assert.ok(zoomedInset(area, 1000).w >= 0.01);
+});
+
+test('a new corner view is a fifth of the picture’s width', () => {
+  assert.equal(INSET_SIZE.normal, 20);
+  assert.equal(cleanInset({ x: 0.1, y: 0.1, w: 0.2, h: 0.2 }).size, 20);
+});
+
+test('the magnifier is as wide as a new corner view, by the longer side', () => {
+  assert.equal(magnifierSize(1000, 500), 200);
+  assert.equal(magnifierSize(450, 600), 120);
+});
+
+test('magnifierArea is centred on the mouse, the closer the smaller', () => {
+  const a = magnifierArea([0.5, 0.25], 200, 1000, 500, 2);
+  for (const [k, v] of Object.entries({ x: 0.45, y: 0.15, w: 0.1, h: 0.2 })) near(a[k], v, 1e-9);
+  near(magnifierArea([0.5, 0.25], 200, 1000, 500, 4).w, 0.05, 1e-9);
+});
+
+test('magnifierArea may run off the picture at its edges', () => {
+  assert.ok(magnifierArea([0, 0], 200, 1000, 500, 2).x < 0);
+});
+
+test('magnifierZoom keeps to the slider’s steps and range', () => {
+  assert.equal(magnifierZoom(2.4), 2.5);
+  assert.equal(magnifierZoom(0), MAGNIFIER.min);
+  assert.equal(magnifierZoom(99), MAGNIFIER.max);
+  assert.equal(magnifierZoom(Number.NaN), MAGNIFIER.normal);
 });
 
 test('insetFilter cuts the area out and lays it over its place', () => {

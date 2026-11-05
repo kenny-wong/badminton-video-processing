@@ -4,7 +4,7 @@
 // width, per cent of the picture's. Without left and top it sits at the bottom right.
 // insetBox() turns it into pixels for the render and the editor's preview.
 
-export const INSET_SIZE = { min: 10, max: 90, normal: 30 };
+export const INSET_SIZE = { min: 10, max: 90, normal: 20 };
 export const INSET_ZOOM = { min: 0.5, max: 10 }; // how much the area is enlarged
 const MIN_AREA = 0.01; // a smaller area is a slip of the mouse
 const MAX_HEIGHT = 0.9; // of the picture: a tall area is narrowed to stay below this
@@ -75,6 +75,22 @@ export function resizedInset(inset, grip, dx, dy, width, height) {
   const left = (grip[1] === 'w' ? x + w - next.w : x) / width;
   const top = (grip[0] === 'n' ? y + h - next.h : y) / height;
   return cleanInset({ ...inset, size, ...clampedTo({ ...inset, size }, left, top, width, height) });
+}
+
+/** The magnifier: a circle round the mouse, on screen only, never rendered. */
+export const MAGNIFIER = { min: 1.5, max: 8, normal: 3, step: 0.5 };
+
+/** Its width in pixels over a picture shown at width × height: a new corner view's size, by the longer side so it isn't tiny on an upright video. */
+export const magnifierSize = (width, height) => (INSET_SIZE.normal / 100) * Math.max(width, height);
+
+/** A saved or stepped ratio, on the slider's scale. */
+export const magnifierZoom = (n) => (Number.isFinite(n) ? between(Math.round(n / MAGNIFIER.step) * MAGNIFIER.step, MAGNIFIER.min, MAGNIFIER.max) : MAGNIFIER.normal);
+
+/** The area it shows, in fractions of the picture: centred on `at`, `zoom` times closer than the picture on screen. It may run off the picture's edge. */
+export function magnifierArea([x, y], size, width, height, zoom) {
+  const w = size / width / zoom;
+  const h = size / height / zoom;
+  return { x: x - w / 2, y: y - h / 2, w, h };
 }
 
 /** How much the area is enlarged in its window. */

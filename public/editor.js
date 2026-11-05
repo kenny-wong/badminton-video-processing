@@ -8,7 +8,7 @@ import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, boardAt, firstShown, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
 import { clock, clockTenths } from './shared/time.js';
 import { apply, CORNER_NAMES, courtLines, courtMapping } from './shared/court.js';
-import { cleanInset, INSET_ZOOM, insetBox, movedInset, resizedInset, zoomedInset, zoomOf } from './shared/inset.js';
+import { cleanInset, INSET_ZOOM, insetBox, magnifierArea, MAGNIFIER, magnifierSize, magnifierZoom, movedInset, resizedInset, zoomedInset, zoomOf } from './shared/inset.js';
 import { frameAt, namePlayers, nearTeams, placePeople } from './shared/people.js';
 import { shuttleInPlay } from './shared/shuttle.js';
 import { icon } from './icons.js';
@@ -75,6 +75,19 @@ const writePad = (pad) => {
 // tracked shuttle, on every tab; per device, on unless turned off.
 const PLAYERS_KEY = 'badminton-video:show-players:v1';
 const SHUTTLE_KEY = 'badminton-video:show-shuttle:v1';
+const MAGNIFIER_KEY = 'badminton-video:magnifier-zoom:v1';
+const readMagnifier = () => {
+  try {
+    return magnifierZoom(Number(localStorage.getItem(MAGNIFIER_KEY) ?? NaN));
+  } catch {
+    return MAGNIFIER.normal;
+  }
+};
+const writeMagnifier = (zoom) => {
+  try {
+    localStorage.setItem(MAGNIFIER_KEY, String(zoom));
+  } catch { /* storage blocked */ }
+};
 const EXPANDED_KEY = 'badminton-video:video-expanded:v1'; // the video at full page width, the side panel under it; per device
 const readShow = (key, fallback = true) => {
   try {
@@ -263,7 +276,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const areaOutline = h('div', { class: 'area-outline', hidden: true });
   const areaDrag = h('div', { class: 'area-outline', hidden: true });
   const areaPicker = h('div', { class: 'area-picker', hidden: true, title: 'Drag over the part of the picture to show in the corner' }, areaDrag);
-  const player = h('div', { class: 'player' }, video, overlay, insetWindow, videoBoard, areaOutline, areaPicker, ...cornerHandles, markTip, flash, openBadge);
+  const magnifier = h('canvas', { class: 'magnifier', hidden: true }); // for looking closer, on screen only: no render has it
+  const player = h('div', { class: 'player' }, video, overlay, insetWindow, videoBoard, areaOutline, areaPicker, ...cornerHandles, magnifier, markTip, flash, openBadge);
   // Which video the player shows: the original (for tagging) or one of the finished files.
   let files = []; // GET /api/matches/:id/rendered
   let showing = ''; // '' = the original, else a finished file's key
@@ -309,6 +323,35 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const insetZoomText = h('span', { class: 'small muted inset-zoom-text' });
   const insetControls = h('span', { class: 'inset-controls', hidden: true }, insetZoom, insetZoomText,
     h('button', { class: 'ghost icon-only', title: 'Remove the corner view', 'aria-label': 'Remove the corner view', onclick: () => saveInset(null) }, icon('close', 16)));
+  let magnifying = false;
+  let magnifierAt = null; // the mouse, as fractions of the picture, while it is on the picture
+  let magnifierRatio = readMagnifier();
+  const magnifierBtn = h('button', {
+    class: 'ghost icon-only', onclick: () => setMagnifying(!magnifying),
+    title: 'Magnifier: a circle follows the mouse over the video and enlarges it, for a closer look. Only on screen, never in a render. The mouse wheel changes how much.',
+    'aria-label': 'Magnifier',
+  }, icon('magnifier'));
+  const magnifierSlider = h('input', {
+    type: 'range', min: MAGNIFIER.min, max: MAGNIFIER.max, step: MAGNIFIER.step, value: magnifierRatio, 'aria-label': 'Magnifier zoom', title: 'How much the magnifier enlarges (or the mouse wheel over the video)',
+    oninput: (e) => setMagnifierRatio(Number(e.target.value)),
+    onchange: (e) => e.target.blur(), // the keys go back to tagging
+  });
+  const magnifierText = h('span', { class: 'small muted inset-zoom-text' }, `${magnifierRatio.toFixed(1)}×`);
+  const magnifierControls = h('span', { class: 'inset-controls', hidden: true }, magnifierSlider, magnifierText);
+  function setMagnifying(on) {
+    magnifying = on;
+    magnifierBtn.classList.toggle('on', on);
+    magnifierControls.hidden = !on;
+    if (!on) magnifierAt = null;
+    drawOverlay();
+  }
+  function setMagnifierRatio(zoom) {
+    magnifierRatio = magnifierZoom(zoom);
+    magnifierSlider.value = String(magnifierRatio);
+    magnifierText.textContent = `${magnifierRatio.toFixed(1)}×`;
+    writeMagnifier(magnifierRatio);
+    drawOverlay();
+  }
   const drawExpandBtn = () => {
     const tip = expanded ? 'Back to the normal size (V)' : 'Expand the video (V)';
     expandBtn.title = tip;
@@ -454,7 +497,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   // Where a pointer is, as a fraction of the picture (corners may lie in the black space around it).
   const pictureAt = (e) => {
     const box = pictureBox();
-    const r = overlay.getBoundingClientRect();
+    const r = player.getBoundingClientRect();
     return [(e.clientX - r.left - box.x) / box.w, (e.clientY - r.top - box.y) / box.h];
   };
   const roundCorner = (n) => Math.round(Math.min(1.5, Math.max(-0.5, n)) * 10000) / 10000;
@@ -464,6 +507,23 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     if (onTracking || marking || e.target.closest('button, a, input, select, .corner-handle, .area-picker, .inset-window')) return;
     toggle();
   });
+
+  // ---- the magnifier follows the mouse over the picture, on any video ----
+  player.addEventListener('pointermove', (e) => {
+    if (!magnifying) return;
+    const at = pictureAt(e);
+    magnifierAt = e.target === video && at.every((n) => n >= 0 && n <= 1) ? at : null;
+    drawMagnifier(pictureBox());
+  });
+  player.addEventListener('pointerleave', () => {
+    magnifierAt = null;
+    drawMagnifier(pictureBox());
+  });
+  video.addEventListener('wheel', (e) => {
+    if (!magnifying) return;
+    e.preventDefault();
+    setMagnifierRatio(magnifierRatio + Math.sign(-e.deltaY) * MAGNIFIER.step);
+  }, { passive: false });
 
   // ---- the corner view: drag out an area of the picture, then move and resize its window, playing or not ----
   let inset = match.inset;
@@ -854,9 +914,30 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     insetView.getContext('2d').drawImage(video, inset.x * vw, inset.y * vh, inset.w * vw, inset.h * vh, 0, 0, w, hgt);
   }
 
+  function drawMagnifier(box) {
+    const on = magnifying && magnifierAt && !choosingArea && !marking && video.readyState >= 2;
+    magnifier.hidden = !on;
+    player.classList.toggle('magnifying', Boolean(on));
+    if (!on) return;
+    const size = magnifierSize(box.w, box.h);
+    Object.assign(magnifier.style, { left: `${box.x + magnifierAt[0] * box.w - size / 2}px`, top: `${box.y + magnifierAt[1] * box.h - size / 2}px`, width: `${size}px`, height: `${size}px`, filter: video.style.filter });
+    const across = Math.round(size * (window.devicePixelRatio || 1));
+    if (magnifier.width !== across) {
+      magnifier.width = across;
+      magnifier.height = across;
+    }
+    const { x, y, w, h: tall } = magnifierArea(magnifierAt, size, box.w, box.h, magnifierRatio);
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const g = magnifier.getContext('2d');
+    g.clearRect(0, 0, across, across); // past the picture's edge nothing is drawn
+    g.drawImage(video, x * vw, y * vh, w * vw, tall * vh, 0, 0, across, across);
+  }
+
   function drawOverlay() {
     const box = pictureBox();
     drawInset(box);
+    drawMagnifier(box);
     drawVideoBoard(box);
     const ratio = window.devicePixelRatio || 1;
     if (overlay.width !== Math.round(box.cw * ratio) || overlay.height !== Math.round(box.ch * ratio)) {
@@ -2008,7 +2089,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         player,
         videoError,
         showNote,
-        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, expandBtn, insetBtn, insetControls, favouriteBtn, showSel, deleteBtn,
+        h('div', { class: 'transport' }, playBtn, timeText, speedSel, muteBtn, expandBtn, insetBtn, insetControls, magnifierBtn, magnifierControls, favouriteBtn, showSel, deleteBtn,
           h('span', { class: 'zoom' }, h('button', { class: 'ghost icon-only', title: 'Zoom out (−)', onclick: () => zoomBy(2) }, '−'), zoomText,
             h('button', { class: 'ghost icon-only', title: 'Zoom in (+)', onclick: () => zoomBy(0.5) }, '+'),
             h('button', { class: 'small', title: 'Whole video (0)', onclick: () => setView(0, duration()) }, 'Fit'))),
