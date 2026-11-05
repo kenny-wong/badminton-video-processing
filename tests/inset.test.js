@@ -125,12 +125,15 @@ test('zoomedInset stops at the picture and at the smallest area', () => {
   assert.ok(zoomedInset(area, 1000).w >= 0.01);
 });
 
-test('a new corner view is a fifth of the picture’s width', () => {
-  assert.equal(INSET_SIZE.normal, 20);
-  assert.equal(cleanInset({ x: 0.1, y: 0.1, w: 0.2, h: 0.2 }).size, 20);
+test('a new corner view is a tenth of the picture’s width, and can go down to half that', () => {
+  assert.equal(INSET_SIZE.normal, 10);
+  assert.equal(cleanInset({ x: 0.1, y: 0.1, w: 0.2, h: 0.2 }).size, 10);
+  assert.equal(resizedInset({ ...area, size: 10 }, 'se', -0.04, -0.04, W, H).size > 5, true);
+  assert.equal(resizedInset({ ...area, size: 10 }, 'se', -0.5, -0.5, W, H).size, 5);
+  assert.equal(cleanInset({ ...area, size: 7.5 }).size, 7.5);
 });
 
-test('the magnifier is as wide as a new corner view, by the longer side', () => {
+test('the magnifier is a fifth of the picture’s longer side', () => {
   assert.equal(magnifierSize(1000, 500), 200);
   assert.equal(magnifierSize(450, 600), 120);
 });
