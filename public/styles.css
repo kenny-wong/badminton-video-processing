@@ -564,7 +564,14 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 .player .open-rally { position: absolute; top: 14px; left: 14px; padding: 5px 12px; border-radius: 999px; background: var(--no); color: #fff; font-weight: 650; font-size: var(--fs-sm); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { opacity: 0.65; } }
 .player canvas.overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
-.player canvas.inset-view { position: absolute; box-sizing: border-box; border: 0 solid #fff; pointer-events: none; }
+.player .inset-window { position: absolute; box-sizing: border-box; border: 0 solid #fff; cursor: move; touch-action: none; }
+.player .inset-window canvas { display: block; width: 100%; height: 100%; }
+.player .inset-grip { position: absolute; width: 16px; height: 16px; margin: -8px; border-radius: 50%; background: #ffd84d; border: 2px solid #000; opacity: 0; transition: opacity 0.12s; }
+.player .inset-window:hover .inset-grip { opacity: 1; }
+.player .inset-grip.nw { left: 0; top: 0; cursor: nwse-resize; }
+.player .inset-grip.ne { right: 0; top: 0; cursor: nesw-resize; }
+.player .inset-grip.sw { left: 0; bottom: 0; cursor: nesw-resize; }
+.player .inset-grip.se { right: 0; bottom: 0; cursor: nwse-resize; }
 .player .area-picker { position: absolute; inset: 0; z-index: 4; cursor: crosshair; touch-action: none; }
 .player .area-outline { position: absolute; box-sizing: border-box; border: 2px dashed #ffd84d; box-shadow: 0 0 0 1px rgb(0 0 0 / 60%); pointer-events: none; }
 .player video { cursor: pointer; } /* a click plays or pauses */
@@ -587,6 +594,13 @@ tbody.match-group + tbody.match-group tr:first-child td { border-top: 2px solid 
 .transport .play-btn:hover { background: var(--accent-hover); }
 .transport .time { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 140px; }
 .transport select { min-height: 30px; padding: 2px 8px; }
+.transport .ghost.on { color: var(--accent); }
+.transport .inset-controls { display: inline-flex; align-items: center; gap: 6px; }
+.transport .inset-controls input { width: 70px; }
+.transport:has(.inset-controls:not([hidden])) select[aria-label="Video shown"] { max-width: 105px; }
+.transport:has(.inset-controls:not([hidden])) .zoom-text { display: none; }
+.transport:has(.inset-controls:not([hidden])) .time { min-width: 120px; }
+.transport .inset-zoom-text { min-width: 3.2em; font-variant-numeric: tabular-nums; }
 .transport .favourite-rally.on { color: var(--focus); border-color: var(--focus); background: var(--fav-bg); }
 .timeline {
   position: relative; height: 36px; background: var(--surface-2); border-radius: var(--radius-sm); cursor: pointer;

@@ -79,7 +79,7 @@ test('team countries save with the scoreboard and follow the video with its tagg
 
 test('the corner view is saved on its own, refused when it isn’t an area, and follows the video', async () => {
   await withServer(async ({ db, call, matches: [first, second] }) => {
-    const inset = { x: 0.5, y: 0.25, w: 0.2, h: 0.2, corner: 'bl', size: 40 };
+    const inset = { x: 0.5, y: 0.25, w: 0.2, h: 0.2, size: 40, left: 0.1, top: 0.6 };
     await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
     await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES });
     const saved = await call(`/api/matches/${first}`, 'PUT', { inset });
