@@ -10,6 +10,9 @@
 // taken to mark whichever of the two it is closer to, and keeps marking it in
 // the new file.
 
+/** On YouTube, and rendered since: the finished file is newer than what's up there. Times are ISO-8601 UTC, so they compare as text. */
+export const reRendered = ({ outputPath, youtubeUrl, renderedAt, uploadedAt }) => Boolean(outputPath && youtubeUrl && renderedAt && uploadedAt && renderedAt > uploadedAt);
+
 export const MAX_PARTS = 3;
 export const MIN_PART = 1; // seconds
 

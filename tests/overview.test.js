@@ -5,6 +5,13 @@ import { openDb } from '../lib/db.js';
 import { matchesQuery, overview, search, stageOf } from '../lib/overview.js';
 import { jobView, listJobs, startJob, stopJob } from '../lib/jobs.js';
 
+test('stageOf: a video rendered again since its upload is back to upload, while its file is there', () => {
+  const again = { rallies: [{ start: 1, end: 2, winner: 'a' }], outputPath: 'x.mp4', youtubeUrl: 'https://youtu.be/x', uploadedAt: '2026-11-04T23:27:05Z', renderedAt: '2026-11-05T00:24:49Z' };
+  assert.equal(stageOf(again), 'upload');
+  assert.equal(stageOf({ ...again, uploadedAt: '2026-11-05T01:00:00Z' }), 'done'); // uploaded since
+  assert.equal(stageOf(again, false), 'done'); // the new file was deleted: what's on YouTube stands
+});
+
 test('stageOf: tag, then render, then upload, then done', () => {
   const r = (winner) => ({ start: 1, end: 2, winner });
   assert.equal(stageOf({ rallies: [] }), 'tag');

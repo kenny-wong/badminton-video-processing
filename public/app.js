@@ -13,6 +13,7 @@ import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons } from '.
 import { api, waitJob } from './api.js';
 import { boardNames, NAME_STYLES, namesMatch, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
+import { reRendered } from './shared/video-files.js';
 import { clock } from './shared/time.js';
 import { renderEditor } from './editor.js';
 import { icon } from './icons.js';
@@ -612,13 +613,15 @@ async function renderTournament(id, notice = null, who = null) {
   const uploadControl = (u) => {
     const job = uploadJobs.get(u.id);
     const rendered = Boolean(u.outputPath);
+    const again = reRendered(u);
     return h('div', { class: 'row tight small step-row', 'data-upload': u.id },
       job
         ? [h('button', { class: 'small danger', title: 'Stop this upload', onclick: () => stopJob(u.id, uploadJobs, 'Stop this upload? YouTube gets nothing; you can upload again later.') }, icon('stop', 13), 'Stop upload'), progressNote(job, 'Uploading')]
         : [h('button', {
           class: 'small', onclick: () => startUpload(u),
-          title: rendered ? 'Upload the rendered video to YouTube, with the privacy and playlist last chosen in a YouTube box' : 'Upload the original video, as it is, to YouTube (not rendered yet), with the privacy and playlist last chosen in a YouTube box',
-        }, icon('youtube', 13), rendered ? 'Upload (rendered)' : 'Upload (original)'), failedNote(`upload:${u.id}`)]);
+          title: again ? `Upload the new render and delete the one on YouTube now (${u.youtubeUrl}). YouTube can’t swap the file in a video, so the link changes; the new video takes the old one’s place in the playlist. If the upload fails, the old one stays.`
+            : rendered ? 'Upload the rendered video to YouTube, with the privacy and playlist last chosen in a YouTube box' : 'Upload the original video, as it is, to YouTube (not rendered yet), with the privacy and playlist last chosen in a YouTube box',
+        }, icon('youtube', 13), again ? 'Upload (re-rendered)' : rendered ? 'Upload (rendered)' : 'Upload (original)'), failedNote(`upload:${u.id}`)]);
   };
   const unitById = (uid) => matches.flatMap((m) => [m, ...m.units]).find((x) => x.id === uid);
   const show = (uid) => {
@@ -642,8 +645,9 @@ async function renderTournament(id, notice = null, who = null) {
   };
   const followRender = (uid, job) => follow(uid, job, renderJobs, () => h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'), 'render');
   // waitJob gives the job's result: the upload's { url, locked, … }.
-  const followUpload = (uid, job) => follow(uid, job, uploadJobs, (r) => h('div', { class: 'notice ok' }, 'Uploaded to YouTube',
-    r?.url ? [': ', h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.url)] : '', r?.locked ? ' (YouTube keeps it private for now)' : '', '.'), 'upload');
+  const followUpload = (uid, job) => follow(uid, job, uploadJobs, (r) => h('div', { class: r?.replaceError ? 'notice warn' : 'notice ok' }, r?.replaced ? 'Replaced on YouTube' : 'Uploaded to YouTube',
+    r?.url ? [': ', h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.url)] : '', r?.locked ? ' (YouTube keeps it private for now)' : '', '.',
+    r?.replaceError ? ` The old video (${r.replaced?.url}) is still on YouTube: ${r.replaceError}` : ''), 'upload');
   const startRender = async (uid) => {
     try {
       followRender(uid, await api(`/api/matches/${uid}/render`, { method: 'POST', body: {} }));
@@ -656,8 +660,11 @@ async function renderTournament(id, notice = null, who = null) {
     // No question: the privacy and playlist last chosen in a YouTube box (Unlisted, into the playlist, at first).
     const prefs = readUploadPrefs();
     const file = u.outputPath ? 'video' : 'original';
+    // A re-rendered video replaces the one on YouTube, which can't be brought back: the one question asked here.
+    const replace = reRendered(u);
+    if (replace && !confirm(`Replace ${u.youtubeUrl} on YouTube?\n\nThe new render is uploaded, then the old video is deleted with its views and comments. The link changes, so links already shared stop working.`)) return;
     try {
-      followUpload(u.id, await api(`/api/matches/${u.id}/youtube`, { method: 'POST', body: { file, privacy: prefs.privacy, playlist: prefs.playlist } }));
+      followUpload(u.id, await api(`/api/matches/${u.id}/youtube`, { method: 'POST', body: { file, privacy: prefs.privacy, playlist: prefs.playlist, replace } }));
     } catch (err) {
       remember(`upload:${u.id}`, err.code === 'signin' ? { message: 'Not signed in to YouTube', detail: 'Sign in first: open any video’s editor, Export tab, YouTube box, Sign in to YouTube.' } : err);
       show(u.id);
@@ -674,7 +681,7 @@ async function renderTournament(id, notice = null, who = null) {
   };
   const nextStep = (u) => {
     const render = renderJobs.has(u.id) || unitStage(u) === 'render';
-    const upload = uploadJobs.has(u.id) || !u.youtubeUrl;
+    const upload = uploadJobs.has(u.id) || !u.youtubeUrl || reRendered(u);
     if (!render && !upload) return null;
     return h('div', { class: 'next-step' }, render ? renderControl(u.id) : null, upload ? uploadControl(u) : null);
   };
@@ -689,7 +696,7 @@ async function renderTournament(id, notice = null, who = null) {
   // Tagged: every rally has a winner and who served first is chosen (serverSet false: not yet).
   const isTagged = (u) => u.rallyCount > 0 && u.tagged === u.rallyCount && u.serverSet !== false;
   // A tagged score that differs from the result is still to tag: no Render here until it's fixed (as Render all).
-  const unitStage = (u) => u.youtubeUrl ? 'done' : u.outputPath ? 'upload' : isTagged(u) && u.check?.ok !== false ? 'render' : 'tag';
+  const unitStage = (u) => u.youtubeUrl && !reRendered(u) ? 'done' : u.outputPath ? 'upload' : isTagged(u) && u.check?.ok !== false ? 'render' : 'tag';
 
   // A suggested video with its Link button.
   const suggestedCell = (u, s) => {
@@ -772,7 +779,9 @@ async function renderTournament(id, notice = null, who = null) {
       checked
         ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result. Fix the tagging in the editor to render it here or with Render all tagged.'}`)
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
-      tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
+      reRendered(m)
+        ? tag(true, 'render part', 'Re-rendered', 'Rendered again since it went on YouTube: the video there is the older one until you upload this')
+        : tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
       youtubeTag(m, tag),
       m.favourites ? h('span', { class: 'pill highlight', title: 'Favourite (★) rallies: they make the highlights video and reels' }, `★ ${m.favourites} Highlight${m.favourites === 1 ? '' : 's'}`) : null);
   };

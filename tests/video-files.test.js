@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cleanParts, markerOf, mergedName, mergeProblems, mergeTime, overlaps, parseTime, shiftNameTime, snapStart, splitName, splitTime, timeText,
+  reRendered,
 } from '../public/shared/video-files.js';
 
 const START = Date.UTC(2026, 10, 1, 12, 12, 8); // recording started 12:12:08
@@ -87,4 +88,14 @@ test('times are shown to the hundredth and typed in several ways', () => {
   assert.equal(parseTime(timeText(95.27)), 95.27);
   assert.equal(parseTime('abc'), null);
   assert.equal(parseTime(''), null);
+});
+
+test('reRendered: on YouTube and rendered since', () => {
+  const u = { outputPath: 'x.mp4', youtubeUrl: 'https://youtu.be/x', uploadedAt: '2026-11-04T23:27:05Z', renderedAt: '2026-11-05T00:24:49Z' };
+  assert.equal(reRendered(u), true);
+  assert.equal(reRendered({ ...u, uploadedAt: '2026-11-05T01:00:00Z' }), false); // replaced since
+  assert.equal(reRendered({ ...u, renderedAt: u.uploadedAt }), false);
+  assert.equal(reRendered({ ...u, youtubeUrl: null }), false); // nothing on YouTube to replace
+  assert.equal(reRendered({ ...u, outputPath: null }), false); // the render was deleted
+  assert.equal(reRendered({ ...u, uploadedAt: null }), false);
 });
