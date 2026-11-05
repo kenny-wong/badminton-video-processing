@@ -85,8 +85,7 @@ Tournaments imported from a badminfo link also bring everyone entered, with thei
 
 ## Shuttle tracking
 
-Optional. [TrackNetV3](https://github.com/qaz812345/TrackNetV3) (MIT licence) follows the shuttle on an NVIDIA GPU. Set it up once with
-`powershell -ExecutionPolicy Bypass -File analysis\setup.ps1` (Python 3.10+ and Git needed; about 3 GB of downloads, kept out of the repo in `analysis\`).
+Optional. [TrackNetV3](https://github.com/qaz812345/TrackNetV3) (MIT licence) follows the shuttle on an NVIDIA GPU. Set it up once in **Settings → Tracking tools**, which also sets up Find players and voice removal: one button, with nothing else to install. It downloads about 3.5 GB, keeps about 6 GB, says up front if the PC has no NVIDIA card or too little room, and carries on from where it got to if stopped. It goes in the app's own folder (in a checkout, `analysis\`, kept out of the repo) or one you name, such as on another drive, and every part has a fixed version (`analysis\requirements.txt`, `lib/analysis-setup.js`). **Remove them** takes it all away again.
 
 In a match: **Mark the court** (click its four outer corners; a tip on the video names the corner to click next and shows it on a small court, and the name follows the pointer; Esc stops). Afterwards drag any yellow corner to move it, with the court lines following, or nudge a focused corner with the arrow keys. Then choose who is at the near end when the video starts and **Track the shuttle**. **Show the shuttle on the video** (ticked unless you untick it, remembered on this PC) draws it on every tab, not only Tracking. The red dot shows only the shuttle in play over the court: sightings beside the court (when the camera is far enough back for there to be any), sightings that stay put for half a second (the shuttle on the floor, or a light mistaken for it) and stray ones off the shuttle's path are hidden. The tracked data keeps them all, for the landing map and clips. The tracked shuttle drives upright clips and the landing map. Works best with the phone behind a baseline, high up, with the whole court in view. Winners are tagged by hand: finding rallies by sound and suggesting winners (from the shuttle or the official result) were tried and taken out, as on real footage they weren't reliable enough to save time.
 
@@ -98,13 +97,13 @@ Tracking takes about 1½ minutes per minute of video on an RTX 3090 (a 6-minute 
 
 ## Players on the video
 
-**Find players** (Tracking tab) runs [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) pose with its ByteTrack tracker over the whole video on the GPU (about 3½ minutes for an 8-minute game), so each person is followed from frame to frame. It's installed by `analysis\setup.ps1` along with the shuttle tracker; Ultralytics is AGPL-3.0 and is only installed locally, never part of the app or the installer.
+**Find players** (Tracking tab) runs [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) pose with its ByteTrack tracker over the whole video on the GPU (about 3½ minutes for an 8-minute game), so each person is followed from frame to frame. It's set up along with the shuttle tracker; Ultralytics is AGPL-3.0 and is only downloaded to your PC by that set-up, never part of the app or the installer.
 
 **Show players and their names** then draws a box on each player, with their name in their team's colour, on every tab while the video plays. The players are the people whose feet are on the marked court (at most a team's worth per end) and who are usually on it, so an umpire or coach by the court is never named; a name stays on its person, and when a player isn't seen, no one else takes their name; their team comes from who was at the near end when the video started and the score, as ends change after each game and at the deciding game's mid-point. In singles that gives each name; doubles partners are told apart by shirt colour, and **Swap A's names** / **Swap B's names** puts a pair the other way round if they come out wrong. Until the court is marked, everyone found is boxed without names.
 
 ## Removing voices
 
-Optional. [Demucs](https://github.com/facebookresearch/demucs) (MIT licence) takes players' shouts, coaching and talk by the court out of the sound and keeps everything else, shuttle hits included. `analysis\setup.ps1` installs it with the shuttle tracker (run it again if you set tracking up before this was added). Switch it on in Settings → Video size, or per render in the editor's Export tab; reels and clips follow Settings and the Export tab's box.
+Optional. [Demucs](https://github.com/facebookresearch/demucs) (MIT licence) takes players' shouts, coaching and talk by the court out of the sound and keeps everything else, shuttle hits included. It's set up along with the shuttle tracker. Switch it on in Settings → Video size, or per render in the editor's Export tab; reels and clips follow Settings and the Export tab's box.
 
 Only the vocals model of Demucs' fine-tuned set runs, and the result is the original sound minus the voices, so nothing else is changed. The first render of a match works out its voice-free sound (about 15 seconds for a 6-minute video on an RTX 3090) and keeps it as `court.flac` in the match's work folder (`<output>\.work\match-<id>\voices\`); later renders reuse it until the video file changes. Loud shouts go; very quiet distant talk may partly stay.
 
@@ -134,7 +133,6 @@ The server writes `logs\app.log` in its data folder (`data\` for `npm start`): s
 
 ## Not yet
 
-- Shuttle tracking and voice removal in the installer (they need Python and an NVIDIA GPU; for now only from a checkout with `analysis\setup.ps1`).
 - Automatic updates and a code-signed installer.
 
 ## Licence

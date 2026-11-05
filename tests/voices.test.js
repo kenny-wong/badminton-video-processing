@@ -62,16 +62,16 @@ test('Demucs progress comes from its chunk lines', () => {
 test('the voice remover is ready only with Python, the script and Demucs all there', async () => {
   const root = await mkdtemp(join(tmpdir(), 'voices-'));
   try {
-    assert.equal(voiceRemover(root).ready, false);
+    assert.equal(voiceRemover(root, root).ready, false);
     const win = process.platform === 'win32';
     await mkdir(join(root, '.venv', win ? 'Scripts' : 'bin'), { recursive: true });
     await writeFile(join(root, '.venv', win ? 'Scripts\\python.exe' : 'bin/python'), '');
     await writeFile(join(root, 'remove_voices.py'), '');
     if (win) {
-      assert.equal(voiceRemover(root).ready, false);
+      assert.equal(voiceRemover(root, root).ready, false);
       await mkdir(join(root, '.venv', 'Lib', 'site-packages', 'demucs'), { recursive: true });
     }
-    assert.equal(voiceRemover(root).ready, true);
+    assert.equal(voiceRemover(root, root).ready, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

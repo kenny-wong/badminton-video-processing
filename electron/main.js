@@ -2,6 +2,7 @@
 // own process, and shows the page in its own window. Everything it keeps
 // (database, logs, thumbnails, YouTube sign-in, the window's own storage)
 // lives in %LOCALAPPDATA%\Badminton Video; FFmpeg comes with the installer.
+// The Python tools' scripts do too; the big rest of them is set up from Settings.
 
 import { app, BrowserWindow, Menu, dialog, shell } from 'electron';
 import { existsSync } from 'node:fs';
@@ -19,6 +20,10 @@ const dataDir = process.env.BADMINTON_VIDEO_DATA || join(app.getPath('userData')
 
 const bundled = join(process.resourcesPath, 'ffmpeg');
 if (app.isPackaged && existsSync(bundled)) process.env.BADMINTON_VIDEO_FFMPEG = bundled;
+if (app.isPackaged) {
+  process.env.BADMINTON_VIDEO_SCRIPTS = join(process.resourcesPath, 'analysis');
+  process.env.BADMINTON_VIDEO_TOOLS = join(app.getPath('userData'), 'analysis');
+}
 
 let win = null;
 

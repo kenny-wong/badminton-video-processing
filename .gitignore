@@ -6,6 +6,11 @@ data/
 analysis/.venv/
 analysis/vendor/
 analysis/ckpts/
+analysis/python/
+analysis/downloads/
+analysis/torch-home/
+analysis/setup.json
+analysis/setup.log
 __pycache__/
 *.pyc
 dist/

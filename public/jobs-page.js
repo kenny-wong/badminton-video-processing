@@ -10,7 +10,7 @@ import { errorNotice } from './notice.js';
 import { goBack } from './nav.js';
 
 const STATUS = { running: ['Running', 'warn'], queued: ['Waiting', ''], done: ['Done', 'ok'], failed: ['Failed', 'bad'], stopped: ['Stopped', ''] };
-const KIND = { render: 'Render', track: 'Shuttle tracking', analyse: 'Find rallies', scan: 'Scan folders', reel: 'Highlight reel', clip: 'Clip', people: 'Find players', merge: 'Merge videos', split: 'Split a video' };
+const KIND = { render: 'Render', track: 'Shuttle tracking', analyse: 'Find rallies', scan: 'Scan folders', reel: 'Highlight reel', clip: 'Clip', people: 'Find players', merge: 'Merge videos', split: 'Split a video', 'analysis-setup': 'Set up tracking tools' };
 
 const time = (ms) => (ms ? new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '');
 const took = (j) => {

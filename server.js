@@ -20,6 +20,7 @@ import { startLog } from './lib/log.js';
 import { BOOT } from './lib/jobs.js';
 import { listenWhenFree } from './lib/restart.js';
 import * as settings from './api/settings.js';
+import * as analysis from './api/analysis.js';
 import * as tournaments from './api/tournaments.js';
 import * as matches from './api/matches.js';
 import * as videos from './api/videos.js';
@@ -42,6 +43,9 @@ const ROUTES = [
   ['DELETE', '/api/settings/logo', settings.deleteLogo],
   ['PUT', '/api/settings/music', settings.putMusic],
   ['DELETE', '/api/settings/music', settings.deleteMusic],
+  ['GET', '/api/analysis', analysis.onRequestGet],
+  ['POST', '/api/analysis/setup', analysis.setup],
+  ['DELETE', '/api/analysis', analysis.remove],
   ['GET', '/api/tournaments', tournaments.onRequestGet],
   ['POST', '/api/tournaments', tournaments.onRequestPost],
   ['GET', '/api/tournaments/:id', tournaments.getOne],

@@ -35,6 +35,7 @@ import { cleanInset } from '../public/shared/inset.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
 import { findPeople, peopleFinder, readPeople, saveSwap } from '../lib/people.js';
 import { cachedLevels, matchLevels } from '../lib/levels.js';
+import { notSetUp, toolsFolder } from '../lib/analysis.js';
 import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
@@ -64,8 +65,8 @@ export function onRequestGet({ params, app }) {
     ...loaded,
     source: { ...source, path: undefined, url: source.ready ? `/media/match/${match.id}` : null },
     format: matchFormat(match),
-    tracking: { ready: tracker().ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
-    findPlayers: { ready: peopleFinder().ready },
+    tracking: { ready: tracker(toolsFolder(settings)).ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
+    findPlayers: { ready: peopleFinder(toolsFolder(settings)).ready },
     // ★ is kept on the whole match, also when this is one game of it.
     starredMatch: match.parentId ? app.db.prepare('SELECT favourite FROM matches WHERE id = ?').get(match.parentId)?.favourite === 1 : match.favourite,
     formatChosen: Boolean(match.format),
@@ -79,7 +80,7 @@ export function onRequestGet({ params, app }) {
     replays: settings.output.replays,
     // An HDR original is shown through this filter, so it looks as the render will (Settings, HDR phone videos).
     hdrPlayback: source.hdr ? hdrPlayback(settings.output) : null,
-    voices: { remove: settings.output.removeVoices, ready: voiceRemover().ready },
+    voices: { remove: settings.output.removeVoices, ready: voiceRemover(toolsFolder(settings)).ready },
     output: { ...describeOutput(loaded, null, described), exists: Boolean(match.outputPath && existsSync(match.outputPath)) },
     highlights: { ...describeOutput(loaded, null, { ...described, highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
@@ -232,7 +233,7 @@ export function track({ params, app }) {
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const { settings, tools: t } = tools(app);
   if (!t) return noFfmpeg();
-  if (!tracker().ready) return fail(503, 'noTracker', 'Shuttle tracking isn’t set up yet: run analysis\\setup.ps1 once (see the README).');
+  if (!tracker(toolsFolder(settings)).ready) return fail(503, 'noTracker', notSetUp('Shuttle tracking'));
   const id = loaded.match.id;
   const job = startJob('track', `track:${id}`, (j, signal) => trackMatch(app.db, t, settings, id, { signal, job: j }), { queue: 'gpu', label: `Track the shuttle: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);
@@ -243,7 +244,7 @@ export function findPlayers({ params, app }) {
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const { settings, tools: t } = tools(app);
   if (!t) return noFfmpeg();
-  if (!peopleFinder().ready) return fail(503, 'noFinder', 'Finding players isn’t set up yet: run analysis\\setup.ps1 once (see the README).');
+  if (!peopleFinder(toolsFolder(settings)).ready) return fail(503, 'noFinder', notSetUp('Finding players'));
   const id = loaded.match.id;
   const job = startJob('people', `people:${id}`, (j, signal) => findPeople(app.db, t, settings, id, { signal, job: j }), { queue: 'gpu', label: `Find players: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);

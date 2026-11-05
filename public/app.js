@@ -11,6 +11,7 @@
 
 import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
+import { analysisPanel } from './analysis-panel.js';
 import { boardNames, NAME_STYLES, namesMatch, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
 import { reRendered } from './shared/video-files.js';
@@ -1364,6 +1365,8 @@ async function renderSettings() {
   const folders = h('textarea', { id: 'folders', placeholder: 'C:\\Users\\you\\Pictures\\Phone\\Badminton' }, s.videoFolders.join('\n'));
   const output = h('input', { type: 'text', id: 'output', class: 'grow', value: s.outputFolder });
   const ffmpeg = h('input', { type: 'text', id: 'ffmpeg', class: 'grow', value: s.ffmpegFolder, placeholder: 'Found by itself' });
+  const analysisFolder = h('input', { type: 'text', id: 'analysis-folder', class: 'grow', value: s.analysisFolder });
+  const analysis = analysisPanel({ folder: analysisFolder, progressBar, errorNotice });
   const pre = h('input', { type: 'number', id: 'pre', min: 0, max: 10, step: 0.5, value: s.pre });
   const rallyGap = h('input', { type: 'number', id: 'rally-gap', min: 0, max: 30, step: 0.5, value: s.rallyGap });
   const post = h('input', { type: 'number', id: 'post', min: 0, max: 10, step: 0.5, value: s.post });
@@ -1559,7 +1562,7 @@ async function renderSettings() {
         try {
           const saved = await api('/api/settings', {
             method: 'PUT',
-            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, pre: Number(pre.value), post: Number(post.value), intervalPad: Number(intervalPad.value), rallyGap: Number(rallyGap.value),
+            body: { videoFolders: lines(folders.value), outputFolder: output.value, ffmpegFolder: ffmpeg.value, analysisFolder: analysisFolder.value, pre: Number(pre.value), post: Number(post.value), intervalPad: Number(intervalPad.value), rallyGap: Number(rallyGap.value),
               nameStyle: { singles: singlesSel.value, doubles: doublesSel.value }, board: readBoard(),
               logo: readLogo(), cards: { title: cardTitle.checked, end: cardEnd.checked, seconds: Number(cardSeconds.value), stats: cardStats.checked },
               description: Object.fromEntries(Object.entries(describe).map(([k, c]) => [k, c.input.checked])),
@@ -1567,6 +1570,7 @@ async function renderSettings() {
               music: { use: musicUse.value, volume: Number(musicVolume.value), court: Number(courtVolume.value) } },
           });
           fill(toolsBox, tools(saved));
+          analysis.refresh();
           fill(msg, h('div', { class: 'notice ok' }, icon('check', 16), 'Saved.'));
         } catch (err) {
           fill(msg, errorNotice(err));
@@ -1613,7 +1617,7 @@ async function renderSettings() {
         h('div', { class: 'row' }, h('label', { for: 'out-size' }, 'Size'), outSize, h('label', { for: 'out-rate' }, 'at most'), outRate, h('span', {}, 'Mbit/s (0: no limit)')),
         h('label', { class: 'row', for: 'out-replays' }, outReplays, 'Slow-motion replay of the last 3 seconds of each ★ rally, straight after it (each render can switch it)'),
         h('label', { class: 'row', for: 'out-voices' }, outVoices, 'Remove voices from the sound: players’ shouts, coaching, talk by the court; the shuttle hits stay (each render can switch it; reels and clips too)'),
-        data.voices ? null : h('p', { class: 'hint' }, 'Removing voices needs Demucs: run ', h('kbd', {}, 'analysis\\setup.ps1'), ' once (see the README).')),
+        data.voices ? null : h('p', { class: 'hint' }, 'Removing voices needs the Tracking tools: set them up further down this page.')),
       section('HDR phone videos', 'Phones film in HDR; renders, clips and reels turn it into ordinary video at this brightness. It’s built into the file, so videos made before need rendering again.',
         hdrLooks,
         h('p', { class: 'hint hdr-none' }, 'No HDR video in the library yet: the preview appears once one is found.')),
@@ -1630,6 +1634,10 @@ async function renderSettings() {
       section('Tagging', 'Pressing A or B without S first ends a rally whose start wasn’t marked.',
         h('div', { class: 'row' }, h('label', { for: 'rally-gap' }, 'Such a rally starts'), rallyGap, h('span', {}, 'seconds after the previous rally ended.')),
         h('p', { class: 'hint' }, 'The first rally starts at the match start (M), or 10 seconds before A / B. Press S at a serve to mark a start exactly; Q moves a selected rally’s start to now.')),
+      section('Tracking tools', 'Shuttle tracking, Find players and removing voices. They’re a big download, so they’re set up separately, once.',
+        analysis.element,
+        h('div', { class: 'row' }, h('label', { for: 'analysis-folder' }, 'Folder'), analysisFolder),
+        h('p', { class: 'hint' }, 'Empty uses the folder shown. Give another to use a roomier drive, or one where the tools are already set up.')),
       h('div', { class: 'label last' }, h('h3', {}, 'FFmpeg'), h('p', {}, 'Optional: its bin folder, if it isn’t found by itself.')),
       h('div', { class: 'fields last' }, h('div', { class: 'row' }, ffmpeg))),
     h('div', { class: 'row', style: { marginTop: '8px' } }, saveBtn),

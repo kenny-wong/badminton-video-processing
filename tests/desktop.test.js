@@ -37,7 +37,8 @@ test('the installer ships the app’s files with the artwork (not the notes besi
   assert.equal(main, 'electron/main.js');
   for (const f of ['server.js', 'electron/**', 'api/**', 'lib/**', 'migrations/**', 'public/**', '!public/visual-kit/*.txt']) assert.ok(build.files.includes(f), f);
   assert.ok(!build.files.some((f) => f.startsWith('!') && f.endsWith('.png')), 'the banner and illustration PNGs go in');
-  assert.deepEqual(build.extraResources, [{ from: 'build/ffmpeg', to: 'ffmpeg' }]);
+  assert.deepEqual(build.extraResources, [{ from: 'build/ffmpeg', to: 'ffmpeg' },
+    { from: 'analysis', to: 'analysis', filter: ['run_tracknet.py', 'find_people.py', 'remove_voices.py', 'requirements.txt'] }]);
 });
 
 test('one icon: the installer’s is drawn from the mark the page uses, on every build', () => {

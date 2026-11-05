@@ -1415,7 +1415,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   // Finding the players (YOLO), showing them, and putting a doubles pair's names the right way round.
   const peopleJobBox = h('div');
   function playersControls() {
-    if (!data.findPlayers?.ready) return h('p', { class: 'hint' }, 'Finding players isn’t set up on this PC yet: run ', h('kbd', {}, 'analysis\\setup.ps1'), ' again.');
+    if (!data.findPlayers?.ready) return h('p', { class: 'hint' }, 'Finding players isn’t set up on this PC yet: ', h('a', { href: '#/settings' }, 'set it up in Settings'), ', under Tracking tools.');
     const swap = (team) => {
       people.swap = { ...people.swap, [team]: !people.swap?.[team] };
       named = null;
@@ -1442,7 +1442,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
 
   function drawTrackingPanel() {
     if (!data.tracking.ready) {
-      fill(trackingBox, h('p', { class: 'hint' }, 'Not set up on this PC yet. Run ', h('kbd', {}, 'analysis\\setup.ps1'), ' once (it installs TrackNetV3 and PyTorch; see the README).'));
+      fill(trackingBox, h('p', { class: 'hint' }, 'Not set up on this PC yet: ', h('a', { href: '#/settings' }, 'set it up in Settings'), ', under Tracking tools.'));
       return;
     }
     const nearSel = h('select', { 'aria-label': 'Team at the near end', onchange: (e) => { nearAtStart = e.target.value || null; saveTrackingSettings(); drawOverlay(); drawTrackingPanel(); } },
@@ -2027,8 +2027,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         h('label', { class: 'row small' }, highlightsBox, 'Highlights only: the ★ rallies, to a separate file', favCount),
         h('div', { class: 'row small' }, h('label', { class: 'row' }, titleCardBox, 'Title card'), h('label', { class: 'row' }, endCardBox, 'End card with the result')),
         h('label', { class: 'row small' }, replaysBox, 'Slow-motion replay after each ★ rally'),
-        h('label', { class: 'row small', title: data.voices?.ready ? 'Demucs takes out players’ shouts, coaching and talk by the court, and keeps the shuttle hits. The first time takes a minute or so for a match; also used for clips.' : 'Run analysis\\setup.ps1 once to set this up (see the README)' },
-          voicesBox, icon('voice-clean', 16), data.voices?.ready ? 'Remove voices from the sound' : 'Remove voices (not set up yet: run analysis\\setup.ps1)'),
+        h('label', { class: 'row small', title: data.voices?.ready ? 'Demucs takes out players’ shouts, coaching and talk by the court, and keeps the shuttle hits. The first time takes a minute or so for a match; also used for clips.' : 'Set this up in Settings, under Tracking tools' },
+          voicesBox, icon('voice-clean', 16), data.voices?.ready ? 'Remove voices from the sound' : 'Remove voices (not set up yet: see Settings, Tracking tools)'),
         h('div', { class: 'row' }, renderBtn),
         renderBox,
         highlightsResult,
