@@ -818,10 +818,23 @@ dialog.keys-dialog .keys { margin-top: 12px; font-size: var(--fs-md); gap: 8px 2
 .video-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px dashed var(--border-strong); cursor: grab; font-size: var(--fs-xs); }
 .video-chip:active { cursor: grabbing; }
 .drop-on td, .match-card.drop-on { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft) !important; }
-.todo-grid { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 900px) { .todo-grid { grid-template-columns: 1fr; } }
-.todo-col { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; }
-.todo-col .match-list { max-height: 260px; overflow-y: auto; margin-top: 6px; }
+.todo-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; font-size: var(--fs-sm); }
+.todo-list li + li { border-top: 1px solid var(--border); }
+.todo-row { display: grid; grid-template-columns: 84px 124px minmax(0, 2.4fr) 56px minmax(0, 1fr) minmax(0, 1.3fr) 76px; gap: 10px; align-items: center; padding: 4px 6px; color: var(--text); text-decoration: none; }
+.todo-row:hover { background: var(--surface-2); }
+.todo-row .tag { justify-self: start; }
+.todo-row > span:not(.tag) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-names { font-weight: 600; color: var(--accent); }
+.todo-day, .todo-game, .todo-event, .todo-tournament, .todo-rallies { color: var(--muted); }
+.todo-rallies { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) {
+  .todo-row { grid-template-columns: 84px 124px minmax(0, 1fr) 56px; }
+  .todo-event, .todo-tournament, .todo-rallies { display: none; }
+}
+@media (max-width: 560px) {
+  .todo-row { grid-template-columns: 84px minmax(0, 1fr) 56px; }
+  .todo-day { display: none; }
+}
 input[type="search"] { font: inherit; font-size: var(--fs-md); color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 10px; min-height: 34px; flex: 1 1 320px; min-width: 0; }
 .transport .zoom { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
 .transport .zoom button.icon-only { font-size: 1.1rem; font-weight: 700; min-height: 30px; min-width: 30px; padding: 0; }

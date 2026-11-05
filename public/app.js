@@ -243,20 +243,28 @@ async function renderHome() {
   only.addEventListener('change', runSearch);
 
   // ---- to do: filmed matches by stage ----
-  const STAGES = [['tag', 'To tag', 'Rallies to find, or winners to give'], ['render', 'To render', 'Every rally has a winner'], ['upload', 'To upload', 'Rendered, no YouTube link yet']];
-  const todoItem = (m) => h('li', {},
-    h('a', { href: `#/m/${m.id}` }, `${teamName(m.teamA)} v ${teamName(m.teamB)}`, m.game ? ` · game ${m.game}` : ''),
-    h('div', { class: 'small muted' }, [day(m.date), m.tournament, [m.draw, m.round].filter(Boolean).join(' ')].filter(Boolean).join(' · '),
-      m.rallies ? ` · ${m.tagged}/${m.rallies} rallies` : ''));
+  const STAGES = [['tag', 'To tag', 'rallies part', 'Rallies to find, or winners to give'], ['render', 'To render', 'render', 'Every rally has a winner'], ['upload', 'To upload', 'youtube', 'Rendered, and not on YouTube yet or rendered again since']];
+  const stageTag = ([, title, kind, hint], text = title) => h('span', { class: `tag ${kind}`, title: hint }, text);
+  // One line each; what doesn't fit is cut short, and the row's tooltip has it all.
+  const todoItem = (m, stage) => {
+    const names = `${teamName(m.teamA)} v ${teamName(m.teamB)}`;
+    const event = [m.draw, m.round].filter(Boolean).join(' ');
+    return h('li', {}, h('a', { class: 'todo-row', href: `#/m/${m.id}`, title: [names, m.game ? `Game ${m.game}` : '', event, m.tournament, day(m.date)].filter(Boolean).join(' · ') },
+      stageTag(stage),
+      h('span', { class: 'todo-day' }, day(m.date)),
+      h('span', { class: 'todo-names' }, names),
+      h('span', { class: 'todo-game' }, m.game ? `Game ${m.game}` : ''),
+      h('span', { class: 'todo-event' }, event),
+      h('span', { class: 'todo-tournament' }, m.tournament),
+      h('span', { class: 'todo-rallies' }, m.rallies ? `${m.tagged}/${m.rallies} rallies` : '')));
+  };
   const todoBox = todo.counts.tag + todo.counts.render + todo.counts.upload + todo.unlinked
     ? h('div', { class: 'card stack' },
       h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('check'), 'To do'),
-        h('span', { class: 'small muted' }, `${todo.counts.done} filmed match${todo.counts.done === 1 ? '' : 'es'} on YouTube`)),
+        h('div', { class: 'row tight' }, STAGES.map((s) => stageTag(s, `${s[1]}: ${todo.counts[s[0]]}`)),
+          h('span', { class: 'small muted' }, `${todo.counts.done} filmed match${todo.counts.done === 1 ? '' : 'es'} on YouTube`))),
       todo.unlinked ? h('div', { class: 'notice warn small' }, `${todo.unlinked} video${todo.unlinked === 1 ? ' isn’t' : 's aren’t'} linked to a match. `, h('a', { href: '#/videos' }, 'See videos')) : null,
-      h('div', { class: 'todo-grid' }, STAGES.map(([k, title, hint]) => h('div', { class: 'todo-col' },
-        h('div', { class: 'row spread' }, h('strong', {}, title), h('span', { class: `pill${todo.counts[k] ? ' warn' : ''}` }, todo.counts[k])),
-        h('div', { class: 'small muted' }, hint),
-        todo[k].length ? h('ul', { class: 'match-list' }, todo[k].map(todoItem)) : h('p', { class: 'hint' }, 'Nothing here.')))))
+      h('ul', { class: 'todo-list' }, STAGES.flatMap((s) => todo[s[0]].map((m) => todoItem(m, s)))))
     : null;
 
   const setup = !settings.videoFolders.length || !favs.length;
