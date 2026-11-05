@@ -298,6 +298,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   const muteBtn = h('button', { class: 'ghost icon-only', onclick: () => { video.muted = !video.muted; fill(muteBtn, icon(video.muted ? 'mute' : 'volume')); }, 'aria-label': 'Mute', title: 'Mute' }, icon('volume'));
   const favouriteBtn = h('button', { class: 'small favourite-rally', onclick: () => toggleFavouriteHere() });
   const expandBtn = h('button', { class: 'ghost icon-only', onclick: () => setExpanded(!expanded) });
+  const cornerViewBox = h('input', { type: 'checkbox', checked: true });
+  const cornerViewNote = h('span', { class: 'muted' });
   const insetBtn = h('button', { class: 'ghost icon-only', onclick: () => (choosingArea ? stopChoosing() : chooseArea()) }, icon('inset'));
   const insetZoom = h('input', {
     type: 'range', min: INSET_ZOOM.min, max: INSET_ZOOM.max, step: 0.1, 'aria-label': 'Corner view zoom', title: 'How much the corner view enlarges its area',
@@ -480,6 +482,8 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     insetBtn.title = tip;
     insetBtn.setAttribute('aria-label', tip);
     insetBtn.classList.toggle('on', Boolean(inset) || choosingArea);
+    cornerViewBox.disabled = !inset;
+    cornerViewNote.textContent = inset ? '' : '(none chosen yet)';
     if (!inset) return;
     insetZoom.value = String(zoomOf(inset));
     insetZoomText.textContent = `${zoomOf(inset).toFixed(1)}×`;
@@ -1483,7 +1487,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     clearTimeout(saveTimer);
     await save();
     try {
-      const r = await runJob(clipBox, () => api(`/api/matches/${id}/clip`, { method: 'POST', body: { rally: i, upright, removeVoices: voicesBox.checked } }));
+      const r = await runJob(clipBox, () => api(`/api/matches/${id}/clip`, { method: 'POST', body: { rally: i, upright, removeVoices: voicesBox.checked, cornerView: cornerViewBox.checked } }));
       fill(clipBox, h('div', { class: 'notice ok row small' }, `Clip of rally ${i + 1}: ${r.seconds} s${r.upright ? (r.followed ? ', following the shuttle' : ', centred on the court') : ''}.`,
         h('button', { class: 'small', onclick: () => api('/api/reveal', { method: 'POST', body: { path: r.path } }).catch((e) => say(e.message)) }, 'Show in folder')));
       loadFiles();
@@ -1634,7 +1638,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       const untagged = rallies.filter((r) => !r.winner).length;
       if (highlightsBox.checked && !rallies.some((r) => r.fav)) return say('Mark some favourite rallies first (☆ or H)');
       if (overlayBox.checked && untagged && !confirm(`${untagged} rallies have no winner, so the scoreboard will skip them. Render anyway?`)) return;
-      followRender(() => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked, replays: replaysBox.checked, removeVoices: voicesBox.checked } }));
+      followRender(() => api(`/api/matches/${id}/render`, { method: 'POST', body: { cut: cutBox.checked, overlay: overlayBox.checked, highlights: highlightsBox.checked, titleCard: titleCardBox.checked, endCard: endCardBox.checked, replays: replaysBox.checked, removeVoices: voicesBox.checked, cornerView: cornerViewBox.checked } }));
     },
   });
   const drawRenderBtn = () => {
@@ -1938,6 +1942,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       card('Render', 'rally-cut',
         h('label', { class: 'row small', title: 'How many seconds to keep each side of a rally is in Settings' }, cutBox, 'Cut the gaps between rallies'),
         h('label', { class: 'row small' }, overlayBox, 'Show the scoreboard'),
+        h('label', { class: 'row small', title: 'Choose and place it with the corner view button beside Expand. Upright clips never have it.' }, cornerViewBox, 'Corner view', cornerViewNote),
         h('label', { class: 'row small' }, highlightsBox, 'Highlights only: the ★ rallies, to a separate file', favCount),
         h('div', { class: 'row small' }, h('label', { class: 'row' }, titleCardBox, 'Title card'), h('label', { class: 'row' }, endCardBox, 'End card with the result')),
         h('label', { class: 'row small' }, replaysBox, 'Slow-motion replay after each ★ rally'),

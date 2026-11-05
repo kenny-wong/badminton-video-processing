@@ -14,7 +14,7 @@
 // POST /api/matches/:id/detections: finds and follows the people in the video (YOLO, a job). GET: what was found
 //   (404 until then); PUT { swap: { a, b } }: which way round each doubles pair's names go.
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
-// POST /api/matches/:id/render { cut, overlay, highlights, titleCard?, endCard?, replays? }: starts a job.
+// POST /api/matches/:id/render { cut, overlay, highlights, titleCard?, endCard?, replays?, cornerView? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
 // GET /api/matches/:id/levels: the sound level along the video (404 until worked out); POST starts working it out (a job).
 // POST /api/matches/:id/clip { rally (0-based), upright }: queues a clip of one rally, upright 9:16 following the shuttle or as filmed.
@@ -321,7 +321,7 @@ export async function clip({ request, params, app }) {
   const upright = body.upright !== false;
   const removeVoices = typeof body.removeVoices === 'boolean' ? body.removeVoices : settings.output.removeVoices;
   const id = loaded.match.id;
-  const job = startJob('clip', `clip:${id}:${index}:${upright ? 'u' : 'w'}`, (j, signal) => renderClip(app.db, t, settings, id, { index, upright, removeVoices, signal, job: j }),
+  const job = startJob('clip', `clip:${id}:${index}:${upright ? 'u' : 'w'}`, (j, signal) => renderClip(app.db, t, settings, id, { index, upright, removeVoices, cornerView: body.cornerView !== false, signal, job: j }),
     { queue: 'gpu', label: `Clip of rally ${index + 1}${upright ? ' (upright)' : ''}: ${matchLabel(loaded.match)}` });
   return json(jobView(job), 202);
 }
@@ -357,7 +357,7 @@ export function startRender(app, t, settings, match, body = {}) {
     cut: body.cut !== false, overlay: body.overlay !== false, highlights: body.highlights === true,
     titleCard: typeof body.titleCard === 'boolean' ? body.titleCard : settings.cards.title, endCard: typeof body.endCard === 'boolean' ? body.endCard : settings.cards.end,
     replays: typeof body.replays === 'boolean' ? body.replays : settings.output.replays,
-    removeVoices: typeof body.removeVoices === 'boolean' ? body.removeVoices : settings.output.removeVoices, signal, job: j,
+    removeVoices: typeof body.removeVoices === 'boolean' ? body.removeVoices : settings.output.removeVoices, cornerView: body.cornerView !== false, signal, job: j,
   }), { queue: 'gpu', label: `${what}: ${matchLabel(match)}` });
 }
 
