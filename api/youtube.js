@@ -9,6 +9,7 @@
 // POST /api/matches/:id/youtube { file?, privacy?, playlist?, replace? }: uploads one of the match's finished files ('video' by default,
 //      'highlights' or 'clip:<name>'; a job, one upload at a time) and marks the match with its link. With `replace`, the
 //      video the match links to now is deleted from YouTube once the upload is done, and the new one takes its place in the playlist.
+//      When the tournament has no more uploads waiting, its playlist is put in match order (result: sorted, or sortError).
 // GET  /api/matches/:id/rendered: the finished files, with URLs to play them.
 // DELETE /api/matches/:id/rendered?key=<key>: deletes one finished file (the original video can't be: it isn't one).
 
@@ -27,7 +28,7 @@ import { matchLabel } from './matches.js';
 import { openInBrowser } from '../lib/browser.js';
 import {
   accessToken, addToTournamentPlaylist, authUrl, deleteVideo, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistPosition, playlistUrl, PRIVACY, readClient, readToken, retryAfter,
-  signOut as forget, tournamentPlaylistTitle, tournamentPlaylistUrls, uploadVideo, videoResource, videoStatus, youtubeDir,
+  signOut as forget, sortPlaylist, tournamentPlaylistTitle, tournamentPlaylistUrls, uploadVideo, videoResource, videoStatus, youtubeDir,
 } from '../lib/youtube.js';
 
 const SIGNIN_MAX_AGE = 10 * 60_000;
@@ -38,6 +39,7 @@ const dirOf = (app) => youtubeDir(app.dataDir ?? join(tmpdir(), 'badminton-video
 export const tournamentPlaylists = (app) => tournamentPlaylistUrls(dirOf(app));
 const redirectOf = (app) => `http://127.0.0.1:${app.port || Number(process.env.PORT) || 8791}/api/youtube/callback`;
 const jobKey = (id, file) => `upload:${id}:${file}`;
+const unsorted = new Map(); // tournament id -> the video last added to its playlist, until the playlist is put in match order
 
 export async function onRequestGet({ request, app }) {
   const dir = dirOf(app);
@@ -172,7 +174,7 @@ function queueUpload(app, loaded, { key, file, privacy, playlist = true, old = n
   const dir = dirOf(app);
   const body = { playlist };
   const { match, tournament } = loaded;
-  return startJob('upload', jobKey(match.id, key), async (j, signal) => {
+  const send = async (j, signal) => {
     const resource = videoResource({ title: file.title, description: file.description, privacy, recordedOn: match.date });
     j.log(`Uploading ${file.path} as ${privacy}: ${resource.snippet.title}`);
     j.message = 'Starting the upload';
@@ -209,6 +211,7 @@ function queueUpload(app, loaded, { key, file, privacy, playlist = true, old = n
         const id = await addToTournamentPlaylist(dir, { tournamentId: tournament.id, title: tournamentPlaylistTitle(tournament), privacy, position }, video.id, await token());
         result.playlist = { id, url: playlistUrl(id) };
         playlistCache.delete(id);
+        unsorted.set(tournament.id, video.id);
       } catch (err) {
         result.playlistError = err.message;
         j.log(`Playlist: ${err.message}`);
@@ -228,7 +231,40 @@ function queueUpload(app, loaded, { key, file, privacy, playlist = true, old = n
       }
     }
     return result;
+  };
+  const job = startJob('upload', jobKey(match.id, key), async (j, signal) => {
+    const result = await send(j, signal).catch(async (err) => {
+      await putInMatchOrder(app, tournament, j); // refused for the channel's limit, say: the videos before it still went up
+      throw err;
+    });
+    return { ...result, ...(await putInMatchOrder(app, tournament, j)) };
   }, { queue: 'upload', label: `YouTube${old ? ' replace' : ''} (${file.label}): ${matchLabel(match)}` });
+  job.tournamentId = tournament?.id;
+  return job;
+}
+
+/** The tournament's videos on YouTube as they were played: by start time, a match's games together and in order. */
+export const videosInMatchOrder = (db, tournamentId) => db.prepare(`SELECT youtube_url FROM matches WHERE tournament_id = ? AND youtube_url IS NOT NULL
+    ORDER BY match_date, match_time, COALESCE(parent_id, id), game`).all(tournamentId).map((r) => youtubeId(r.youtube_url)).filter(Boolean);
+
+/**
+ * When job `j` is the tournament's last upload waiting or running and videos went into its playlist:
+ * puts the playlist in match order. { sorted: { moved, videos } } or { sortError }; a failure is tried again after the next upload.
+ */
+async function putInMatchOrder(app, tournament, j) {
+  const added = unsorted.get(tournament?.id);
+  if (!added || listJobs().some((o) => o !== j && o.tournamentId === tournament.id && (o.status === 'running' || o.status === 'queued'))) return {};
+  j.message = 'Putting the playlist in match order';
+  const dir = dirOf(app);
+  try {
+    const sorted = await sortPlaylist(await knownPlaylist(dir, tournament.id), videosInMatchOrder(app.db, tournament.id), await accessToken(dir), fetch, { added });
+    unsorted.delete(tournament.id);
+    j.log(`Playlist in match order: ${sorted.moved} of ${sorted.videos} videos moved`);
+    return { sorted };
+  } catch (err) {
+    j.log(`Putting the playlist in match order: ${err.message}`);
+    return { sortError: err.message };
+  }
 }
 
 /**

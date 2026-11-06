@@ -654,9 +654,10 @@ async function renderTournament(id, notice = null, who = null) {
   };
   const followRender = (uid, job) => follow(uid, job, renderJobs, () => h('div', { class: 'notice ok' }, 'Rendered: its file is ready to watch and upload.'), 'render');
   // waitJob gives the job's result: the upload's { url, locked, … }.
-  const followUpload = (uid, job) => follow(uid, job, uploadJobs, (r) => h('div', { class: r?.replaceError ? 'notice warn' : 'notice ok' }, r?.replaced ? 'Replaced on YouTube' : 'Uploaded to YouTube',
+  const followUpload = (uid, job) => follow(uid, job, uploadJobs, (r) => h('div', { class: r?.replaceError || r?.sortError ? 'notice warn' : 'notice ok' }, r?.replaced ? 'Replaced on YouTube' : 'Uploaded to YouTube',
     r?.url ? [': ', h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.url)] : '', r?.locked ? ' (YouTube keeps it private for now)' : '', '.',
-    r?.replaceError ? ` The old video (${r.replaced?.url}) is still on YouTube: ${r.replaceError}` : ''), 'upload');
+    r?.replaceError ? ` The old video (${r.replaced?.url}) is still on YouTube: ${r.replaceError}` : '',
+    r?.sorted?.moved ? ' The playlist is in match order.' : '', r?.sortError ? ` The playlist couldn’t be put in match order: ${r.sortError}` : ''), 'upload');
   const startRender = async (uid) => {
     try {
       followRender(uid, await api(`/api/matches/${uid}/render`, { method: 'POST', body: {} }));

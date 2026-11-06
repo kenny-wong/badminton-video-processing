@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, deleteVideo, knownPlaylist, nextOffset, nextPacificMidnight, retryAfter, parseDescribed, pkce, playlistInfo, playlistPosition, playlistTitle, readClient, tournamentPlaylistTitle, tournamentPlaylistUrls,
+  accessToken, addToTournamentPlaylist, apiError, authUrl, cutBytes, deleteVideo, knownPlaylist, nextOffset, nextPacificMidnight, retryAfter, parseDescribed, pkce, playlistInfo, playlistMoves, playlistPosition, playlistTitle, readClient, sortPlaylist, tournamentPlaylistTitle, tournamentPlaylistUrls,
   uploadVideo, videoResource,
 } from '../lib/youtube.js';
 
@@ -283,4 +283,46 @@ test('retryAfter: when an upload refused for a limit can go again', () => {
   assert.equal(new Date(nextPacificMidnight(Date.parse('2026-11-01T12:00:00Z'))).toISOString(), '2026-11-02T08:00:00.000Z');
   assert.equal(retryAfter('rateLimitExceeded', { now }), '2026-11-02T22:05:00.000Z');
   assert.equal(retryAfter('forbidden', { now }), null);
+});
+
+const listed = (...videos) => videos.map((videoId) => ({ id: `i-${videoId}`, videoId }));
+const applied = (items, moves) => {
+  const list = [...items];
+  for (const { item, position } of moves) list.splice(position, 0, ...list.splice(list.indexOf(item), 1));
+  return list.map((x) => x.videoId);
+};
+
+test('playlistMoves moves only what is out of place, and leaves videos it doesn’t know where they are', () => {
+  assert.deepEqual(playlistMoves(listed('a', 'b', 'c'), ['a', 'b', 'c']), []);
+  const late = listed('b', 'c', 'a'); // the usual case: the new video belongs earlier
+  assert.deepEqual(playlistMoves(late, ['a', 'b', 'c']), [{ item: late[2], position: 0 }]);
+  const mixed = listed('c', 'x', 'a', 'y', 'b');
+  assert.deepEqual(applied(mixed, playlistMoves(mixed, ['a', 'b', 'c'])), ['a', 'x', 'b', 'y', 'c']);
+  // The same video twice, as a retried add can leave it: each copy is an item of its own.
+  const twice = listed('b', 'a', 'a');
+  assert.deepEqual(applied(twice, playlistMoves(twice, ['a', 'b'])), ['a', 'a', 'b']);
+});
+
+test('sortPlaylist reads every page, waits for a video just added, and retries a busy playlist', async () => {
+  const videos = ['c', 'b'];
+  let reads = 0;
+  let busy = 1;
+  const waits = [];
+  const puts = [];
+  const fetchImpl = async (url, opts = {}) => {
+    if (opts.method === 'PUT') {
+      if (busy-- > 0) return jsonRes({ error: { code: 409, message: 'Busy' } }, 409);
+      const { id, snippet } = JSON.parse(opts.body);
+      puts.push([id, snippet.playlistId, snippet.resourceId.videoId, snippet.position]);
+      return jsonRes({ id });
+    }
+    const q = new URL(url).searchParams;
+    if (!q.has('pageToken') && ++reads === 2) videos.push('a'); // the new video shows on the second read
+    if (q.get('pageToken')) return jsonRes({ items: videos.slice(1).map((v) => ({ id: `i-${v}`, snippet: { resourceId: { videoId: v } } })) });
+    return jsonRes({ items: [{ id: `i-${videos[0]}`, snippet: { resourceId: { videoId: videos[0] } } }], nextPageToken: 'more' });
+  };
+  const done = await sortPlaylist('PL9', ['a', 'b', 'c'], 'tok', fetchImpl, { added: 'a', wait: async (ms) => { waits.push(ms); } });
+  assert.deepEqual(done, { moved: 2, videos: 3 });
+  assert.deepEqual(puts, [['i-a', 'PL9', 'a', 0], ['i-b', 'PL9', 'b', 1]]);
+  assert.deepEqual(waits, [2000, 2000]); // one for the video to show, one for the busy playlist
 });

@@ -8,7 +8,8 @@ import { openDb } from '../lib/db.js';
 import { saveTournament } from '../lib/tournaments.js';
 import { parseMatches } from '../lib/schedule.js';
 import { getJob } from '../lib/jobs.js';
-import { onRequestGet, renderedList, upload, uploadAll } from '../api/youtube.js';
+import { gameRow } from '../api/matches.js';
+import { onRequestGet, renderedList, upload, uploadAll, videosInMatchOrder } from '../api/youtube.js';
 import { rmSync } from 'node:fs';
 import { PAGE } from './fixtures/be-pages.js';
 
@@ -32,26 +33,50 @@ function setUp() {
   return { app: { db, dataDir }, id };
 }
 
-/** A pretend YouTube: records each call; `uploadFails` makes the upload itself fail (true, or Google's error reply). */
-function fakeYouTube({ uploadFails = false } = {}) {
+/**
+ * A pretend YouTube: records each call; `uploadFails` makes the upload itself fail (true, or Google's error reply),
+ * after `uploadsOk` good ones. `playlist` (video ids) is the playlist's order, kept up to date. `ids` names the uploads
+ * in turn; `manual` false refuses moves as for a playlist sorted by date.
+ */
+function fakeYouTube({ uploadFails = false, uploadsOk = 0, playlist = [], ids = ['NEW0000000b'], manual = true } = {}) {
   const calls = [];
+  let sent = 0;
+  const state = { manual };
   const fetch = async (url, opts = {}) => {
     const method = opts.method ?? 'GET';
     const u = String(url);
     calls.push(`${method} ${u.replace('https://www.googleapis.com', '')}`);
     if (u.includes('uploadType=resumable')) return new Response(null, { status: 200, headers: { Location: 'https://upload.test/session' } });
-    if (u === 'https://upload.test/session') return uploadFails ? jsonRes(uploadFails === true ? { error: { code: 400, message: 'Bad video' } } : uploadFails, 400) : jsonRes({ id: 'NEW0000000b', status: { privacyStatus: 'unlisted', uploadStatus: 'uploaded' } });
+    if (u === 'https://upload.test/session') {
+      if (uploadFails && sent >= uploadsOk) return jsonRes(uploadFails === true ? { error: { code: 400, message: 'Bad video' } } : uploadFails, 400);
+      return jsonRes({ id: ids[Math.min(sent++, ids.length - 1)], status: { privacyStatus: 'unlisted', uploadStatus: 'uploaded' } });
+    }
     if (u.includes('/videos?part=status')) return jsonRes({ items: [{ status: { privacyStatus: 'unlisted', uploadStatus: 'processed' } }] });
     if (u.includes('/playlistItems?part=snippet&playlistId=')) return jsonRes({ items: [{ snippet: { position: 1 } }] });
+    if (u.includes('/playlistItems?part=snippet&maxResults=')) return jsonRes({ items: playlist.map((videoId, i) => ({ id: `item-${videoId}`, snippet: { position: i, resourceId: { videoId } } })) });
     if (u.includes('/playlists?part=snippet&id=')) return jsonRes({ items: [{ id: 'PL1', snippet: { title: 'Example' } }] });
     if (method === 'POST' && u.includes('/playlistItems')) {
-      calls.push(`  position ${JSON.parse(opts.body).snippet.position}`);
+      const { position, resourceId } = JSON.parse(opts.body).snippet;
+      calls.push(`  position ${position}`);
+      playlist.splice(position ?? playlist.length, 0, resourceId.videoId);
       return jsonRes({ id: 'item' });
     }
-    if (method === 'DELETE') return new Response(null, { status: 204 });
+    if (method === 'PUT' && u.includes('/playlistItems')) {
+      if (!state.manual) return jsonRes({ error: { code: 400, message: 'Not manual', errors: [{ reason: 'manualSortRequired' }] } }, 400);
+      const { id, snippet } = JSON.parse(opts.body);
+      assert.equal(id, `item-${snippet.resourceId.videoId}`);
+      playlist.splice(playlist.indexOf(snippet.resourceId.videoId), 1);
+      playlist.splice(snippet.position, 0, snippet.resourceId.videoId);
+      return jsonRes({ id });
+    }
+    if (method === 'DELETE') {
+      const gone = new URL(u).searchParams.get('id');
+      if (playlist.includes(gone)) playlist.splice(playlist.indexOf(gone), 1);
+      return new Response(null, { status: 204 });
+    }
     throw new Error(`unexpected ${method} ${u}`);
   };
-  return { calls, fetch };
+  return { calls, fetch, state, playlist };
 }
 
 async function finished(res) {
@@ -91,6 +116,7 @@ test('Replace uploads first, puts the new video in the old one’s place in the 
     'POST /youtube/v3/playlistItems?part=snippet',
     '  position 1',
     'DELETE /youtube/v3/videos?id=OLD0000000a',
+    'GET /youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=PL1', // nothing out of place: nothing moves
   ]);
   assert.deepEqual(job.result.replaced, { url: 'https://youtu.be/OLD0000000a', deleted: true });
   assert.equal(app.db.prepare('SELECT youtube_url FROM matches WHERE id = ?').get(id).youtube_url, 'https://youtu.be/NEW0000000b');
@@ -175,4 +201,84 @@ test('an upload refused for the channel’s limit says when it can go again: a d
   assert.equal(job.status, 'failed');
   assert.match(job.error, /upload limit/);
   assert.equal(job.retryAt, new Date(Date.parse(earlier) + 86400_000).toISOString());
+});
+
+/** The tournament's first `n` matches by time, each rendered with a phone video and none on YouTube. */
+function renderedMatches(app, id, n) {
+  const tid = app.db.prepare('SELECT tournament_id FROM matches WHERE id = ?').get(id).tournament_id;
+  app.db.prepare('UPDATE matches SET youtube_url = NULL WHERE tournament_id = ?').run(tid);
+  const ids = app.db.prepare('SELECT id FROM matches WHERE tournament_id = ? AND game = 0 ORDER BY match_date, match_time, id LIMIT ?').all(tid, n).map((r) => r.id);
+  for (const m of ids) {
+    const path = join(app.dataDir, `render-${m}.mp4`);
+    writeFileSync(path, 'rendered bytes');
+    app.db.prepare('UPDATE matches SET output_path = ? WHERE id = ?').run(path, m);
+    app.db.prepare("INSERT INTO videos (path, size, modified_at, recorded_at, duration, match_id) VALUES (?, 14, 'x', '2026-10-24T08:05:00Z', 600, ?)").run(path, m);
+  }
+  return { tid, ids };
+}
+
+const uploadAllRendered = async (app, tid) => {
+  const r = await (await uploadAll({ request: new Request(`http://127.0.0.1/api/tournaments/${tid}/upload-all`, { method: 'POST', body: JSON.stringify({ kind: 'rendered' }) }), params: { id: String(tid) }, app })).json();
+  const jobs = [];
+  for (const j of r.jobs) jobs.push(await finished(new Response(JSON.stringify(j))));
+  return jobs;
+};
+
+test('the playlist goes into match order once, after the tournament’s last upload, leaving unknown videos in place', async () => {
+  const { app, id } = setUp();
+  const { tid, ids } = renderedMatches(app, id, 3);
+  app.db.prepare("UPDATE matches SET youtube_url = 'https://youtu.be/LATE0000000' WHERE id = ?").run(ids[2]); // uploaded first, played last
+  const yt = fakeYouTube({ playlist: ['LATE0000000', 'HAND0000000'], ids: ['FIRST000000', 'SECOND00000'] });
+  const jobs = await withFetch(yt.fetch, () => uploadAllRendered(app, tid));
+  assert.deepEqual(jobs.map((j) => j.status), ['done', 'done']);
+  assert.deepEqual(yt.playlist, ['FIRST000000', 'HAND0000000', 'SECOND00000', 'LATE0000000']);
+  assert.equal(jobs[0].result.sorted, undefined); // more were waiting
+  assert.deepEqual(jobs[1].result.sorted, { moved: 3, videos: 4 });
+  const lastUpload = yt.calls.findLastIndex((c) => c.includes('upload.test/session'));
+  assert.ok(yt.calls.findIndex((c) => c.startsWith('PUT') && c.includes('playlistItems')) > lastUpload);
+});
+
+test('a last upload YouTube refuses still leaves the ones before it in match order', async () => {
+  const { app, id } = setUp();
+  const { tid, ids } = renderedMatches(app, id, 3);
+  app.db.prepare("UPDATE matches SET youtube_url = 'https://youtu.be/LATE0000000' WHERE id = ?").run(ids[2]);
+  const refused = { error: { code: 400, message: 'Too many', errors: [{ reason: 'uploadLimitExceeded' }] } };
+  const yt = fakeYouTube({ playlist: ['LATE0000000'], ids: ['FIRST000000'], uploadFails: refused, uploadsOk: 1 });
+  const jobs = await withFetch(yt.fetch, () => uploadAllRendered(app, tid));
+  assert.deepEqual(jobs.map((j) => j.status), ['done', 'failed']);
+  assert.deepEqual(yt.playlist, ['FIRST000000', 'LATE0000000']);
+});
+
+test('a playlist YouTube won’t reorder says why, keeps the upload, and is tried again after the next one', async () => {
+  const { app, id } = setUp();
+  const { ids } = renderedMatches(app, id, 3);
+  app.db.prepare("UPDATE matches SET youtube_url = 'https://youtu.be/LATE0000000' WHERE id = ?").run(ids[2]);
+  const yt = fakeYouTube({ playlist: ['LATE0000000'], ids: ['FIRST000000', 'SECOND00000'], manual: false });
+  const first = await withFetch(yt.fetch, async () => finished(await upload({ ...post(ids[0], {}), app })));
+  assert.equal(first.status, 'done', first.error);
+  assert.match(first.result.sortError, /Manual/);
+  assert.equal(app.db.prepare('SELECT youtube_url FROM matches WHERE id = ?').get(ids[0]).youtube_url, 'https://youtu.be/FIRST000000');
+  yt.state.manual = true;
+  const second = await withFetch(yt.fetch, async () => finished(await upload({ ...post(ids[1], {}), app })));
+  assert.equal(second.result.sortError, undefined);
+  assert.deepEqual(yt.playlist, ['FIRST000000', 'SECOND00000', 'LATE0000000']);
+});
+
+test('an upload kept out of the playlist doesn’t touch its order', async () => {
+  const { app, id } = setUp();
+  const { ids } = renderedMatches(app, id, 1);
+  const yt = fakeYouTube({ playlist: ['HAND0000000'] });
+  const job = await withFetch(yt.fetch, async () => finished(await upload({ ...post(ids[0], { playlist: false }), app })));
+  assert.equal(job.status, 'done', job.error);
+  assert.ok(!yt.calls.some((c) => c.includes('maxResults')));
+});
+
+test('match order is by start time, with a match’s games together and in order', () => {
+  const { app, id } = setUp();
+  const { tid, ids } = renderedMatches(app, id, 2);
+  const [earlier, later] = ids;
+  const games = [2, 1].map((g) => gameRow(app.db, earlier, g));
+  const links = [[later, 'LATE0000000'], [games[0], 'GAME2000000'], [games[1], 'GAME1000000']];
+  for (const [m, video] of links) app.db.prepare('UPDATE matches SET youtube_url = ? WHERE id = ?').run(`https://youtu.be/${video}`, m);
+  assert.deepEqual(videosInMatchOrder(app.db, tid), ['GAME1000000', 'GAME2000000', 'LATE0000000']);
 });

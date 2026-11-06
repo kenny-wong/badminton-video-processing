@@ -21,7 +21,7 @@ const TIPS = {
   channel: 'The YouTube channel uploads go to',
   file: 'Which finished video to upload: the whole match, the ★ highlights or a rally clip. Newest first.',
   privacy: 'Who can watch the upload. Unlisted: only people you send the link to; it doesn’t show on your channel or in search. Private: only you. Public: everyone, in search too. You can change it later in YouTube Studio.',
-  playlist: 'Puts the video in a YouTube playlist named after the tournament, so one link shares all its matches. The playlist is made with the first upload (Unlisted, or Public for public videos); later uploads from the tournament join it.',
+  playlist: 'Puts the video in a YouTube playlist named after the tournament, so one link shares all its matches. The playlist is made with the first upload (Unlisted, or Public for public videos); later uploads from the tournament join it, and once the last one waiting is up the playlist is put in match order.',
   upload: 'Uploads the chosen video with its title and description (chapters too when there are at least 3), then saves its link on this match, replacing any earlier one. You can keep working; it shows on the Jobs page.',
   replace: 'Uploads the chosen video as a new YouTube video, puts it in the old one’s place in the playlist, then deletes the old one. YouTube can’t swap the file inside a video, so the link changes and the old views and comments go.',
   byHand: 'Copies the title, opens YouTube’s upload page in Chrome and shows the file in Explorer, for you to drag across.',
@@ -116,6 +116,8 @@ export function youtubePanel({ id, preview, runJob, errorNotice, say, onUploaded
           r.uploadStatus && r.uploadStatus !== 'processed' ? h('div', { class: 'small' }, 'YouTube is still processing it; HD takes a while longer.') : null),
       r.playlist ? h('p', { class: 'small' }, 'Added to the tournament’s playlist: ', h('a', { href: r.playlist.url, target: '_blank', rel: 'noopener' }, 'open playlist ↗')) : null,
       r.playlistError ? h('div', { class: 'notice warn small' }, `Uploaded, but not added to the tournament’s playlist: ${r.playlistError}. Add it in YouTube Studio (Playlists).`) : null,
+      r.sorted?.moved ? h('p', { class: 'small' }, 'The playlist is in match order.') : null,
+      r.sortError ? h('div', { class: 'notice warn small' }, `The playlist couldn’t be put in match order: ${r.sortError}`) : null,
       r.replaceError ? h('div', { class: 'notice warn small' }, `The old video (${r.replaced?.url}) is still on YouTube: ${r.replaceError}`)
         : r.replaced ? h('p', { class: 'small' }, r.replaced.deleted ? `The old video (${r.replaced.url}) was deleted.` : `The old video (${r.replaced.url}) was already gone from YouTube.`) : null);
   };
