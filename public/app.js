@@ -81,6 +81,7 @@ async function checkServerVersion() {
     chip.title = `This window: ${PAGE_VERSION}. The server can’t be reached.`;
     return;
   }
+  if (server.dev) markDev();
   const since = server.startedAt ? new Date(server.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
   chip.title = `This window: ${PAGE_VERSION}. Server: ${server.version}${since ? `, running since ${since}` : ''}.`;
   const advice = versionAdvice(PAGE_VERSION, server.version);
@@ -94,6 +95,23 @@ async function checkServerVersion() {
       ? [h('span', {}, `Server version ${server.version} doesn’t match this app (${PAGE_VERSION}). The server needs to be restarted.`),
         h('button', { class: 'small primary', onclick: (e) => restartServer(e.currentTarget, server.boot) }, 'Restart server')]
       : null);
+}
+// A development copy (not the installed app): yellow mark, a DEV badge, and "(dev)" after every page title.
+const DEV_SUFFIX = ' (dev)';
+const devTitle =(title) => (title.endsWith(DEV_SUFFIX) ? title : `${title}${DEV_SUFFIX}`);
+function markDev() {
+  if (document.documentElement.dataset.dev !== undefined) return;
+  document.documentElement.dataset.dev = '';
+  const mark = 'visual-kit/app-mark-dev.svg';
+  document.querySelector('.brand img')?.setAttribute('src', mark);
+  document.querySelector('link[rel="icon"]')?.setAttribute('href', mark);
+  document.querySelector('.brand .version')?.after(h('span', { class: 'dev-badge', title: 'A development copy, not the installed app' }, 'DEV'));
+  const fix = () => {
+    const t = devTitle(document.title);
+    if (t !== document.title) document.title = t;
+  };
+  fix();
+  new MutationObserver(fix).observe(document.head, { childList: true, subtree: true, characterData: true });
 }
 // Restarts the server, then reloads this window once the new one answers.
 async function restartServer(button, oldBoot) {

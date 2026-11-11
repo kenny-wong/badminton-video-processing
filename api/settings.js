@@ -1,4 +1,4 @@
-// GET /api/version: the version this server runs, its run id and when it started.
+// GET /api/version: the version this server runs, its run id, when it started and whether it's a development copy.
 // POST /api/restart { force? }: restarts the server (409 while jobs run, unless force).
 // GET /api/settings: the settings, the app version, whether FFmpeg was found, and a
 //   frame of the latest linked video for the scoreboard preview.
@@ -22,7 +22,8 @@ import { toolsFolder } from '../lib/analysis.js';
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const STARTED = new Date().toISOString();
 
-export const versionRoute = () => json({ version, boot: BOOT, startedAt: STARTED });
+// dev: not the installed app (a development copy: `npm run app`, `npm start`), so the page can say so.
+export const versionRoute = () => json({ version, boot: BOOT, startedAt: STARTED, dev: process.env.BADMINTON_VIDEO_DEV === '1' });
 
 export async function restart({ request, app }) {
   const body = (await readJson(request)) ?? {};

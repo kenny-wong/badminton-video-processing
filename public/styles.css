@@ -864,6 +864,7 @@ svg.landing-map .rally-dot:hover { stroke-opacity: 1; stroke-width: 2; }
 button.rally-link { display: inline; padding: 0; min-height: 0; border: 0; background: none; box-shadow: none; font: inherit; color: var(--accent); text-transform: inherit; letter-spacing: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 button.rally-link:hover { color: var(--accent-hover); }
 .panel-tabs button { padding: 6px 4px; gap: 4px; }
+.dev-badge { color: #3d2f00; background: #f5c518; font-weight: 800; font-size: 0.68rem; letter-spacing: 0.06em; padding: 1px 7px; border-radius: 999px; }
 .server-version { color: #3d2f00; background: var(--gold); font-weight: 700; font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; margin-left: -20px; }
 .version-banner { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 8px 20px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, transparent); font-size: var(--fs-sm); font-weight: 600; }
 

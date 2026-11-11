@@ -50,3 +50,22 @@ test('one icon: the installer’s is drawn from the mark the page uses, on every
   assert.equal(build.win.icon, 'build/icon.png');
   assert.ok(!existsSync(new URL('../public/favicon.svg', import.meta.url)), 'the old icon is gone');
 });
+
+test('a development copy says so: yellow window icon, (dev) title, and /api/version dev', async () => {
+  const main = readFileSync(new URL('../electron/main.js', import.meta.url), 'utf8');
+  assert.match(main, /build\/icon-dev\.png/);
+  assert.match(main, /if \(!app\.isPackaged\) process\.env\.BADMINTON_VIDEO_DEV = '1'/);
+  assert.match(readFileSync(new URL('../scripts/make-icon.mjs', import.meta.url), 'utf8'), /app-mark-dev\.svg', '\.\.\/build\/icon-dev\.png/);
+  assert.ok(existsSync(new URL('../public/visual-kit/app-mark-dev.svg', import.meta.url)));
+  const { versionRoute } = await import('../api/settings.js');
+  const before = process.env.BADMINTON_VIDEO_DEV;
+  try {
+    delete process.env.BADMINTON_VIDEO_DEV;
+    assert.equal((await versionRoute().json()).dev, false);
+    process.env.BADMINTON_VIDEO_DEV = '1';
+    assert.equal((await versionRoute().json()).dev, true);
+  } finally {
+    if (before === undefined) delete process.env.BADMINTON_VIDEO_DEV;
+    else process.env.BADMINTON_VIDEO_DEV = before;
+  }
+});

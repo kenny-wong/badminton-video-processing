@@ -25,7 +25,7 @@ function pngChunks(buf) {
   return types;
 }
 
-const files = [...images('public'), join('build', 'icon.png')];
+const files = [...images('public'), join('build', 'icon.png'), join('build', 'icon-dev.png')];
 
 test('the app has pictures to check', () => {
   assert.ok(files.some((f) => f.endsWith('court-banner.png')));

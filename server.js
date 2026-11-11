@@ -339,6 +339,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv
     process.exit(1);
   });
   const dataDir = fileURLToPath(new URL('./data/', import.meta.url));
+  process.env.BADMINTON_VIDEO_DEV ??= '1'; // the project's own copy, not the installed app
   startServer({ dataDir, dbPath: process.env.DB_PATH || undefined, onListening: (address) => {
     if (process.argv.includes('--open') && existsSync(CHROME)) {
       spawn(CHROME, [`--app=${address}`, '--window-size=1400,900'], { detached: true, stdio: 'ignore' }).unref();

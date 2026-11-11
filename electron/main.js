@@ -14,6 +14,8 @@ import { linkAction, windowKey } from './links.js';
 const NAME = 'Badminton Video';
 // 8791 is `npm start`'s, so the installed app and a development copy can run side by side.
 const PORT = app.isPackaged ? 8792 : 8793;
+// A development copy says so: the page shows a yellow mark and "(dev)" in its title (GET /api/version `dev`).
+if (!app.isPackaged) process.env.BADMINTON_VIDEO_DEV = '1';
 
 if (process.env.LOCALAPPDATA) app.setPath('userData', join(process.env.LOCALAPPDATA, app.isPackaged ? NAME : `${NAME} (development)`));
 const dataDir = process.env.BADMINTON_VIDEO_DATA || join(app.getPath('userData'), 'data');
@@ -38,11 +40,12 @@ function freePort(port, tries = 20) {
 
 function openWindow(address, listJobs) {
   const origin = new URL(address).origin;
-  const icon = fileURLToPath(new URL('../build/icon.png', import.meta.url));
+  // The installed app takes its icon from the .exe; a development copy uses the yellow one.
+  const icon = fileURLToPath(new URL('../build/icon-dev.png', import.meta.url));
   win = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: NAME,
+    title: app.isPackaged ? NAME : `${NAME} (dev)`,
     icon: !app.isPackaged && existsSync(icon) ? icon : undefined,
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
