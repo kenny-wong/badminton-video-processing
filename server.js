@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { openDb } from './lib/db.js';
+import { labelGroupMatches } from './lib/group-rounds.js';
 import { fail, idParam, serverError } from './lib/http.js';
 import { loadMatch, sourceFor } from './lib/pipeline.js';
 import { renderedFile } from './lib/rendered.js';
@@ -323,6 +324,13 @@ export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.d
   // a job "started" in the log with no "finished" or "failed" after it is how that shows.
   process.on('exit', (code) => console.log(`Server stopping (exit code ${code})`));
   const db = openDb(dbPath);
+  try {
+    const t = Date.now();
+    const n = labelGroupMatches(db); // group matches numbered in play order (and after the migration that added the column)
+    if (n) console.log(`Group matches numbered in play order: ${n} rows updated in ${Date.now() - t} ms`);
+  } catch (err) {
+    console.error('Numbering group matches', err);
+  }
   const server = createApp({ db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart });
   listenWhenFree(server, port, '127.0.0.1', () => {
     const address = `http://127.0.0.1:${port}/`;

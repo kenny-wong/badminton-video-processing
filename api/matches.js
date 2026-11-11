@@ -85,7 +85,7 @@ export function onRequestGet({ params, app }) {
     highlights: { ...describeOutput(loaded, null, { ...described, highlights: true }), exists: Boolean(match.highlightsPath && existsSync(match.highlightsPath)) },
     units: unitsOf(app.db, match),
     stranded: strandedTagging(app.db, match.tournamentId, match.id).map((r) => ({
-      id: r.id, date: r.match_date, time: r.match_time, draw: r.draw, round: r.round, teamA: JSON.parse(r.team_a), teamB: JSON.parse(r.team_b), rallies: rallyCount(r),
+      id: r.id, date: r.match_date, time: r.match_time, draw: r.draw, round: r.round_label ?? r.round, teamA: JSON.parse(r.team_a), teamB: JSON.parse(r.team_b), rallies: rallyCount(r),
     })),
     jobs,
   });

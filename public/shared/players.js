@@ -132,7 +132,7 @@ export function matchPasses(m, f) {
   if (f.fav && !m.favourite) return false;
   const words = String(f.text ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {
-    const text = [m.tournament, m.draw, m.round, ...m.teamA, ...m.teamB].join(' ').toLowerCase();
+    const text = [m.tournament, m.draw, m.round, m.beRound, ...m.teamA, ...m.teamB].join(' ').toLowerCase();
     if (!words.every((w) => text.includes(w))) return false;
   }
   return true;

@@ -847,7 +847,8 @@ async function renderTournament(id, notice = null, who = null) {
         h('span', { class: `game-point${g[k] > g[1 - k] ? ' win' : g[k] < g[1 - k] ? ' lose' : ''}`, title: `Game ${j + 1}: ${teamName(k ? m.teamB : m.teamA)} ${g[k]}`, 'aria-label': `Game ${j + 1}: ${g[k]}` }, g[k]))) : null)));
 
   const eventLine = (m) => h('div', { class: 'match-event small' },
-    h('span', { class: 'event-label' }, m.draw || 'Match'), h('span', { class: 'muted' }, m.round),
+    h('span', { class: 'event-label' }, m.draw || 'Match'),
+    h('span', { class: 'muted', title: m.beRound && m.beRound !== m.round ? `Badminton England calls it ${m.beRound}: the fixture's place in the group, not when it's played` : null }, m.round),
     !m.games?.length ? h('span', { class: 'muted result-pending', title: 'No result is recorded: not played yet, or played but its result isn’t in yet (Update results)' }, 'No result yet') : null);
 
   // One game: its thumbnail when filmed, its name and score, progress, its next steps (Render, Upload) and
@@ -973,7 +974,7 @@ async function renderTournament(id, notice = null, who = null) {
     const words = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return matches.filter((m) => {
       if (!picked(m) || (prefs.hideNoVideo && !hasVideo(m))) return false;
-      const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.court, courtOf(m), m.time, m.date].join(' ').toLowerCase();
+      const text = [...m.teamA, ...m.teamB, m.draw, m.round, m.beRound, m.court, courtOf(m), m.time, m.date].join(' ').toLowerCase();
       if (!words.every((word) => text.includes(word))) return false;
       if (!passesStars(m, viewState.stars)) return false;
       if (!progressFilter.value) return true;

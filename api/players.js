@@ -15,6 +15,7 @@ import { fail, idParam, json, readJson } from '../lib/http.js';
 import { apiUrl, badminfoId, entrants, getJson, playerPageUrl } from '../lib/badminfo.js';
 import { matchFromRow } from '../lib/db.js';
 import { matchPeople, playerFromRow, refreshProfile, refreshProfiles, saveEntrants, teamIds } from '../lib/players.js';
+import { labelGroupMatches } from '../lib/group-rounds.js';
 import { addFavourite, favouriteMatcher, favourites, favouriteTournaments, linkFavourite, orderFavourites, removeFavourite, setStarred } from '../lib/favourites.js';
 import { loadMatch } from '../lib/pipeline.js';
 import { importPlayerTournaments } from '../lib/player-import.js';
@@ -53,7 +54,7 @@ function matchesOf(db, id, playlists = {}) {
 
 /** A match as the player pages list it. */
 const view = (m, r, side = null) => ({
-  id: m.id, tournamentId: m.tournamentId, tournament: r.tournament_name, tournamentStart: r.tournament_start ?? m.date, date: m.date, time: m.time, draw: m.draw, round: m.round,
+  id: m.id, tournamentId: m.tournamentId, tournament: r.tournament_name, tournamentStart: r.tournament_start ?? m.date, date: m.date, time: m.time, draw: m.draw, round: m.round, beRound: m.beRound,
   event: eventCode(m.draw), favourite: m.favourite,
   teamA: m.teamA, teamB: m.teamB, games: m.games, side, winner: resultWinner(m),
   won: side && resultWinner(m) ? resultWinner(m) === side : null,
@@ -137,7 +138,9 @@ export async function addFavouriteRoute({ request, app }) {
   }
   // A favourite's profile (win chances, rating history) is read in the background.
   if (player.id) refreshProfile(app.db, player.id).catch((err) => console.error('reading a player profile', err));
-  return json({ key: addFavourite(app.db, { ...player, starred: body.starred !== false }) }, 201);
+  const key = addFavourite(app.db, { ...player, starred: body.starred !== false });
+  labelGroupMatches(app.db); // a group match whose two sides differ is numbered from the starred player's side
+  return json({ key }, 201);
 }
 
 export async function linkFavouriteRoute({ request, params, app }) {
@@ -153,11 +156,14 @@ export async function linkFavouriteRoute({ request, params, app }) {
   }
   if (typeof body.starred === 'boolean' && body.link === undefined) {
     setStarred(app.db, key, body.starred);
+    labelGroupMatches(app.db);
     return json({ key, starred: body.starred });
   }
   const player = await linkedPlayer(app.db, body.link);
   if (player.error) return player.error;
-  return json({ key: linkFavourite(app.db, key, player.id, player.name) });
+  const linked = linkFavourite(app.db, key, player.id, player.name);
+  labelGroupMatches(app.db);
+  return json({ key: linked });
 }
 
 export async function orderFavouritesRoute({ request, app }) {
@@ -171,6 +177,7 @@ export async function orderFavouritesRoute({ request, app }) {
 export function removeFavouriteRoute({ params, app }) {
   const key = idParam(params.key);
   if (!key || !removeFavourite(app.db, key)) return fail(404, 'notFound', 'No such favourite');
+  labelGroupMatches(app.db);
   return json({ ok: true });
 }
 

@@ -11,7 +11,7 @@ import { scanFolders } from '../lib/videos.js';
 import { detachVideo } from '../lib/tagging.js';
 
 export function onRequestGet({ app }) {
-  const rows = app.db.prepare(`SELECT v.*, m.team_a, m.team_b, m.draw, m.round, m.tournament_id, t.name AS tournament
+  const rows = app.db.prepare(`SELECT v.*, m.team_a, m.team_b, m.draw, COALESCE(m.round_label, m.round) AS round, m.tournament_id, t.name AS tournament
     FROM videos v LEFT JOIN matches m ON m.id = v.match_id LEFT JOIN tournaments t ON t.id = m.tournament_id
     ORDER BY v.recorded_at DESC, v.path`).all();
   return json({
