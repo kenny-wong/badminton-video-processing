@@ -6,7 +6,7 @@ test('the version on the page equals package.json', () => {
   const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(version, /^\d+\.\d+\.\d+$/);
-  assert.equal(/<span class="version">([^<]*)<\/span>/.exec(html)?.[1], version);
+  assert.equal(/<a class="version" href="#\/releases"[^>]*>([^<]*)<\/a>/.exec(html)?.[1], version);
 });
 
 test('page and server versions: reload when the server is newer, restart it when older', async () => {

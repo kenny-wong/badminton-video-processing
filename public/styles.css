@@ -162,7 +162,9 @@ a { color: var(--accent); text-underline-offset: 2px; }
 }
 .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font-weight: 650; font-size: var(--fs-lg); letter-spacing: -0.01em; }
 .brand img { border-radius: 7px; box-shadow: 0 0 0 1px rgb(255 255 255 / 15%); }
-.version { color: var(--head-muted); font-weight: 500; font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; background: rgb(255 255 255 / 9%); }
+.brand-home { display: flex; align-items: center; gap: inherit; color: inherit; text-decoration: none; }
+.version { color: var(--head-muted); font-weight: 500; font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; background: rgb(255 255 255 / 9%); text-decoration: none; transition: background 0.15s, color 0.15s; }
+a.version:hover, a.version:focus-visible { color: var(--head-text); background: rgb(255 255 255 / 18%); }
 .tabs { display: flex; gap: 2px; }
 .tabs a {
   display: inline-flex; align-items: center; gap: 7px;
@@ -985,3 +987,19 @@ input[type="search"].tournament-find { flex: 0 1 240px; width: 240px; }
 .player-card .drag-grip { cursor: grab; color: var(--muted); font-size: 1.1rem; line-height: 1; min-width: 26px; min-height: 26px; padding: 0; }
 .player-card.dragging { opacity: 0.5; }
 .player-card.drop-here { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ---------- Release notes (#/releases) ---------- */
+.release-toolbar { justify-content: flex-start; max-width: 900px; }
+.release-toolbar .check { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.release-count { margin-left: auto; font-size: var(--fs-sm); white-space: nowrap; }
+.release-list { max-width: 900px; }
+.release { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: var(--radius-sm); padding: 10px 16px 10px 14px; margin: 8px 0; scroll-margin-top: calc(var(--head-h) + 12px); }
+.release.minor, .release.major { border-left-color: var(--accent); }
+.release.current { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.release-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.release-version { font-weight: 700; font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+.release-kind.minor, .release-kind.major { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.release-date { margin-left: auto; font-size: var(--fs-sm); white-space: nowrap; }
+.release-notes { margin: 6px 0 0; padding-left: 20px; line-height: 1.55; }
+.release-notes li + li { margin-top: 3px; }
+.release.patch .release-notes { color: var(--muted); }

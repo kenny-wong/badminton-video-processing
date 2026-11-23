@@ -7,6 +7,7 @@
 //   #/videos      every video found
 //   #/tools       merge videos, split one (tools-page.js)
 //   #/jobs        background jobs (jobs-page.js)
+//   #/releases    release notes, from the header's version (releases-page.js)
 //   #/settings    folders, cutting, scoreboard, output
 
 import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons } from './dom.js';
@@ -26,6 +27,7 @@ import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
 import { passesStars, percents, starredUnits } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
+import { renderReleases } from './releases-page.js';
 import { renderTools } from './tools-page.js';
 import { matchStar } from './match-star.js';
 import { courtDisplay } from './shared/venues.js';
@@ -78,12 +80,12 @@ async function checkServerVersion() {
     // A server from before 1.16.1 has no /api/version, but its settings carry the version.
     server = await api('/api/version').catch((err) => (err.status === 404 ? api('/api/settings') : Promise.reject(err)));
   } catch {
-    chip.title = `This window: ${PAGE_VERSION}. The server can’t be reached.`;
+    chip.title = `Release notes. This window: ${PAGE_VERSION}. The server can’t be reached.`;
     return;
   }
   if (server.dev) markDev();
   const since = server.startedAt ? new Date(server.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
-  chip.title = `This window: ${PAGE_VERSION}. Server: ${server.version}${since ? `, running since ${since}` : ''}.`;
+  chip.title = `Release notes. This window: ${PAGE_VERSION}. Server: ${server.version}${since ? `, running since ${since}` : ''}.`;
   const advice = versionAdvice(PAGE_VERSION, server.version);
   shown.hidden = !advice;
   shown.textContent = advice ? `server ${server.version}` : '';
@@ -1693,6 +1695,9 @@ async function router() {
     } else if (section === 'jobs') {
       setTab('jobs');
       leaving = await renderJobs(main);
+    } else if (section === 'releases') {
+      setTab('releases');
+      renderReleases(main, PAGE_VERSION);
     } else if (section === 'videos') await renderVideos();
     else if (section === 'tools') {
       setTab('tools');
