@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { linkAction, windowKey } from './links.js';
+import { linkAction, openAction, windowKey } from './links.js';
 
 const NAME = 'Badminton Video';
 // 8791 is `npm start`'s, so the installed app and a development copy can run side by side.
@@ -50,8 +50,9 @@ function openWindow(address, listJobs) {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    const action = linkAction(url, origin);
+    const action = openAction(url, origin);
     if (action === 'browser') shell.openExternal(url);
+    if (action === 'here') win.loadURL(url);
     return { action: action === 'app' ? 'allow' : 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
@@ -61,7 +62,7 @@ function openWindow(address, listJobs) {
     if (action === 'browser') shell.openExternal(url);
   });
   win.webContents.on('before-input-event', (event, input) => {
-    const key = windowKey(input);
+    const key = windowKey(input, { dev: !app.isPackaged });
     if (key === 'reload') win.webContents.reload();
     else if (key === 'devtools') win.webContents.toggleDevTools();
     if (key) event.preventDefault();

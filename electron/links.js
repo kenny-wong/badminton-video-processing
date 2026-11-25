@@ -3,7 +3,7 @@
 // Google sign-in) open in the default browser; anything else is refused.
 // No Electron here, so it can be tested.
 
-/** 'app' (one of the app's own pages), 'browser' (http/https elsewhere) or 'deny'. */
+/** 'app' (the app's own address), 'browser' (http/https elsewhere) or 'deny'. */
 export function linkAction(url, origin) {
   let u;
   try {
@@ -16,9 +16,21 @@ export function linkAction(url, origin) {
   return 'deny';
 }
 
-/** The window's keyboard extras, given Electron's `before-input-event` input: 'reload', 'devtools' or null. */
-export function windowKey(input) {
-  if (input.type !== 'keyDown') return null;
+/**
+ * What a Ctrl+click, middle click or window.open does: 'here' (one of the app's pages opens in the app's one
+ * window: it has no tabs or second windows), else as linkAction ('app': a file of the app, such as a picture).
+ */
+export function openAction(url, origin) {
+  const action = linkAction(url, origin);
+  return action === 'app' && new URL(url).pathname === '/' ? 'here' : action;
+}
+
+/**
+ * The window's keyboard extras, given Electron's `before-input-event` input: 'reload', 'devtools' or null. Only in
+ * a development copy: in the installed app F5 and the rest do nothing, as it isn't a browser.
+ */
+export function windowKey(input, { dev = false } = {}) {
+  if (!dev || input.type !== 'keyDown') return null;
   if (input.key === 'F5' || (input.control && !input.shift && input.key.toLowerCase() === 'r')) return 'reload';
   if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) return 'devtools';
   return null;

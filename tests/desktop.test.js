@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
-import { linkAction, windowKey } from '../electron/links.js';
+import { linkAction, openAction, windowKey } from '../electron/links.js';
 
 const origin = 'http://127.0.0.1:8792';
 
@@ -20,8 +20,22 @@ test('other kinds of link are refused', () => {
   assert.equal(linkAction('not a url', origin), 'deny');
 });
 
-test('window keys: F5 / Ctrl+R reload, F12 / Ctrl+Shift+I developer tools; the editor’s keys pass', () => {
-  const key = (k, extra = {}) => windowKey({ type: 'keyDown', key: k, control: false, shift: false, ...extra });
+test('Ctrl+click or middle click on one of the app’s pages opens it in the same window', () => {
+  assert.equal(openAction(`${origin}/#/t/3`, origin), 'here');
+  assert.equal(openAction(`${origin}/`, origin), 'here');
+  assert.equal(openAction(`${origin}/media/rendered/5?key=video`, origin), 'app');
+  assert.equal(openAction('https://youtu.be/abc', origin), 'browser');
+  assert.equal(openAction('file:///C:/x.exe', origin), 'deny');
+});
+
+test('the installed app isn’t a browser: F5, Ctrl+R, F12 and Ctrl+Shift+I do nothing', () => {
+  for (const [k, extra] of [['F5', {}], ['r', { control: true }], ['F12', {}], ['I', { control: true, shift: true }]]) {
+    assert.equal(windowKey({ type: 'keyDown', key: k, control: false, shift: false, ...extra }), null, k);
+  }
+});
+
+test('a development copy’s keys: F5 / Ctrl+R reload, F12 / Ctrl+Shift+I developer tools; the editor’s keys pass', () => {
+  const key = (k, extra = {}) => windowKey({ type: 'keyDown', key: k, control: false, shift: false, ...extra }, { dev: true });
   assert.equal(key('F5'), 'reload');
   assert.equal(key('r', { control: true }), 'reload');
   assert.equal(key('F12'), 'devtools');
@@ -29,7 +43,7 @@ test('window keys: F5 / Ctrl+R reload, F12 / Ctrl+Shift+I developer tools; the e
   assert.equal(key('r'), null);
   assert.equal(key('z', { control: true }), null); // undo in the editor
   assert.equal(key('R', { control: true, shift: true }), null);
-  assert.equal(windowKey({ type: 'keyUp', key: 'F5' }), null);
+  assert.equal(windowKey({ type: 'keyUp', key: 'F5' }, { dev: true }), null);
 });
 
 test('the installer ships the app’s files with the artwork (not the notes beside it), and FFmpeg as a resource', () => {
