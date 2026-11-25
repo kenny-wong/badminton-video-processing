@@ -30,9 +30,10 @@ test('a code holds the planner’s address and token; plain http only on this PC
 });
 
 test('a match is found in badminfo by its players, whichever way round, with or without accents', () => {
-  assert.deepEqual(matchKey(JSON_T, T, match([['Amy Sample'], ['Mia Madeup']])), { key: key(6, 1, 3) });
-  assert.deepEqual(matchKey(JSON_T, T, match([['MIA  MADEUP'], ['Amy Sample']])), { key: key(6, 1, 3) });
-  assert.deepEqual(matchKey(JSON_T, T, match([['Zoe Example', 'Ivy Invented'], ['Mia Madeup', 'Amy Sample']], { draw: 'WD U15' })), { key: key(9, 1, 2, 3, 4) });
+  const who = (...n) => n.map((i) => ({ id: id(i), name: NAMES[i - 1] }));
+  assert.deepEqual(matchKey(JSON_T, T, match([['Amy Sample'], ['Mia Madeup']])), { key: key(6, 1, 3), sides: [who(1), who(3)] });
+  assert.deepEqual(matchKey(JSON_T, T, match([['MIA  MADEUP'], ['Amy Sample']])), { key: key(6, 1, 3), sides: [who(3), who(1)] }, 'the sides follow the match, not badminfo');
+  assert.deepEqual(matchKey(JSON_T, T, match([['Zoe Example', 'Ivy Invented'], ['Mia Madeup', 'Amy Sample']], { draw: 'WD U15' })), { key: key(9, 1, 2, 3, 4), sides: [who(4, 2), who(1, 3)] });
 });
 
 test('players who met twice: the score says which match, else the kind of draw; never a guess', () => {
@@ -64,7 +65,7 @@ function setUp() {
 
 /** A pretend planner and badminfo in place of fetch. `world.status` is what the planner answers with. */
 function pretend(t, { account = 'Kim' } = {}) {
-  const world = { links: new Map(), posts: 0, badminfo: 0, status: 200, json: JSON_T, auth: null, refuse: [], account };
+  const world = { info: new Map(), links: new Map(), posts: 0, badminfo: 0, status: 200, json: JSON_T, auth: null, refuse: [], account };
   const real = globalThis.fetch;
   t.after(() => { globalThis.fetch = real; });
   globalThis.fetch = async (url, opts = {}) => {
@@ -79,8 +80,9 @@ function pretend(t, { account = 'Kim' } = {}) {
     if (!opts.method || opts.method === 'GET') return Response.json({ account: world.account, links: world.links.size });
     world.posts += 1;
     const { links } = JSON.parse(opts.body);
-    for (const { key: k, video, games } of links) {
+    for (const { key: k, video, games, info } of links) {
       if (world.refuse.includes(k)) continue;
+      world.info.set(k, info);
       if (video || Object.keys(games).length) world.links.set(k, { video, games });
       else world.links.delete(k);
     }
@@ -96,7 +98,7 @@ test('a match’s link and its games’ links go together', () => {
   const m = add(['Amy Sample'], ['Mia Madeup'], { url: 'https://youtu.be/whole' });
   add(['Amy Sample'], ['Mia Madeup'], { parent: m, game: 2, url: 'https://youtu.be/two' });
   add(['Amy Sample'], ['Ivy Invented']);
-  assert.deepEqual(linkedMatches(db).map((x) => [x.id, x.badminfoId, JSON.parse(x.payload)]), [[m, T, { video: 'https://youtu.be/whole', games: { 2: 'https://youtu.be/two' } }]]);
+  assert.deepEqual(linkedMatches(db).map((x) => [x.id, x.badminfoId, x.links, x.about]), [[m, T, { video: 'https://youtu.be/whole', games: { 2: 'https://youtu.be/two' } }, { event: 'WS U15 - Group A', round: 'Round 1', date: '2026-11-01', time: '09:00', score: [] }]]);
 });
 
 test('connecting sends every link; afterwards only what changed goes, and a link taken off is taken off there', async (t) => {
@@ -202,4 +204,33 @@ test('a wrong code connects nothing; another account starts again, the same one 
   assert.match(readFileSync(join(app.dataDir, 'planner.json'), 'utf8'), /"account": "Lee"/);
   await disconnect(app);
   assert.deepEqual(status(app), { connected: false });
+});
+
+test('with the links go who played, marked when they are on the Players list, and what the match was', async (t) => {
+  const { db, add, app } = setUp();
+  const world = pretend(t);
+  db.prepare("INSERT INTO favourites (name, player_id, starred) VALUES ('Amy Sample', ?, 1), ('Zoe Example', NULL, 1), ('Mia Madeup', ?, 0)").run(id(1), id(3));
+  const m = add(['Mia Madeup', 'Amy Sample'], ['Zoe Example', 'Ivy Invented'], { draw: 'WD U15', round: 'Round 2', games: [[15, 4], [15, 5]], url: 'https://youtu.be/dbl' });
+  db.prepare("UPDATE matches SET round_label = 'Group match 1', match_time = '14:25' WHERE id = ?").run(m);
+  await connect(app, CODE);
+  await sendLinks(app);
+  assert.deepEqual(world.info.get(key(9, 1, 2, 3, 4)), {
+    sides: [[{ id: id(1), name: 'Amy Sample', mine: true }, { id: id(3), name: 'Mia Madeup' }], [{ id: id(4), name: 'Ivy Invented' }, { id: id(2), name: 'Zoé Example', mine: true }]],
+    event: 'WD U15', round: 'Group match 1', date: '2026-11-01', time: '14:25', score: [[15, 4], [15, 5]],
+  });
+  // A result that comes in later is sent; badminfo isn't asked again for it.
+  db.prepare("UPDATE matches SET games = '[[15,4],[15,6]]' WHERE id = ?").run(m);
+  await sendLinks(app);
+  assert.deepEqual([world.posts, world.badminfo, world.info.get(key(9, 1, 2, 3, 4)).score], [2, 1, [[15, 4], [15, 6]]]);
+});
+
+test('links sent by an earlier version are sent again with who played', async (t) => {
+  const { db, add, app } = setUp();
+  const world = pretend(t);
+  const m = add(['Amy Sample'], ['Mia Madeup'], { url: 'https://youtu.be/a' });
+  await connect(app, CODE);
+  db.prepare("INSERT INTO planner_links (match_id, be_key, payload, sent_at) VALUES (?, ?, ?, 'x')").run(m, key(6, 1, 3), JSON.stringify({ video: 'https://youtu.be/a', games: {} }));
+  await sendLinks(app);
+  assert.deepEqual([world.posts, world.badminfo, world.info.get(key(6, 1, 3)).sides[0][0].name], [1, 1, 'Amy Sample']);
+  assert.ok(db.prepare('SELECT sides FROM planner_links').get().sides);
 });

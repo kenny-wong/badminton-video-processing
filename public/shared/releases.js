@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.95.0', date: '2026-11-25', notes: [
+    'Enrolment planner: each match’s players, event, time and score go with its YouTube links, so the planner can list the videos by tournament and share them with other accounts.',
+  ] },
   { version: '1.94.0', date: '2026-11-25', notes: [
     'Videos tab: grouped by tournament. Open a tournament to choose its own video folder; it’s scanned, and each video that surely shows a match or game without a video is linked by itself (with Undo).',
     'A folder on an external drive is found whatever its drive letter: videos and folders are looked for on every drive when the drives change. Links and tagging are kept while it isn’t connected.',
