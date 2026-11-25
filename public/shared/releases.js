@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.93.0', date: '2026-11-25', notes: [
+    'Settings → Enrolment planner: connect once with a code, and the YouTube links of your matches and games go to the planner’s Strategy matches by themselves.',
+  ] },
   { version: '1.92.0', date: '2026-11-23', notes: [
     'Release notes: click the version number beside the app name to see what changed in each version.',
   ] },

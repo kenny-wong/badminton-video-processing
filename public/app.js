@@ -13,6 +13,7 @@
 import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons } from './dom.js';
 import { api, waitJob } from './api.js';
 import { analysisPanel } from './analysis-panel.js';
+import { plannerPanel } from './planner-panel.js';
 import { boardNames, NAME_STYLES, namesMatch, teamName } from './shared/names.js';
 import { gamesText } from './shared/score.js';
 import { reRendered } from './shared/video-files.js';
@@ -1656,6 +1657,8 @@ async function renderSettings() {
       section('Tagging', 'Pressing A or B without S first ends a rally whose start wasn’t marked.',
         h('div', { class: 'row' }, h('label', { for: 'rally-gap' }, 'Such a rally starts'), rallyGap, h('span', {}, 'seconds after the previous rally ended.')),
         h('p', { class: 'hint' }, 'The first rally starts at the match start (M), or 10 seconds before A / B. Press S at a serve to mark a start exactly; Q moves a selected rally’s start to now.')),
+      section('Enrolment planner', 'Sends your matches’ YouTube links to your planner’s Strategy tab automatically, after each upload and whenever a link changes.',
+        plannerPanel({ errorNotice }).element),
       section('Tracking tools', 'Shuttle tracking, Find players and removing voices. They’re a big download, so they’re set up separately, once.',
         analysis.element,
         h('div', { class: 'row' }, h('label', { for: 'analysis-folder' }, 'Folder'), analysisFolder),

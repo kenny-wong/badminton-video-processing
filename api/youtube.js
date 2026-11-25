@@ -25,6 +25,7 @@ import { matchPeople } from '../lib/players.js';
 import { deleteRendered, originalFile, renderedFile, renderedFiles } from '../lib/rendered.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
 import { matchLabel } from './matches.js';
+import { changed as plannerChanged } from '../lib/planner.js';
 import { openInBrowser } from '../lib/browser.js';
 import {
   accessToken, addToTournamentPlaylist, authUrl, deleteVideo, exchangeCode, knownPlaylist, pkce, playlistInfo, playlistPosition, playlistUrl, PRIVACY, readClient, readToken, retryAfter,
@@ -199,6 +200,7 @@ function queueUpload(app, loaded, { key, file, privacy, playlist = true, old = n
     j.log(`Uploaded: ${url} (YouTube replied ${video.status?.privacyStatus ?? '?'})`);
     // The match keeps the link of its latest upload, whichever file it was.
     app.db.prepare('UPDATE matches SET youtube_url = ?, uploaded_at = ?, updated_at = ? WHERE id = ?').run(url, nowIso(), nowIso(), match.id);
+    plannerChanged(app); // the enrolment planner gets the new link
     const result = { videoId: video.id, url, file: key, label: file.label, privacy, privacyNow: video.status?.privacyStatus ?? null, uploadStatus: video.status?.uploadStatus ?? null, playlist: null, playlistError: null, replaced: null, replaceError: null };
     // Asked again after the upload: an unaudited Google project's videos may be locked to private.
     const now = await videoStatus(video.id, await token()).catch((err) => { j.log(`Couldn’t read the status: ${err.message}`); return null; });

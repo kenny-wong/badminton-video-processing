@@ -31,6 +31,8 @@ import * as overview from './api/overview.js';
 import * as reels from './api/reels.js';
 import * as youtube from './api/youtube.js';
 import * as videoTools from './api/tools.js';
+import * as planner from './api/planner.js';
+import { changed as plannerChanged, keepSending } from './lib/planner.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
 const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
@@ -88,6 +90,10 @@ const ROUTES = [
   ['GET', '/api/youtube/callback', youtube.callback],
   ['POST', '/api/youtube/signout', youtube.signOutRoute],
   ['POST', '/api/youtube/open', youtube.openPage],
+  ['GET', '/api/planner', planner.onRequestGet],
+  ['POST', '/api/planner', planner.onRequestPost],
+  ['POST', '/api/planner/send', planner.send],
+  ['DELETE', '/api/planner', planner.onRequestDelete],
   ['GET', '/api/reels', reels.onRequestGet],
   ['POST', '/api/reels', reels.onRequestPost],
   ['GET', '/api/matches/:id/people', players.matchPeopleRoute],
@@ -291,6 +297,7 @@ export function createApp(app) {
             response = serverError(err, `${req.method} ${url.pathname}`);
           }
         }
+        if (response.ok && req.method !== 'GET' && !url.pathname.startsWith('/api/planner')) plannerChanged(app); // a YouTube link may have changed
         res.writeHead(response.status, Object.fromEntries(response.headers));
         res.end(Buffer.from(await response.arrayBuffer()));
         return;
@@ -331,7 +338,9 @@ export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.d
   } catch (err) {
     console.error('Numbering group matches', err);
   }
-  const server = createApp({ db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart });
+  const app = { db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart };
+  const server = createApp(app);
+  keepSending(app);
   listenWhenFree(server, port, '127.0.0.1', () => {
     const address = `http://127.0.0.1:${port}/`;
     console.log(`Badminton Video running at ${address}`);
