@@ -97,6 +97,26 @@ test('the corner view is saved on its own, refused when it isn’t an area, and 
   });
 });
 
+test('a corner view and court marked before any rally follow the video too, and nothing else of the match does', async () => {
+  await withServer(async ({ db, call, matches: [first, second] }) => {
+    const inset = { x: 0.5, y: 0.25, w: 0.2, h: 0.2, size: 40, left: 0.1, top: 0.6 };
+    const corners = [[0.1, 0.9], [0.9, 0.9], [0.7, 0.4], [0.3, 0.4]];
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${first}`, 'PUT', { inset, corners, firstServer: 'b' });
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [] });
+    assert.equal(get(db, first).inset, null);
+    const r = await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [1] });
+    assert.equal(r.body.tagging, null, 'no tagging to speak of');
+    assert.deepEqual([get(db, second).inset, get(db, second).corners, get(db, second).firstServer], [inset, corners, 'a']);
+    assert.equal(db.prepare('SELECT carried_tagging FROM videos WHERE id = 1').get().carried_tagging, null);
+    // A match with its own corner view keeps it.
+    await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [] });
+    await call(`/api/matches/${first}`, 'PUT', { inset: { ...inset, x: 0.2 } });
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    assert.deepEqual([get(db, first).inset.x, get(db, first).corners], [0.2, corners]);
+  });
+});
+
 test('a match with its own tagging keeps it; the video holds on to the other', async () => {
   await withServer(async ({ db, call, matches: [first, second] }) => {
     await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });

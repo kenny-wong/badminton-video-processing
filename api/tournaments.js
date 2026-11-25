@@ -1,7 +1,7 @@
 // GET /api/tournaments: every tournament with counts, and its progress for the favourites (`stats`: mine, players[key]).
 // POST /api/tournaments { link }: imports (or re-imports) one; { name } makes a custom tournament.
 // GET /api/tournaments/:id: its matches (each with its games' own rows, `units`, when
-//   filmed game by game), their videos and suggested links (one video per match or game).
+//   filmed game by game), their videos, suggested links (one video per match or game) and links that go against the recording times (`doubts`).
 // POST /api/tournaments/:id/unlink-all: unlinks every video from its matches (each video carries its tagging).
 // POST /api/tournaments/:id/refresh: re-reads its matches and results.
 // DELETE /api/tournaments/:id: forgets it (video files are untouched).
@@ -17,7 +17,7 @@ import { fail, idParam, json, readJson, serverError } from '../lib/http.js';
 import { fetchTournament, saveTournament } from '../lib/tournaments.js';
 import { matchFromRow, nowIso, tournamentFromRow, videoFromRow } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
-import { freeVideos, suggestLinks } from '../lib/tournament-videos.js';
+import { freeVideos, showDoubts, suggestLinks } from '../lib/tournament-videos.js';
 import { checkLibrary } from '../lib/videos.js';
 import { detachVideo } from '../lib/tagging.js';
 import { checkResult, replayMatch } from '../public/shared/score.js';
@@ -29,6 +29,7 @@ import { findTools } from '../lib/ffmpeg.js';
 import { jobView } from '../lib/jobs.js';
 import { startRender } from './matches.js';
 import { stageOf } from '../lib/overview.js';
+import { about } from './tournament-videos.js';
 import { tournamentPlaylists } from './youtube.js';
 import { existsSync } from 'node:fs';
 import { progress, tournamentStats } from '../lib/tournament-stats.js';
@@ -172,14 +173,14 @@ export async function getOne({ params, app }) {
       }),
     };
   });
-  const { suggestions } = suggestLinks(app.db, tournament, free);
+  const { suggestions, doubts } = suggestLinks(app.db, tournament, free);
   for (const s of suggestions) {
     const m = shown.find((x) => x.id === s.matchId);
     while (m.units.length < s.game) m.units.push({ id: null, game: m.units.length + 1, videoIds: [], rallyCount: 0 });
   }
   const here = new Set(shown.flatMap((m) => [...m.favs.a, ...m.favs.b]));
   return json({
-    tournament, matches: shown, videos: [...linked, ...free], suggestions, favourites: favs.filter((f) => here.has(f.key)),
+    tournament, matches: shown, videos: [...linked, ...free], suggestions, doubts: showDoubts(app.db, doubts, about), favourites: favs.filter((f) => here.has(f.key)),
     roster: tournament.kind === 'custom' ? rosterOf(app.db, id) : null,
     playlistUrl: (await tournamentPlaylists(app))[id] ?? null,
   });

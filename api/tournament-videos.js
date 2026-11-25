@@ -17,15 +17,15 @@ import { jobView, startJob } from '../lib/jobs.js';
 import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { findFolder, inFolder, isFolder, isRoot, listDrives, samePath, tournamentFolders } from '../lib/locate.js';
 import { checkLibrary, scanFolders } from '../lib/videos.js';
-import { allFolders, autoLink, currentFolder, folderOwner, folderParents, freeVideos, getTournament, markScanned, SHORTEST_S, suggestLinks } from '../lib/tournament-videos.js';
+import { allFolders, autoLink, currentFolder, folderOwner, folderParents, freeVideos, getTournament, markScanned, SHORTEST_S, showDoubts, suggestLinks } from '../lib/tournament-videos.js';
 import { unlinkByHand } from '../lib/tagging.js';
 
 const drivesOf = (app) => (app.drives ?? listDrives)();
 const tournamentOf = (app, params) => getTournament(app.db, idParam(params.id));
 const none = () => fail(404, 'notFound', 'No such tournament');
 
-/** What the page says about a match (or one game of it). */
-const about = (m) => ({
+/** What the pages say about a match (or one game of it). */
+export const about = (m) => ({
   id: m.id, parentId: m.parent_id ?? m.id, game: m.game, date: m.match_date, time: m.match_time, draw: m.draw, round: m.round_label ?? m.round,
   teamA: parseJson(m.team_a, []), teamB: parseJson(m.team_b, []), games: parseJson(m.games, []),
 });
@@ -38,7 +38,7 @@ export async function onRequestGet({ params, app }) {
   const found = await currentFolder(db, tournament, await drivesOf(app), { quick: true });
   tournament = getTournament(db, tournament.id);
   const free = freeVideos(db, tournament);
-  const { suggestions, whose, askWhose } = suggestLinks(db, tournament, free);
+  const { suggestions, doubts, whose, askWhose } = suggestLinks(db, tournament, free);
   const matches = new Map(db.prepare('SELECT * FROM matches WHERE tournament_id = ?').all(tournament.id).map((m) => [m.id, m]));
   const folders = allFolders(db);
   const rows = db.prepare('SELECT v.* FROM videos v LEFT JOIN matches m ON m.id = v.match_id WHERE m.tournament_id = ? OR v.match_id IS NULL').all(tournament.id).map(videoFromRow);
@@ -65,6 +65,7 @@ export async function onRequestGet({ params, app }) {
     players: favs.filter((f) => here.has(f.key)).map((f) => ({ key: f.key, name: f.name })),
     whose,
     askWhose,
+    doubts: showDoubts(db, doubts, about),
     ffmpeg: Boolean(findTools(settings.ffmpegFolder)),
   });
 }

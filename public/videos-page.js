@@ -9,6 +9,7 @@ import { backLinks } from './nav.js';
 import { clock } from './shared/time.js';
 import { teamName } from './shared/names.js';
 import { illustratedEmpty } from './visuals.js';
+import { doubtNotice } from './link-doubts.js';
 
 const SOURCE = { apple: 'iPhone clock', filename: 'file name', creation_time: 'video clock', modified: 'file date (guess)' };
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -221,6 +222,7 @@ export async function renderTournamentVideos(main, id, ctx) {
     backLinks('#/videos', 'Videos', '', { up: true }),
     pageHead(tournament.name, dates(tournament), h('a', { class: 'btn', href: `#/t/${id}` }, icon('court', 16), 'Matches')),
     msg, outcome, folderCard,
+    doubtNotice(id, data.doubts),
     data.askWhose && whose ? h('div', { class: 'notice warn' }, `${players.map((p) => p.name).join(', ')} all played here, and the videos don’t show clearly whose matches were filmed. Choose under “Filmed”, then Scan and link.`) : null,
     h('div', { class: 'row spread video-head' },
       h('div', { class: 'section-title' }, icon('film', 15), `${plural(videos.length, 'video')} · ${linked} linked${videos.length - linked ? ` · ${videos.length - linked} not linked` : ''}${missing ? ` · ${missing} missing` : ''}`),

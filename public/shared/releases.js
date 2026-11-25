@@ -1,6 +1,11 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.96.0', date: '2026-11-25', notes: [
+    'A tournament’s pages warn when links don’t fit when the videos were recorded: videos whose times and lengths fit another match better, or a match’s games in the wrong order. Videos that fit a match holding the wrong ones are no longer suggested for another match.',
+    'A corner view, marked court or shuttle track goes with its video to another match even before any rally is tagged.',
+    'A group match’s new game videos show its match number straight away.',
+  ] },
   { version: '1.95.0', date: '2026-11-25', notes: [
     'Enrolment planner: each match’s players, event, time and score go with its YouTube links, so the planner can list the videos by tournament and share them with other accounts.',
   ] },

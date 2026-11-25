@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../lib/db.js';
 import { addFavourite } from '../lib/favourites.js';
-import { autoLink, folderOwner, freeVideos, getTournament, suggestLinks } from '../lib/tournament-videos.js';
+import { autoLink, folderOwner, freeVideos, getTournament, showDoubts, suggestLinks } from '../lib/tournament-videos.js';
 import { onRequestGet, onRequestPut, unlinkMany } from '../api/tournament-videos.js';
 import { scanFolders } from '../lib/videos.js';
-import { unlinkByHand } from '../lib/tagging.js';
+import { gameRow, linkVideo, unlinkByHand } from '../lib/tagging.js';
+import { doubtKey } from '../public/shared/link-doubts.js';
 
 const FOLDER = 'I:\\Video\\Silver';
 
@@ -178,4 +179,42 @@ test('a scan takes a known video from its new place with its link, and doesn’t
     db.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('links that go against the recording times are doubted, and nothing is suggested around them', () => {
+  const { db, match, video, t } = setUp();
+  addFavourite(db, { name: 'Amy Lee' });
+  const m1 = match('09:00', 'Amy Lee', 'Bea Ng', [[12, 15], [15, 8], [15, 13]]);
+  const m2 = match('09:40', 'Cat Ho', 'Amy Lee', [[8, 15], [16, 14], [15, 9]]);
+  const early = [video('1.mp4', '09:04', 331), video('2.mp4', '09:10', 407), video('3.mp4', '09:18', 489)];
+  const late = [video('4.mp4', '09:48', 374), video('5.mp4', '09:55', 397), video('6.mp4', '10:02', 317)];
+  const today = { today: '2026-11-01' };
+  const link = (ids, m) => ids.forEach((v, i) => linkVideo(db, gameRow(db, m, i + 1), v));
+  const doubts = () => suggestLinks(db, t(), freeVideos(db, t()), today).doubts.map((d) => [d.ids, d.now, d.fits]);
+  // The later match's videos on the earlier match: the earlier ones aren't offered the later match.
+  link(late, m1);
+  const r = suggestLinks(db, t(), freeVideos(db, t()), today);
+  assert.deepEqual(r.suggestions, []);
+  assert.deepEqual(doubts(), [[late, m1, m2], [early, null, m1]]);
+  assert.deepEqual(autoLink(db, t(), today).linked, []);
+  const shown = showDoubts(db, r.doubts, (m) => ({ id: m.id }));
+  assert.deepEqual(shown[0].videos.map((v) => v.name), ['4.mp4', '5.mp4', '6.mp4']);
+  assert.deepEqual([shown[0].now, shown[0].fits, shown[1].now], [{ id: m1 }, { id: m2 }, null]);
+  // Both swapped.
+  link(early, m2);
+  assert.deepEqual(doubts(), [[early, m2, m1], [late, m1, m2]]);
+  assert.equal(doubtKey(shown), doubtKey([...shown].reverse()));
+  // Put right: nothing doubted, until two games are the wrong way round.
+  for (const v of [...early, ...late]) unlinkByHand(db, v);
+  link(early, m1);
+  link(late, m2);
+  assert.deepEqual(doubts(), []);
+  db.prepare("UPDATE videos SET recorded_source = 'filename'").run();
+  for (const v of late) unlinkByHand(db, v);
+  link([late[1], late[0], late[2]], m2);
+  assert.deepEqual(doubts(), [[[late[1], late[0], late[2]], m2, null]]);
+  // A recording time that is only a guess doubts nothing.
+  db.prepare("UPDATE videos SET recorded_source = 'modified'").run();
+  assert.deepEqual(doubts(), []);
+  db.close();
 });

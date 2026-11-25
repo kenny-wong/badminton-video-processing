@@ -32,6 +32,7 @@ import { renderReleases } from './releases-page.js';
 import { renderTools } from './tools-page.js';
 import { renderTournamentVideos, renderVideos } from './videos-page.js';
 import { matchStar } from './match-star.js';
+import { doubtNotice } from './link-doubts.js';
 import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
 import { backLinks, pageShown } from './nav.js';
@@ -1267,6 +1268,7 @@ async function renderTournament(id, notice = null, who = null) {
     msg,
     notice,
     custom?.el,
+    doubtNotice(id, data.doubts),
     overview,
     suggestions.length ? h('div', { class: 'notice info row spread' },
       h('span', {}, `${suggestions.length === 1 ? 'One video has a suggested match' : `${suggestions.length} videos have suggested matches`}, going by when they were recorded (one video per match, or per game when a match was filmed game by game). Check, then link.`), linkAll) : null,
