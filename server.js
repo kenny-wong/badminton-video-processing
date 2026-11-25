@@ -71,6 +71,7 @@ const ROUTES = [
   ['GET', '/api/matches/:id', matches.onRequestGet],
   ['PUT', '/api/matches/:id', matches.onRequestPut],
   ['PUT', '/api/matches/:id/favourite', matches.setFavourite],
+  ['PUT', '/api/matches/:id/score', matches.setScore],
   ['PUT', '/api/matches/:id/videos', matches.linkVideos],
   ['PUT', '/api/matches/:id/games/:game/videos', matches.linkGameVideos],
   ['POST', '/api/matches/:id/render', matches.render],

@@ -19,6 +19,7 @@ import { percent, percents } from './shared/players.js';
 import { landingNote, landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 import { youtubePanel } from './youtube-panel.js';
+import { correctedTitle, openScoreDialog } from './score-dialog.js';
 import { matchStar } from './match-star.js';
 import { backLinks, replacePage } from './nav.js';
 
@@ -179,9 +180,18 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       h('h1', {}, matchStar(match.parentId ?? match.id, data.starredMatch), ' ', h('span', { class: 'side-a' }, teamName(match.teamA)), h('span', { class: 'vs' }, 'v'), h('span', { class: 'side-b' }, teamName(match.teamB))),
       h('div', { class: 'meta' },
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
-        match.games.length ? h('span', { class: 'result' }, ['Result ', gamesView(match.games)]) : null),
+        match.games.length ? h('span', { class: 'result' }, ['Result ', gamesView(match.games)]) : null,
+        match.beGames ? h('span', { title: correctedTitle(match) }, 'Corrected') : null,
+        tournament.kind !== 'custom' ? h('button', { class: 'small', type: 'button', title: 'Correct the result, when Badminton England has it wrong', onclick: correctScore }, 'Correct score') : null),
       unitSwitch()),
     headRight);
+
+  // The result of the whole match, with this video's tagged games beside Badminton England's.
+  function correctScore() {
+    const { games } = replay(rallies, format, firstServer, startFor({ ...match, startScore }), { oneGame: unitGame > 0 });
+    const tagged = unitGame ? Object.assign([], { [unitGame - 1]: games[unitGame - 1] }) : games;
+    openScoreDialog(match, { tagged: rallies.length ? tagged : [], errorNotice, onSaved: async () => { clearTimeout(saveTimer); await save(); location.reload(); } });
+  }
 
   // Whole match and each game, for moving between a match's game videos from here.
   function unitSwitch() {
@@ -1186,7 +1196,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     fill(checkBox,
       h('div', {}, 'Tagged score: ', games.length ? h('span', {}, gamesView(unitGame ? games.slice(unitGame - 1, unitGame) : games)) : '0-0',
         winner ? ` (${winner.toUpperCase()} wins${unitGame ? ' the game' : ''})` : ''),
-      official.length ? h('div', {}, unitGame ? `Official game ${unitGame}: ` : 'Official result: ', h('span', {}, gamesView(unitGame ? official.slice(-1) : official)), ' ',
+      official.length ? h('div', {}, match.beGames ? (unitGame ? `Corrected game ${unitGame}: ` : 'Corrected result: ') : unitGame ? `Official game ${unitGame}: ` : 'Official result: ', h('span', {}, gamesView(unitGame ? official.slice(-1) : official)), ' ',
         res.ok ? h('span', { class: 'pill ok' }, 'matches ✓') : untagged ? h('span', { class: 'pill warn' }, `${untagged} untagged`) : h('span', { class: 'pill bad' }, `differs in game ${res.game + 1}`)) : null,
       h('div', { class: 'muted' }, `${rallies.length} rallies`, untagged ? ` · ${untagged} without a winner` : '', favs ? ` · ★ ${favs}` : ''));
     favCount.textContent = favs ? `(${favs})` : '(none marked yet)';

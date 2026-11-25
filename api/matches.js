@@ -13,6 +13,7 @@
 // POST /api/matches/:id/track: tracks the shuttle (a job). GET /api/matches/:id/track: the sightings.
 // POST /api/matches/:id/detections: finds and follows the people in the video (YOLO, a job). GET: what was found
 //   (404 until then); PUT { swap: { a, b } }: which way round each doubles pair's names go.
+// PUT /api/matches/:id/score { games }: corrects the match's result (a game's row corrects its match); null goes back to Badminton England's.
 // POST /api/matches/:id/take-tagging { from, replace? }: brings tagging stranded on a match with no video.
 // POST /api/matches/:id/render { cut, overlay, highlights, titleCard?, endCard?, replays?, cornerView? }: starts a job.
 // POST /api/matches/:id/reveal { highlights? }: shows the finished video (or highlights) in Explorer.
@@ -45,6 +46,7 @@ import { cleanComment } from '../lib/naming.js';
 import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { cleanBoardOverride } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
+import { fixScore } from '../lib/score-fix.js';
 import { matchBoard, matchCountries } from '../lib/nations.js';
 import { checkLibrary } from '../lib/videos.js';
 
@@ -181,6 +183,18 @@ export async function setFavourite({ request, params, app }) {
   const { id } = loaded.match;
   app.db.prepare('UPDATE matches SET favourite = ? WHERE id = ?').run(body.favourite ? 1 : null, id);
   return json({ ok: true, id, favourite: body.favourite });
+}
+
+export async function setScore({ request, params, app }) {
+  const body = await readJson(request);
+  if (!body || (body.games !== null && !Array.isArray(body.games))) return fail(400, 'badInput', 'Send games: the corrected result, or null');
+  try {
+    const r = fixScore(app.db, idParam(params.id), body.games);
+    return r ? json({ ok: true, ...r }) : fail(404, 'notFound', 'No such match');
+  } catch (err) {
+    if (err.code === 'badInput') return fail(400, err.code, err.message);
+    throw err;
+  }
 }
 
 export async function linkVideos({ request, params, app }) {

@@ -32,6 +32,7 @@ import { renderReleases } from './releases-page.js';
 import { renderTools } from './tools-page.js';
 import { renderTournamentVideos, renderVideos } from './videos-page.js';
 import { matchStar } from './match-star.js';
+import { correctedTitle, openScoreDialog } from './score-dialog.js';
 import { doubtNotice } from './link-doubts.js';
 import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
@@ -782,6 +783,17 @@ async function renderTournament(id, notice = null, who = null) {
   };
 
   // What's done for a match (or game), as a row of labels: each in its own colour when done, greyed when not.
+  // A wrong score is fixed in the tagging, or, when Badminton England has it wrong, in the result itself.
+  const correctScore = (m) => {
+    const match = m.parent ?? m;
+    const tagged = [];
+    for (const u of match.units ?? []) if (u.rallyCount && u.tagGames?.[u.game - 1]) tagged[u.game - 1] = u.tagGames[u.game - 1];
+    if (match.rallyCount) match.tagGames.forEach((g, i) => { tagged[i] ??= g; });
+    openScoreDialog(match, { tagged, errorNotice, onSaved: () => renderTournament(id, h('div', { class: 'notice ok' }, 'The score is saved.')) });
+  };
+  const wrongScoreTag = (m, title) => (custom ? h('span', { class: 'tag score-bad', title }, 'Score ≠')
+    : h('button', { type: 'button', class: 'tag score-bad', title: `${title} Click to correct the result.`, onclick: () => correctScore(m) }, 'Score ≠'));
+  const correctedTag = (m) => (m.beGames ? h('button', { type: 'button', class: 'tag score-fixed', title: `${correctedTitle(m)}. Click to change.`, onclick: () => correctScore(m) }, 'Score corrected') : null);
   const statusCell = (m) => {
     if (!m.videoIds?.length && !(m.units && gamesLinked(m))) return m.units ? h('span', { class: 'small muted' }, 'Not filmed') : null;
     const tag = (done, kind, text, title, href = null) => (done && href
@@ -797,7 +809,9 @@ async function renderTournament(id, notice = null, who = null) {
       const scoreOk = checks.length === total && !bad;
       return h('div', { class: 'row tags' },
         tag(tagged > 0, tagged < total ? 'rallies part' : 'rallies', `${tagged}/${total} tagged games`, 'Games with every rally tagged and who served first chosen'),
-        tag(bad || scoreOk, bad ? 'score-bad' : scoreOk ? 'score-ok' : 'score', bad ? 'Score ≠' : scoreOk ? 'Score ✓' : 'Score', bad ? 'A game’s tagged score differs from the result: fix its tagging in the editor to render it here or with Render all tagged' : 'Tagged game scores checked against the result'),
+        bad ? wrongScoreTag(m, 'A game’s tagged score differs from the result: fix its tagging in the editor to render it here or with Render all tagged.')
+          : tag(scoreOk, scoreOk ? 'score-ok' : 'score', scoreOk ? 'Score ✓' : 'Score', 'Tagged game scores checked against the result'),
+        correctedTag(m),
         tag(rendered > 0, 'render', `${rendered}/${total} rendered`, 'Rendered game videos'),
         youtubeTag(m, tag));
     }
@@ -809,8 +823,10 @@ async function renderTournament(id, notice = null, who = null) {
         !m.rallyCount ? 'Rallies' : noServer ? `${m.rallyCount} rallies · serve?` : allTagged ? `${m.rallyCount} rallies` : `${m.tagged}/${m.rallyCount} rallies`,
         !m.rallyCount ? 'No rallies yet' : noServer ? 'Every rally has a winner; choose who served first in the editor (Scoring tab)' : allTagged ? 'Every rally has a winner' : `${m.rallyCount - m.tagged} rallies have no winner yet`),
       checked
-        ? tag(true, m.check.ok ? 'score-ok' : 'score-bad', m.check.ok ? 'Score ✓' : 'Score ≠', `Tagged: ${gamesText(m.tagGames)}${m.check.ok ? ', the same as the result' : ', not the result. Fix the tagging in the editor to render it here or with Render all tagged.'}`)
+        ? m.check.ok ? tag(true, 'score-ok', 'Score ✓', `Tagged: ${gamesText(m.tagGames)}, the same as the result`)
+          : wrongScoreTag(m, `Tagged: ${gamesText(m.tagGames)}, not the result. Fix the tagging in the editor to render it here or with Render all tagged.`)
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
+      m.parent ? null : correctedTag(m),
       reRendered(m)
         ? tag(true, 'render part', 'Re-rendered', 'Rendered again since it went on YouTube: the video there is the older one until you upload this')
         : tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),

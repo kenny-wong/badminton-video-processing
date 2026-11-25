@@ -958,6 +958,11 @@ table.parts .part-pick { white-space: nowrap; }
 .tag.rallies.part { background: var(--warn-bg); color: var(--warn); }
 .tag.score-ok { background: var(--yes-bg); color: var(--yes); }
 .tag.score-bad { background: var(--no-bg); color: var(--no); }
+.tag.score-fixed { background: var(--warn-bg); color: var(--warn); }
+button.tag { font-family: inherit; cursor: pointer; box-shadow: none; min-height: 0; }
+button.tag:hover { filter: brightness(0.95); }
+.score-dialog th, .score-dialog td { text-align: left; vertical-align: middle; padding: 5px 8px; }
+.score-dialog .score-points { width: 5.5em; }
 .tag.render { background: var(--tag-render-bg); color: var(--tag-render); }
 .tag.render.part { background: var(--warn-bg); color: var(--warn); }
 .tag.youtube { background: var(--tag-youtube-bg); color: var(--tag-youtube); }
