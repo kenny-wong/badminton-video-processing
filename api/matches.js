@@ -29,7 +29,7 @@ import { hdrPlayback, readSettings } from '../lib/settings.js';
 import { findTools } from '../lib/ffmpeg.js';
 import { findJob, jobView, startJob } from '../lib/jobs.js';
 import { describeOutput, loadMatch, matchFormat, renderMatch, sourceFor } from '../lib/pipeline.js';
-import { cleanFormat, cleanRallies, cleanStart, defaultServer, resultServer } from '../public/shared/score.js';
+import { cleanFormat, cleanRallies, cleanStart } from '../public/shared/score.js';
 import { cleanCorners } from '../public/shared/court.js';
 import { cleanInset } from '../public/shared/inset.js';
 import { readTrack, tracker, trackMatch, trackPoints } from '../lib/track.js';
@@ -39,20 +39,24 @@ import { notSetUp, toolsFolder } from '../lib/analysis.js';
 import { voiceRemover } from '../lib/voices.js';
 import { renderClip } from '../lib/clip.js';
 import { youtubeId, youtubeUrl } from '../lib/links.js';
-import { applyCarried, detachVideo, endsFromOtherGames, followEnds, hasTagging, moveTagging, rallyCount, strandedTagging } from '../lib/tagging.js';
+import { followEnds, gameRow, hasTagging, linkVideo, moveTagging, rallyCount, strandedTagging, unlinkByHand } from '../lib/tagging.js';
 import { teamName } from '../public/shared/names.js';
 import { cleanComment } from '../lib/naming.js';
 import { favouriteMatcher, favourites } from '../lib/favourites.js';
 import { cleanBoardOverride } from '../public/shared/board.js';
 import { matchPeople } from '../lib/players.js';
 import { matchBoard, matchCountries } from '../lib/nations.js';
+import { checkLibrary } from '../lib/videos.js';
+
+export { gameRow }; // kept here too for what imports it from the API
 
 function load(app, params) {
   const id = idParam(params.id);
   return id ? loadMatch(app.db, id) : null;
 }
 
-export function onRequestGet({ params, app }) {
+export async function onRequestGet({ params, app }) {
+  await checkLibrary(app); // an external drive may have come back, perhaps under another letter
   const loaded = load(app, params);
   if (!loaded) return fail(404, 'notFound', 'No such match');
   const settings = readSettings(app.db);
@@ -63,7 +67,7 @@ export function onRequestGet({ params, app }) {
   const jobs = Object.fromEntries(['render', 'track', 'people'].map((k) => [k, jobView(findJob(`${k}:${match.id}`))]));
   return json({
     ...loaded,
-    source: { ...source, path: undefined, url: source.ready ? `/media/match/${match.id}` : null },
+    source: { ...source, path: undefined, where: loaded.videos[0]?.path ?? null, url: source.ready ? `/media/match/${match.id}` : null },
     format: matchFormat(match),
     tracking: { ready: tracker(toolsFolder(settings)).ready, tracked: Boolean(match.trackPath && existsSync(match.trackPath)), trackedAt: match.trackedAt },
     findPlayers: { ready: peopleFinder(toolsFolder(settings)).ready },
@@ -191,33 +195,15 @@ export async function linkVideos({ request, params, app }) {
   let tagging = null;
   db.exec('BEGIN');
   try {
-    // Videos leaving this match, then videos coming from another match, are unlinked first.
-    for (const v of videos) if (!ids.includes(v.id)) detachVideo(db, v.id);
-    for (const v of ids) {
-      const row = db.prepare('SELECT match_id FROM videos WHERE id = ?').get(v);
-      if (row?.match_id && row.match_id !== match.id) detachVideo(db, v);
-    }
-    for (const v of ids) db.prepare('UPDATE videos SET match_id = ?, part = 1 WHERE id = ?').run(match.id, v);
-    tagging = applyCarried(db, match.id, ids);
+    // A video taken off a match by hand stays off it: scanning doesn't link it by itself again.
+    for (const v of videos) if (!ids.includes(v.id)) unlinkByHand(db, v.id);
+    if (ids.length) tagging = linkVideo(db, match.id, ids[0]);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
     throw err;
   }
   return json({ ok: true, tagging });
-}
-
-/** The row for one game of a match, made from the match the first time. */
-export function gameRow(db, parentId, game) {
-  const existing = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game);
-  if (existing) return existing.id;
-  const games = JSON.parse(db.prepare('SELECT games FROM matches WHERE id = ?').get(parentId)?.games ?? '[]');
-  db.prepare(`INSERT INTO matches (tournament_id, parent_id, game, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, first_server, server_set)
-    SELECT tournament_id, id, ?, match_date, match_time, starts_at, draw, round, court, duration, team_a, team_b, games, winner, format, ?, ? FROM matches WHERE id = ? AND game = 0`)
-    .run(game, defaultServer(game, games), resultServer(game, games) ? 1 : null, parentId);
-  const id = db.prepare('SELECT id FROM matches WHERE parent_id = ? AND game = ?').get(parentId, game)?.id ?? null;
-  if (id) endsFromOtherGames(db, id);
-  return id;
 }
 
 export async function linkGameVideos({ request, params, app }) {

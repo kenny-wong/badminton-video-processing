@@ -97,6 +97,11 @@ async function start() {
       app.relaunch();
       app.exit(0);
     },
+    // Windows' folder dialog, for a tournament's video folder.
+    pickFolder: async (start) => {
+      const r = await dialog.showOpenDialog(win, { title: 'Choose the folder with this tournament’s videos', defaultPath: start, properties: ['openDirectory'] });
+      return r.canceled ? null : r.filePaths[0] ?? null;
+    },
     onListening: (address) => openWindow(address, listJobs),
   });
 }

@@ -17,7 +17,8 @@ import { fail, idParam, json, readJson, serverError } from '../lib/http.js';
 import { fetchTournament, saveTournament } from '../lib/tournaments.js';
 import { matchFromRow, nowIso, tournamentFromRow, videoFromRow } from '../lib/db.js';
 import { readSettings } from '../lib/settings.js';
-import { groupParts, perVideo, suggest } from '../lib/matching.js';
+import { freeVideos, suggestLinks } from '../lib/tournament-videos.js';
+import { checkLibrary } from '../lib/videos.js';
 import { detachVideo } from '../lib/tagging.js';
 import { checkResult, replayMatch } from '../public/shared/score.js';
 import { matchFormat } from '../lib/pipeline.js';
@@ -93,7 +94,7 @@ export function unlinkAll({ params, app }) {
   const ids = app.db.prepare('SELECT v.id FROM videos v JOIN matches m ON m.id = v.match_id WHERE m.tournament_id = ?').all(id).map((r) => r.id);
   app.db.exec('BEGIN');
   try {
-    for (const v of ids) detachVideo(app.db, v);
+    for (const v of ids) detachVideo(app.db, v); // may be linked again by the next scan of its folder
     app.db.exec('COMMIT');
   } catch (err) {
     app.db.exec('ROLLBACK');
@@ -124,13 +125,12 @@ export function renderAll({ params, app }) {
   return json({ queued: jobs.length, jobs }, jobs.length ? 202 : 200);
 }
 
-const DAY_MS = 86400000;
-
 /**
  * One tournament with its matches, linked videos and suggestions for unlinked ones, plus
  * `playlistUrl`: the tournament's YouTube playlist, once an upload made one.
  */
 export async function getOne({ params, app }) {
+  await checkLibrary(app);
   const id = idParam(params.id);
   const tournament = tournamentFromRow(id && app.db.prepare('SELECT * FROM tournaments WHERE id = ?').get(id));
   if (!tournament) return fail(404, 'notFound', 'No such tournament');
@@ -139,10 +139,7 @@ export async function getOne({ params, app }) {
   const rows =app.db.prepare('SELECT * FROM matches WHERE tournament_id = ? ORDER BY match_date, match_time, draw, id, game').all(id).map(matchFromRow);
   const matches = rows.filter((m) => !m.game);
   const linked = app.db.prepare(`SELECT v.* FROM videos v JOIN matches m ON m.id = v.match_id WHERE m.tournament_id = ? ORDER BY v.part`).all(id).map(videoFromRow);
-  const from = tournament.start ? Date.parse(`${tournament.start}T00:00:00Z`) - DAY_MS : 0;
-  const to = tournament.end ? Date.parse(`${tournament.end}T00:00:00Z`) + 2 * DAY_MS : 0;
-  const free = from ? app.db.prepare('SELECT * FROM videos WHERE match_id IS NULL AND missing = 0 AND recorded_at >= ? AND recorded_at < ? ORDER BY recorded_at')
-    .all(new Date(from).toISOString(), new Date(to).toISOString()).map(videoFromRow) : [];
+  const free = freeVideos(app.db, tournament);
   // What the page shows of a match or a game's row: videos, tagging progress, outputs.
   const status = (m) => {
     const { games } = replayMatch(m, matchFormat(m));
@@ -175,14 +172,7 @@ export async function getOne({ params, app }) {
       }),
     };
   });
-  const filmed = new Set(linked.map((v) => rows.find((m) => m.id === v.matchId)?.parentId ?? v.matchId));
-  const anyMine = shown.some((m) => m.mine);
-  const candidates = shown.filter((m) => !filmed.has(m.id) && (!anyMine || m.mine))
-    .map((m) => ({ id: m.id, startsAt: Date.parse(m.startsAt), duration: m.duration }));
-  const groups = groupParts(free.map((v) => ({ id: v.id, recordedAt: Date.parse(v.recordedAt), duration: v.duration })));
-  // Back-to-back videos of one match go to its games: as many as were played, else as many as the format allows.
-  const gamesOf = (mid) => { const m = shown.find((x) => x.id === mid); return m.games.length || matchFormat(m).bestOf; };
-  const suggestions = perVideo(suggest(groups, candidates), gamesOf);
+  const { suggestions } = suggestLinks(app.db, tournament, free);
   for (const s of suggestions) {
     const m = shown.find((x) => x.id === s.matchId);
     while (m.units.length < s.game) m.units.push({ id: null, game: m.units.length + 1, videoIds: [], rallyCount: 0 });

@@ -4,7 +4,7 @@
 //   #/m/<id>      the match editor
 //   #/players     favourite players (★) and a search of everyone (players-page.js)
 //   #/p/<id>      one player, by badminfo id
-//   #/videos      every video found
+//   #/videos      every tournament's videos, and #/videos/<id> one tournament's: its folder, scan, links (videos-page.js)
 //   #/tools       merge videos, split one (tools-page.js)
 //   #/jobs        background jobs (jobs-page.js)
 //   #/releases    release notes, from the header's version (releases-page.js)
@@ -30,6 +30,7 @@ import { passesStars, percents, starredUnits } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
 import { renderReleases } from './releases-page.js';
 import { renderTools } from './tools-page.js';
+import { renderTournamentVideos, renderVideos } from './videos-page.js';
 import { matchStar } from './match-star.js';
 import { courtDisplay } from './shared/venues.js';
 import { versionAdvice } from './shared/version.js';
@@ -289,7 +290,7 @@ async function renderHome() {
       h('ul', { class: 'todo-list' }, STAGES.flatMap((s) => todo[s[0]].map((m) => todoItem(m, s)))))
     : null;
 
-  const setup = !settings.videoFolders.length || !favs.length;
+  const setup = (!settings.videoFolders.length && !tournaments.some((t) => t.videoFolder)) || !favs.length;
 
   // ---- tournaments: grouped under each favourite player (default), all of them, or one player's ----
   const listTitle = h('div', { class: 'section-title' });
@@ -395,10 +396,9 @@ async function renderHome() {
     setup ? h('div', { class: 'card setup-card' }, h('div', {},
       h('h3', { class: 'card-title' }, icon('check'), 'Getting started'),
       h('ol', { class: 'steps' },
-        h('li', {}, h('span', {}, h('a', { href: '#/settings' }, 'Settings'), ': add the folders where your phone videos are.')),
         h('li', {}, h('span', {}, h('a', { href: '#/players' }, 'Players'), ': star your players (★) to pick out their matches.')),
         h('li', {}, h('span', {}, 'Import a tournament with its badminfo or Badminton England link.')),
-        h('li', {}, h('span', {}, 'Scan the video folders: each video is matched to a match by when it was recorded.')),
+        h('li', {}, h('span', {}, h('a', { href: '#/videos' }, 'Videos'), ': choose each tournament’s video folder (it’s found on any drive); its videos are scanned and linked.')),
         h('li', {}, h('span', {}, 'Open a match to tag rallies, then render it with the score and without the gaps.')))),
       h('img', { class: 'setup-art', src: 'visual-kit/shuttle-video.png', alt: '', width: 190, height: 175, loading: 'lazy', onerror: dropMissing })) : null,
     h('div', { class: 'home-grid' },
@@ -411,7 +411,7 @@ async function renderHome() {
         importMsg),
       h('div', { class: 'card stack' },
         h('div', { class: 'row spread' }, h('h3', { class: 'card-title' }, icon('match-video'), 'Phone videos'), scanBtn),
-        h('p', { class: 'hint' }, settings.videoFolders.length ? settings.videoFolders.join(' · ') : ['No video folders yet. ', h('a', { href: '#/settings' }, 'Add them in Settings.')]),
+        h('p', { class: 'hint' }, 'Each tournament has its own video folder: choose it on the ', h('a', { href: '#/videos' }, 'Videos tab'), '. Scanning looks in all of them', settings.videoFolders.length ? `, and in ${settings.videoFolders.join(' · ')}` : '', '.'),
         scanBox)),
     h('div', { class: 'card stack' }, h('div', { class: 'row' }, query, only), results),
     todoBox,
@@ -536,7 +536,7 @@ async function renderTournament(id, notice = null, who = null) {
       for (const f of e.dataTransfer.files) {
         const v = all.find((x) => x.name.toLowerCase() === f.name.toLowerCase() && x.size === f.size);
         if (!v) {
-          fill(msg, h('div', { class: 'notice warn' }, `${f.name} isn’t among the scanned videos. Copy it into a video folder and scan (Tournaments page), then drop it again.`));
+          fill(msg, h('div', { class: 'notice warn' }, `${f.name} isn’t among the scanned videos. Copy it into this tournament’s video folder and scan (its Videos page), then drop it again.`));
           return;
         }
         ids.push(v.id);
@@ -1238,6 +1238,7 @@ async function renderTournament(id, notice = null, who = null) {
           : h('a', { href: `https://be.tournamentsoftware.com/tournament/${tournament.beId}`, target: '_blank', rel: 'noopener' }, 'Badminton England ↗'),
         tournament.badminfoId ? [' · ', h('a', { href: `https://badminfo.com/Tournament/${tournament.badminfoId}`, target: '_blank', rel: 'noopener' }, 'badminfo ↗')] : null,
         tournament.completedAt ? [' · ', h('span', { class: 'pill ok' }, '✓ Complete')] : null],
+      h('a', { class: 'btn', href: `#/videos/${id}`, title: tournament.videoFolder ? `Its video folder: ${tournament.videoFolder}` : 'Choose its video folder, scan it and link the videos' }, icon('folder', 16), 'Videos'),
       h('button', {
         title: tournament.completedAt ? 'Show it as unfinished again on the Tournaments page' : 'Nothing more to film, render or upload here (some matches had no video): stop highlighting it on the Tournaments page',
         onclick: async () => {
@@ -1269,7 +1270,7 @@ async function renderTournament(id, notice = null, who = null) {
     overview,
     suggestions.length ? h('div', { class: 'notice info row spread' },
       h('span', {}, `${suggestions.length === 1 ? 'One video has a suggested match' : `${suggestions.length} videos have suggested matches`}, going by when they were recorded (one video per match, or per game when a match was filmed game by game). Check, then link.`), linkAll) : null,
-    !videos.length ? h('div', { class: 'notice warn' }, 'No videos from these dates yet. ', h('a', { href: '#/' }, 'Scan your video folders'), ' after copying them from your phone.') : null,
+    !videos.length ? h('div', { class: 'notice warn' }, 'No videos yet. ', h('a', { href: `#/videos/${id}` }, 'Choose this tournament’s video folder'), '.') : null,
     unmatched.length ? h('details', { class: 'unlinked-videos stack small' },
       h('summary', {}, icon('film', 15), `${unmatched.length} unlinked video${unmatched.length === 1 ? '' : 's'}`, h('span', { class: 'muted' }, ' · drag onto a match or game')),
       h('p', { class: 'hint' }, 'Drag a video onto its match or game, or use Choose video. You can also drop a scanned video from Explorer.'),
@@ -1308,7 +1309,7 @@ function returnTo(back, table) {
 
 /** What a folder scan found, in a sentence. */
 function scanText(r) {
-  return `Found ${r.found} video${r.found === 1 ? '' : 's'}; ${r.added} new or changed.${r.failed ? ` ${r.failed} couldn't be read.` : ''}${r.removed ? ` ${r.removed} gone from ${r.removed === 1 ? 'its folder was' : 'their folders were'} taken off the list.` : ''}${r.missing ? ` ${r.missing} missing ${r.missing === 1 ? 'one is' : 'ones are'} kept (linked to a match, or the folder can't be reached).` : ''}`;
+  return `Found ${r.found} video${r.found === 1 ? '' : 's'}; ${r.added} new or changed.${r.moved ? ` ${r.moved} found at a new place.` : ''}${r.linked ? ` ${r.linked} linked to ${r.linked === 1 ? 'a match' : 'matches'}.` : ''}${r.notConnected ? ` ${r.notConnected} tournament folder${r.notConnected === 1 ? ' isn’t' : 's aren’t'} on a connected drive.` : ''}${r.failed ? ` ${r.failed} couldn't be read.` : ''}${r.removed ? ` ${r.removed} gone from ${r.removed === 1 ? 'its folder was' : 'their folders were'} taken off the list.` : ''}${r.missing ? ` ${r.missing} missing ${r.missing === 1 ? 'one is' : 'ones are'} kept (linked to a match, or the folder can't be reached).` : ''}`;
 }
 
 let scanned = null; // the last refresh's outcome, shown once by the page that is drawn after it
@@ -1324,7 +1325,7 @@ function refreshControls() {
   scanned = null;
   const button = h('button', {
     type: 'button',
-    title: 'Look in your video folders (set in Settings) for new, changed and deleted videos',
+    title: 'Look in the tournaments’ video folders and those in Settings for new, changed and deleted videos, and link the sure ones',
     onclick: async () => {
       button.disabled = true;
       try {
@@ -1337,44 +1338,6 @@ function refreshControls() {
     },
   }, icon('refresh', 16), 'Refresh from folders');
   return { button, box, notice };
-}
-
-// ---------- Videos ----------
-
-/** " · merged from 3 videos", " · part 2 of 20261101_121214.mp4" for a video made on the Tools page. */
-function madeFromText(made) {
-  if (made?.kind === 'merge') return ` · merged from ${made.from.length} videos`;
-  if (made?.kind === 'split') return ` · part ${made.part} of ${made.from[0]?.name ?? 'a video'}`;
-  return '';
-}
-
-async function renderVideos() {
-  setTab('videos');
-  document.title = 'Videos · Badminton Video';
-  const { videos } = await api('/api/videos');
-  const SOURCE = { apple: 'iPhone clock', filename: 'file name', creation_time: 'video clock', modified: 'file date (guess)' };
-  const refresh = refreshControls();
-  fill(main,
-    pageHead('Videos', 'Every video found in your folders. Files are never moved or changed here.', refresh.button),
-    refresh.notice, refresh.box,
-    videos.length ? h('div', { class: 'table-scroll' }, h('table', {},
-      h('thead', {}, h('tr', {}, ['Recorded', 'File', 'Length', 'Picture', 'Match', ''].map((x) => h('th', {}, x)))),
-      h('tbody', {}, videos.map((v) => h('tr', {},
-        h('td', { class: 'nowrap' }, when(v.recordedAt), h('div', { class: 'small muted' }, SOURCE[v.recordedSource] ?? '')),
-        h('td', {}, v.name, v.missing ? [' ', h('span', { class: 'pill bad' }, 'missing')] : null,
-          v.madeFrom?.kind === 'merge' ? [' ', h('span', { class: 'pill ok', title: `Merged from ${v.madeFrom.from.map((x) => x.name).join(' + ')}` }, 'merged')] : null,
-          h('div', { class: 'small muted' }, megabytes(v.size), madeFromText(v.madeFrom))),
-        h('td', { class: 'nowrap' }, clock(v.duration ?? 0)),
-        h('td', { class: 'small' }, `${v.width}×${v.height}`, h('div', { class: 'muted' }, `${Math.round(v.fps ?? 0)} fps · ${v.codec ?? '?'}${v.hdr ? ' · HDR' : ''}`)),
-        h('td', { class: 'small' }, v.match
-          ? [h('a', { href: `#/m/${v.match.id}` }, `${teamName(v.match.teamA)} v ${teamName(v.match.teamB)}`), h('div', { class: 'muted' }, `${v.match.tournament} · ${v.match.draw}`)]
-          : h('span', { class: 'muted' }, 'not linked')),
-        h('td', {}, h('div', { class: 'row tight' },
-          v.match ? h('button', {
-            class: 'small',
-            onclick: async () => { await api(`/api/videos/${v.id}`, { method: 'PUT', body: { matchId: null } }); renderVideos(); },
-          }, 'Unlink') : null,
-          v.missing ? null : h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: 'Cut this video into parts on the Tools page' }, icon('scissors', 14), 'Split')))))))) : illustratedEmpty('Your video library starts here.', 'Add folders in ', h('a', { href: '#/settings' }, 'Settings'), ' and scan them from the ', h('a', { href: '#/' }, 'Tournaments page'), ' to find your match footage.'));
 }
 
 // ---------- Settings ----------
@@ -1601,8 +1564,8 @@ async function renderSettings() {
       },
     },
     h('div', { class: 'settings-grid' },
-      section('Video folders', 'Copy videos off your phone into one of these, then scan. Subfolders are included.',
-        folders, h('p', { class: 'hint' }, 'One folder per line.')),
+      section('Video folders', 'Folders for videos of no particular tournament. Subfolders are included.',
+        folders, h('p', { class: 'hint' }, 'One folder per line. Each tournament’s own folder is chosen on the ', h('a', { href: '#/videos' }, 'Videos tab'), '.')),
       section('Finished videos', 'Rendered videos go here, by year and tournament, each with a .txt of its YouTube title and description.',
         h('div', { class: 'row' }, output),
         h('div', { class: 'stack small' }, h('div', { class: 'muted' }, 'The YouTube description also gives (from badminfo, for badminfo imports):'),
@@ -1701,7 +1664,11 @@ async function router() {
     } else if (section === 'releases') {
       setTab('releases');
       renderReleases(main, PAGE_VERSION);
-    } else if (section === 'videos') await renderVideos();
+    } else if (section === 'videos') {
+      setTab('videos');
+      if (id) await renderTournamentVideos(main, Number(id), { pageHead, runJob, errorNotice });
+      else await renderVideos(main, { pageHead, refresh: refreshControls(), errorNotice });
+    }
     else if (section === 'tools') {
       setTab('tools');
       leaving = await renderTools(main, { runJob, refresh: refreshControls(), query: new URLSearchParams(query ?? '') });

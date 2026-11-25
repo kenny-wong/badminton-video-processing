@@ -32,6 +32,9 @@ import * as reels from './api/reels.js';
 import * as youtube from './api/youtube.js';
 import * as videoTools from './api/tools.js';
 import * as planner from './api/planner.js';
+import * as tournamentVideos from './api/tournament-videos.js';
+import { listDrives } from './lib/locate.js';
+import { checkLibrary } from './lib/videos.js';
 import { changed as plannerChanged, keepSending } from './lib/planner.js';
 
 export const PORT = Number(process.env.PORT) || 8791;
@@ -107,7 +110,13 @@ const ROUTES = [
   ['PUT', '/api/favourites/order', players.orderFavouritesRoute], // before :key
   ['PUT', '/api/favourites/:key', players.linkFavouriteRoute],
   ['DELETE', '/api/favourites/:key', players.removeFavouriteRoute],
+  ['GET', '/api/tournaments/:id/videos', tournamentVideos.onRequestGet],
+  ['PUT', '/api/tournaments/:id/videos', tournamentVideos.onRequestPut],
+  ['POST', '/api/tournaments/:id/videos/scan', tournamentVideos.scan],
+  ['POST', '/api/tournaments/:id/videos/find', tournamentVideos.find],
+  ['POST', '/api/pick-folder', tournamentVideos.pickFolder],
   ['GET', '/api/videos', videos.onRequestGet],
+  ['POST', '/api/videos/unlink', tournamentVideos.unlinkMany],
   ['POST', '/api/videos/scan', videos.scan],
   ['PUT', '/api/videos/:id', videos.onRequestPut],
   ['GET', '/api/videos/:id/keyframes', videoTools.keyframesRoute],
@@ -320,9 +329,9 @@ const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 /**
  * Opens the log and database in `dataDir` and listens on 127.0.0.1:`port`.
  * Used by `npm start` below and by the desktop app (electron/main.js), which
- * passes its own folder, port and `restart`.
+ * passes its own folder, port, `restart` and `pickFolder` (its folder dialog).
  */
-export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.db'), port = PORT, restart = null, onListening = () => {} }) {
+export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.db'), port = PORT, restart = null, pickFolder = null, onListening = () => {} }) {
   mkdirSync(dataDir, { recursive: true });
   startLog(join(dataDir, 'logs', 'app.log'));
   const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -338,7 +347,8 @@ export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.d
   } catch (err) {
     console.error('Numbering group matches', err);
   }
-  const app = { db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart };
+  const app = { db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart, pickFolder, drives: listDrives };
+  checkLibrary(app); // videos on a drive that has another letter now, or isn't connected; the page doesn't wait
   const server = createApp(app);
   keepSending(app);
   listenWhenFree(server, port, '127.0.0.1', () => {

@@ -207,7 +207,9 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
     const box = h('div', { class: 'card' });
     fill(main, header, box);
     if (data.source.reason === 'missing') {
-      fill(box, h('p', {}, 'A video file for this match has been moved or deleted. Put it back and scan again, or link other videos from the tournament page.'));
+      fill(box, h('p', {}, `This video isn’t there: ${data.source.where ?? 'its file'}. If it’s on an external drive, connect it (any letter will do) and try again. If it was moved, choose its folder on `,
+        h('a', { href: `#/videos/${tournament.id}` }, 'the tournament’s Videos page'), '.'),
+        h('button', { class: 'primary', onclick: () => window.dispatchEvent(new HashChangeEvent('hashchange')) }, 'Try again'));
     } else {
       fill(box, h('p', {}, 'No video is linked to this match yet. ', h('a', { href: `#/t/${tournament.id}` }, 'Link one on the tournament page.')));
     }

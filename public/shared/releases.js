@@ -1,6 +1,12 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.94.0', date: '2026-11-25', notes: [
+    'Videos tab: grouped by tournament. Open a tournament to choose its own video folder; it’s scanned, and each video that surely shows a match or game without a video is linked by itself (with Undo).',
+    'A folder on an external drive is found whatever its drive letter: videos and folders are looked for on every drive when the drives change. Links and tagging are kept while it isn’t connected.',
+    'A video moved to another folder or drive is recognised by its name and size, and keeps its match and tagging.',
+    'Matching goes by how long each video is for the points played, as well as when it was filmed, and by whose matches were filmed (choose under Filmed).',
+  ] },
   { version: '1.93.0', date: '2026-11-25', notes: [
     'Settings → Enrolment planner: connect once with a code, and the YouTube links of your matches and games go to the planner’s Strategy matches by themselves.',
   ] },

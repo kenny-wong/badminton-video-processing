@@ -1003,3 +1003,35 @@ input[type="search"].tournament-find { flex: 0 1 240px; width: 240px; }
 .release-notes { margin: 6px 0 0; padding-left: 20px; line-height: 1.55; }
 .release-notes li + li { margin-top: 3px; }
 .release.patch .release-notes { color: var(--muted); }
+
+/* Videos tab: tournaments with their folders, and one tournament's videos. */
+.video-tournaments { list-style: none; margin: 0 0 14px; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.video-tournaments li + li { border-top: 1px solid var(--border); }
+.video-tournament { display: grid; grid-template-columns: 150px minmax(0, 1.2fr) minmax(0, 1.4fr) 84px 190px; gap: 14px; align-items: center; padding: 10px 14px; color: var(--text); text-decoration: none; }
+.video-tournament:hover { background: var(--surface-2); }
+.video-tournament > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt-day, .vt-count { color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.vt-name { font-weight: 600; color: var(--accent); }
+.vt-folder { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); }
+.vt-folder .icon { flex: none; color: var(--muted); }
+.vt-folder > span { overflow: hidden; text-overflow: ellipsis; }
+.vt-state { display: flex; gap: 6px; justify-content: flex-end; }
+.video-rest > summary { margin: 6px 0 10px; }
+.folder-path { font-weight: 600; overflow-wrap: anywhere; }
+.file-cell { overflow-wrap: anywhere; min-width: 180px; }
+.video-head { margin: 18px 0 8px; gap: 8px 14px; }
+.video-head .section-title { margin: 0; }
+.video-head .video-find { flex: 0 1 300px; width: auto; max-width: 300px; }
+:is(.type-path, .video-rest) > summary::before { content: '▸ '; }
+:is(.type-path, .video-rest)[open] > summary::before { content: '▾ '; }
+.type-path form { margin-top: 8px; }
+.scan-linked { margin: 0; padding-left: 18px; max-height: 260px; overflow-y: auto; }
+.scan-linked li { padding: 2px 0; }
+@media (max-width: 900px) {
+  .video-tournament { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; }
+  .vt-name, .vt-folder { grid-column: 1; }
+  .vt-day, .vt-count { grid-row: 1; }
+  .vt-count { justify-self: end; }
+  .vt-state { grid-column: 2; grid-row: 2; }
+  .vt-folder { grid-row: 3; grid-column: 1 / -1; }
+}
