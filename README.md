@@ -1,152 +1,129 @@
 # Badminton Video
 
-A Windows desktop app for phone videos of badminton matches. It:
+A Windows app that turns the phone videos you film at badminton tournaments into finished match videos: a live scoreboard on screen, the waiting between rallies cut out, ready for YouTube.
 
-- imports a tournament from **badminfo** or **Badminton England** (tournamentsoftware): every match with its time, court, players and result;
-- finds your videos and **links each one to its match** by when it was recorded (one video per match, or one per game when games were filmed separately);
-- lets you **tag rallies** from the keyboard, or **finds them by the sound of shuttle hits** so you only say who won each one;
-- keeps the score by the rules (21 / 15 / 11 points, setting, best of 3 or one game) and checks it against the official result;
-- **renders** the match with a **scoreboard** burned in and the **gaps between rallies cut out**, using the NVIDIA encoder when there is one;
-- names the result for **YouTube**: title, description with a chapter for every rally (★ on highlighted ones) to jump to, and a folder per year and tournament.
+![A finished video: the scoreboard is drawn on the picture](docs/images/7-result.png)
 
-Everything runs on your PC. Video files are never moved or changed.
+Everything runs on your own PC. Your original videos are never changed.
 
-## Installing
+*The screenshots use made-up players and a drawn court.*
 
-Run `Badminton-Video-Setup-<version>.exe`. It installs for your Windows account only (no administrator needed), adds Start-menu and desktop shortcuts, and brings its own copy of FFmpeg. The installer isn't code-signed yet, so Windows may say "Windows protected your PC": choose **More info → Run anyway**.
+## Install
 
-The installed app keeps everything (database, logs, thumbnails, YouTube sign-in) in `%LOCALAPPDATA%\Badminton Video`; uninstalling leaves that folder alone. Rendered videos go to the folder chosen in Settings (default `Videos\Badminton`). An NVIDIA GPU is optional; without one, rendering uses the CPU (slower). Shuttle tracking and voice removal need the Python set-up below and aren't part of the installer yet.
+1. Run `Badminton-Video-Setup-<version>.exe`. No administrator rights are needed.
+2. If Windows says "Windows protected your PC", choose **More info → Run anyway** (the installer isn't signed yet).
+3. Open **Badminton Video** from the Start menu.
 
-## Building and developing
+The app brings its own copy of FFmpeg. An NVIDIA graphics card makes rendering faster, but you don't need one. New versions install themselves: when one is ready the app shows **Restart now**.
 
-Needs Windows 10/11, [Node.js](https://nodejs.org/) 24 or later and FFmpeg (`winget install Gyan.FFmpeg`; found automatically, or set its folder in Settings). The app itself uses no npm packages; Electron and electron-builder are development tools only (`npm install`).
+## How to use it
+
+### 1. Add your players
+
+Open **Players** and type each player's name, or paste their badminfo player link. Tick **★ Favourite** for the players you film: their matches are picked out everywhere else in the app.
+
+![Players page](docs/images/1-players.png)
+
+### 2. Import a tournament
+
+On **Tournaments**, paste the tournament's link from **badminfo** or **Badminton England** and click **Import**. Every match comes in with its time, court, players and result.
+
+Not on those sites? Type a name and click **Make tournament**, then add the matches yourself.
+
+The **To do** list shows what's left: videos to tag, to render and to upload.
+
+![Tournaments page](docs/images/2-import.png)
+
+### 3. Give the tournament its video folder
+
+Put the tournament's videos in one folder (for example `20261101 Riverside Junior Open`). Open the tournament's **Videos** page, click **Choose folder…** and pick it.
+
+The app links each video to its match by when it was recorded. Anything it isn't sure about is left for you: click **Choose match**, or drag the video onto its match on the tournament page.
+
+![Videos page of a tournament](docs/images/3-videos.png)
+
+### 4. Check the tournament page
+
+Each match shows its result, its video (one for the whole match, or one per game) and how far it has got: **tagged**, **score ✓**, **rendered**, **YouTube**. The buttons on each row are the next step. Click **Open editor** to tag a video.
+
+![Tournament page](docs/images/4-tournament.png)
+
+### 5. Tag the rallies
+
+In the editor, first choose **who serves first** on the Scoring tab. Then play the video and use the keyboard:
+
+| Key | What it does |
+|---|---|
+| **Space** | play / pause |
+| **S** | a rally starts now |
+| **A** or **B** | the rally ends now, won by side A or side B |
+| **L** | a let (replayed, no point) |
+| **H** | mark a rally as a ★ highlight |
+| **M** / **F** | the match starts / finishes here (anything outside is cut) |
+| **←** / **→** | back / on 2 seconds (with Shift: 10 seconds) |
+| **[** / **]** | slower / faster |
+| **Ctrl+Z** | undo |
+| **?** | show every shortcut |
+
+You don't have to press **S**: pressing **A** or **B** alone starts the rally a few seconds after the last one.
+
+The scoreboard follows your tagging, and the panel says whether your score **matches** the official result.
+
+![Tagging rallies in the editor](docs/images/5-tagging.png)
+
+### 6. Render and upload
+
+Open the **Export** tab and click **Render video**. The finished video goes into your output folder (Settings → Finished videos), sorted by year and tournament, with a `.txt` holding its YouTube title and description. The description lists every rally, so viewers can jump to one.
+
+To upload, sign in to YouTube in the **YouTube** box on the same tab. Or use **Upload** on the tournament page, which also adds the video to the tournament's playlist.
+
+![Render options on the Export tab](docs/images/6-render.png)
+
+### Choose the scoreboard's look
+
+In **Settings** you choose how names appear, the scoreboard's style, colours, size and corner, and what else goes in: finished games' scores, GAME POINT / MATCH POINT, interval banners, a title card and an end card. The preview shows it on one of your videos.
+
+![Scoreboard settings](docs/images/8-scoreboard-settings.png)
+
+## More it can do
+
+- **Highlights**: render only your ★ rallies, or a **Highlight reel** of the ★ rallies of many matches.
+- **Clips**: one rally as a clip, as filmed or upright for Shorts and Reels.
+- **Statistics**: the editor's Stats tab shows points won on serve, longest runs, rally lengths and a momentum chart.
+- **Corner view and magnifier**: enlarge part of the picture, such as the far court.
+- **Share YouTube links**: copy every link of a tournament or player, with results, ready to paste into a message.
+- **Merge or split videos** (Tools tab) without losing quality.
+- **Correct a wrong result** with **Score ≠** on the tournament page.
+
+### Optional extras
+
+- **Shuttle tracking, player names on the video and voice removal**: set them up with one button in **Settings → Tracking tools**. They need an NVIDIA card and about 6 GB of space.
+- **Uploading straight to YouTube** needs your own Google Cloud project: turn on *YouTube Data API v3*, create an OAuth client of type **Desktop app**, and save its JSON as `client.json` in the `data\youtube` folder of the app's data (see below). Then use **Sign in to YouTube** in the editor's YouTube box.
+
+## Where things are kept
+
+- The app's data (database, logs, YouTube sign-in): `%LOCALAPPDATA%\Badminton Video`. Uninstalling leaves it alone.
+- Finished videos: the folder in **Settings → Finished videos** (by default `Videos\Badminton`).
+- If something fails, the red box's **Details** shows what happened, with a button to open the log.
+
+## For developers
+
+Needs Windows 10 or 11, [Node.js](https://nodejs.org/) 24 and FFmpeg (`winget install Gyan.FFmpeg`). The app uses no npm packages; Electron and electron-builder are only for building the installer (`npm install`).
 
 ```
-npm start      # the app on http://127.0.0.1:8791 in a Chrome app window, data in data/
-npm run dev    # the same without opening Chrome, restarting when files change
-npm run app    # the desktop (Electron) version, port 8793, data in %LOCALAPPDATA%\Badminton Video (development)
-npm run dist   # builds dist\Badminton-Video-Setup-<version>.exe, with this PC's FFmpeg copied in and the icon drawn from public/visual-kit/app-mark.svg, and offers it to the app installed on this PC
-npm test       # unit tests (Node's built-in test runner)
+npm start      # run it in a Chrome app window (port 8791, data in data\)
+npm run dev    # the same, restarting when files change
+npm run app    # the desktop version (Electron)
+npm run dist   # build dist\Badminton-Video-Setup-<version>.exe
+npm test       # unit tests
 ```
 
-The desktop version (`electron/main.js`) runs the same server inside Electron's own process on port 8792, in its own window; web links open in the default browser. `BADMINTON_VIDEO_DATA` points it at another data folder.
+How it's built:
 
-Updating the installed app: `npm run dist` ends by copying the installer to `%LOCALAPPDATA%\Badminton Video\updates` with a `latest.json` saying its version, size, SHA-256 and release notes (`scripts/offer-update.mjs`; `npm run dist -- --no-offer` skips it, `BADMINTON_VIDEO_UPDATES` sets another folder). The installed app looks there every minute, checks the file, and shows **Version n is installed and ready. Restart now / Later**. Restart now saves the open editor, backs up the database to `data\backups` (the newest 5 are kept), starts the installer silently (`/S /currentuser --updated --force-run`, which keeps the shortcuts and taskbar pin) and closes; the installer replaces the files and opens the app again. Windows doesn't let a running program's files be replaced, so that step waits for the restart. Closing the app with a version waiting installs it too, without reopening it. After an update the page says **Updated to version n**, with the release notes a click away.
-
-## Using it
-
-The **International broadcast** scoreboard look adds shaped country flags, compact white name rows, shaded brown score tiles and sliding score changes. Choose it in **Settings → Scoreboard look**, or for one match in **Export → Scoreboard**. Choose Team A and Team B countries there too; flags are optional and appear in both the preview and rendered videos.
-
-1. On the **Players** page, add and star your players to pick out their matches. In **Settings** you can choose how names appear on the scoreboard, separately for singles and doubles (CHAN, THAI, T. CHAN or THAI CHAN). The scoreboard's look (by default a broadcast-style board: white rows, narrow lettering, the current game in orange and a shuttle by the server; or another preset or your own colours, font, opacity, size, corner, a heading line, the scores of finished games, GAME POINT / MATCH POINT flags and interval or game banners) is set there too, with a preview over a frame of your video and the board again at its actual size in a 1080p video. The broadcast looks are lettered in D-DIN Condensed, a free DIN condensed like the broadcasts' own, which comes with the app (FFmpeg gets a copy for each render); on the International look a point plays as on TV: the old number slides out of its tile, the new one slides in, and the serve shuttle hops to the other row. As on TV, a number that changes flips over, and once the match (or a game's own video) is over the board keeps the final score up rather than starting the next game at 0–0; each match can pick its own preset and corner on the editor's Export tab. A logo (PNG or JPEG) can go in a corner of every video, and a title card (players, event, date) and an end card (who won, the score) can be added before the first rally and after the last. Under Cutting you set how many seconds to keep before and after each rally (1.5 by default) and, at the interval, after the rally that reaches it and before the next (4 by default). Videos can be made smaller (1080p or 720p, with a bitrate cap), each ★ rally can get a slow-motion replay of its last 3 seconds straight after it, and a music track (MP3, M4A or WAV) can go under highlights, reels or every video, with the court's sound turned down. **Share YouTube links** (on a tournament page, or a player's page) copies the YouTube links of the matches the filters show, each with its day, time, event, players and result, ready to paste into a message. **Highlight reel** (on a tournament page, for everyone or one of your players, or on a player's page for all their filmed matches) joins the ★ rallies of many matches into one video, each with a short card and its own scoreboard. The editor's Export tab also makes a **clip of one rally**, as filmed or upright 9:16 for Shorts and Reels; upright clips follow the shuttle once it has been tracked.
-2. **Import** a tournament with its badminfo or Badminton England link, or **make your own** (a club night, a friendly, anything not on those sites) by giving it a name. On a custom tournament's page you edit its name, dates, venue and scoring (best of 3 or one game, to 21, 15 or 11), tick which players from the Players list are in it, and add, edit or delete its matches (date, time on court, event, round, court, one or two players a side, the result). Its matches link to videos, get tagged and rendered like imported ones; the time on court is what the video suggestions go by.
-3. **Videos** tab: open a tournament and choose the folder its videos are in. With none chosen yet, the app looks on every drive for a folder with the tournament's date and name (`20261101 Silver`) and offers it. The folder is scanned straight away (and by **Scan and link** later), and each video that surely shows a match or game without a video is linked to it; the links made are listed, with **Undo these links**. Less sure ones are only suggested, clips under 90 seconds are left alone, and a video you unlinked by hand isn't linked by itself again. If videos are linked to a match but their times and lengths fit another one better, or a match's games are in the wrong order, the tournament's pages warn about it, and videos that fit a match holding the wrong ones aren't suggested for another (**Keep these links** hides the warning until they change). If a result itself is wrong on Badminton England, click **Score ≠** on the tournament page or **Correct score** in the editor and type the right one (or take the score your tagging made): the app uses it everywhere, keeps it through **Update results**, and goes back to Badminton England's when you choose that or once it says the same. If several of your players were there, **Filmed** says whose matches the videos show: the app works it out when one player's matches stand out, and asks otherwise.
-   - The folder can be on an **external drive**. If its letter changes, the folder and its videos are found at the same place on another drive (or by the folder's name and a video in it). While the drive isn't connected, links, tagging and thumbnails stay; connect it and carry on.
-   - A video moved to another folder or drive is known by its name and size, and keeps its match and tagging.
-   - A video is matched by when it was recorded, how long it is for the points played (about 14 seconds a point), and whose matches were filmed.
-   - Folders for videos of no particular tournament can be added in Settings.
-
-   Each video's recording time comes from the iPhone's clock, the phone's file name (`20261024_091233.mp4`, `VID_…`, `PXL_…`), the video's own timestamp, or as a last resort the file date.
-4. On the tournament page, **link** the videos still suggested (or choose one per match). A match or game takes one video: one video of the whole match goes to the match, and when the games were filmed separately (back-to-back videos around the match's time) each video is suggested for its own game, which then has its own tagging, render and YouTube link, grouped under the match (**Link both** / **Link all 3** links them together). Videos are never joined. Linked the wrong match? Unlink it: that match is cleared, and the video's tagging goes with it to the next match you link it to. **Unlink all** (top of the page) unlinks every video of the tournament the same way. Winners show in green with a tick and losers in red, game by game; your starred players have a gold ★ mark and their matches a gold edge; **Win chance** is badminfo's chance before the match for each side; courts are shortened ("Court 3", the venue named once at the top). Each day lists its filmed matches first, each filmed game with its thumbnail, progress (rallies, the tagged score against the result, rendered, YouTube) and next step (**Render**, or **Upload**, which opens its YouTube box); the matches not filmed fold under **Not filmed**, which opens by itself while you search. The totals at the top count the whole tournament (matches, then videos: a match filmed game by game has one per game); click a video total to see those matches. The progress filter picks either what's done so far (filmed, tagged, rendered, on YouTube, each including videos that went further) or the next step (needs a video, tagging, ready to render, ready for YouTube, or any of them). Switch between a list and a grid; your players' matches show by default, and coming back from the editor returns you to the match you opened.
-5. **Open** a match. Choose who serves first on the Scoring tab (a video counts as tagged only once it's chosen; games 2 and 3 take it from the result). Press **S** when a rally starts and **A** or **B** when it ends (pressing A or B without S assumes the rally began 5 seconds after the last one; Settings → Tagging changes the gap), and **Clear all rallies** (Scoring tab, where the format, first server and starting score sit above the list of rallies) starts again (Ctrl+Z undoes it). The score and the check against the official result update as you go.
-   - Press **M** where the match starts and **F** where it finishes; anything outside is left out.
-   - If the video starts mid-match, set the game and score it starts at under *Video starts at*.
-   - Playback runs from 0.25× to 16× (`[` and `]`); Chrome mutes the sound above 4×.
-   - The score after each tagged rally shows in small type under the timeline. Press **H** (or ☆ in the list) to mark a favourite rally; *Highlights only* renders just those to a separate file.
-6. **Render**. The finished video and a `.txt` with its YouTube title and description go into the output folder. Signed in to YouTube (see [YouTube upload](#youtube-upload)), **Upload to YouTube** in the editor's YouTube box uploads it, adds it to the tournament's playlist and marks the match as uploaded. Otherwise the same button copies the title, opens YouTube's upload page and shows the file in Explorer to drag across; upload it as *Unlisted* to share by link, then paste the link into the match's YouTube box: the match shows as *on YouTube* in the tournament list. On the tournament page, **Upload all rendered** and **Upload all original** queue every video there that isn't on YouTube yet (the original only for those not rendered), with the privacy and playlist choice from the YouTube box. The original phone video can also go up as it is, without rendering: choose *Original video (not rendered)* in the YouTube box (on the tournament page, each video's **Upload (rendered)** or **Upload (original)** row uploads straight from the list with the YouTube box's last choices, beside **Render**; both can run at once, each with its progress); it gets the same title and description, with chapters at its own times.
-
-## Getting around
-
-- The home page has a compact court banner. A shuttle-and-play app mark, badminton-specific icons, and illustrated setup and empty libraries follow the app's light or dark theme.
-- The home page has a **search** across every imported match (player, tournament or event; narrow it to matches with a video, tagged or on YouTube) and a **To do** list of filmed matches still to tag, to render or to upload, plus videos not linked to anything.
-- **Jobs** (in the header while anything runs) lists the background work. Renders and shuttle tracking take turns on the graphics card: start several and they queue. **Render all tagged** on a tournament page queues every filmed match whose rallies all have a winner, whose tagged score agrees with the result and that has no video yet (a match whose score differs shows no **Render** button there until its tagging is fixed); each queued render or upload shows its progress and a Stop button on its row.
-- In the editor, the switch next to the speed plays the original or any rendered file (whole match, highlights, clips). A render as long as the original keeps the rally timeline and scores; a cut one, highlights or a clip plays on its own, with a plain seek bar and 2 s / 10 s jumps, and tagging keys off until you choose Original again. The bin next to the switch deletes the rendered file being played (never the original), and the match forgets it. On the Export tab, Scoreboard and Clip of one rally fold away and remember whether they were open.
-- **Refresh from folders** on the Videos and Tools tabs looks in every tournament's video folder and those in Settings again, and links the sure ones (as **Scan folders** on the home page does): new and changed videos are added, and videos no longer in their folders are taken off the list (unless one is linked to a match or carries tagging, or its folder or drive can't be reached right now: those stay, marked *missing*).
-- On a tournament page, drag an unlinked video's chip, or the video file itself from Explorer, onto its match (or game) to link it.
-- In the editor, the expand button next to the sound button (or **V**) makes the video as big as the window allows, with the timeline still under it and the side panel moved below; it stays that way until you switch it back.
-- **Corner view**: the button next to Expand in the editor's playback bar lets you drag over part of the picture (the far court, a scoreboard on the wall), and it plays enlarged in a window on the same video, with a white edge, at the bottom right to begin with. Drag the window to move it and its corners to resize it, while the video plays or not; the slider beside the button sets how much the area is enlarged (moving the pointer onto the window or the slider outlines the area). The scoreboard stays on top. It goes into the whole video, highlights, reels and clips as filmed the next time you render them, in the same place and size (upright clips leave it out); untick **Corner view** among the Export tab's render options to leave it out of a render or clip, without losing it. Each match or game video has its own, and it stays with the video like its tagging.
-- **Magnifier**: the button beside the corner view button turns on a circle that follows the mouse over the video, enlarging what's under it while the video plays, for a closer look at a line call or a shuttle. The slider or the mouse wheel sets how much (1.5× to 8×, remembered). It works on rendered files too, and it's only on screen: renders never include it.
-- A video rendered again after it went on YouTube shows **Re-rendered** in amber on the tournament page, keeps its YouTube link, and gets an **Upload (re-rendered)** button (it's also under *Ready for YouTube* in the filter and *To upload* on the home page). The button asks once, then uploads the new render, puts it in the old one's place in the playlist and deletes the old video, only after the upload succeeds. YouTube can't swap the file in a video, so the link changes and the old views and comments go. **Upload all** leaves these alone.
-- The editor's timeline zooms with the mouse wheel or + / − (0 shows the whole video; Shift+wheel moves along), with a strip of frames above it and the sound level below it, where shuttle hits show as spikes and missed rallies stand out.
-- The header shows this window's version; hovering it shows the server's. When they differ (after an update) a bar says the server version doesn't match and the server needs restarting, with a **Restart server** button (it asks first if jobs are running; they would stop) (or, if the server is the newer one, that the window needs reloading).
-- In the editor, **?** shows every keyboard shortcut. The header's theme button switches between light, dark and Windows' own setting.
-
-## Merging and splitting videos
-
-The **Tools** tab joins phone videos end to end or cuts one into parts, without re-encoding: the picture and sound are copied as they are, and the originals are never edited. The new files go next to the original and straight into the library.
-
-- **Merge videos**: add videos from the library, put them in order (drag, or ↑ ↓; **Sort by recording time** puts them back in filming order) and merge. They must have the same kind of picture and sound. The result carries the first video's details and start time and the last one's end time, and every frame of every video is checked to be in it. It is named `<first video's name> merged.mp4`, or, when the originals are removed, just the first video's name (its time is still when the merged video starts). Merged videos are marked **merged** in the Videos and Tools lists.
-- **Split a video**: choose a video (or **Split** on the Videos page), play or scrub it and mark up to three parts: **1 / 2 / 3** chooses the part, **I** / **O** set where it starts and ends (or type the times), Space plays, ← / → move 2 s (Shift: 10 s), , / . one frame, and the mouse wheel over the picture or the bar moves 1 s a notch (Shift: one frame). A lossless cut can only start on a key frame (phones write one about every second), so each part starts at the last one before your start; the page shows where. Each part is named and timed from where it starts: `20261101_121214.mp4` cut 95 s in becomes `20261101_121349 part 2.mp4`.
-- Timestamps: the file's created, modified and accessed times and the video's own creation time each mark the start or the end of recording in the original (Samsung phones stamp the end), and keep marking it in the new file. The phone's own metadata (camera model, lens, location, recording mode, iPhone creation date) and its file-type header (brands and version) are copied over byte for byte.
-- **Remove the original videos** (ticked by default) moves the originals to the Recycle Bin once the new files are made, so they can still be restored from there. A split's original goes with everything outside the parts. The originals are kept if anything went wrong (a track that couldn't be copied, frame counts that don't add up, metadata that couldn't be carried over), or if one is linked to a match: unlink it there first.
-
-## Statistics
-
-The editor's **Stats** tab works out, from the tagged rallies: points won on each side's serve and on receive, the longest run of points, average and longest rallies (and shots per rally, counted from the hit sounds), and for each game its length, biggest leads, best runs and comebacks. A momentum chart shows who led after every rally, game by game, and can be saved as a picture. Once the court is marked and the shuttle tracked, a court map shows where each rally ended. Settings can add the longest rally and best run to the end card, and a banner after rallies of many shots.
-
-## Players
-
-The **Players** page holds your list of players: add one by name only, or by their badminfo player link (the app then reads their ratings and matches). Star (★) the ones you film: favourites' matches are picked out on tournament pages and get the video suggestions, and the Tournaments page groups tournaments under each favourite (a tournament with two of them shows under both; the rest come last). Each card shows progress for its player (or all your favourites): their matches out of all, filmed matches (every game has a video, one for the match or one per game), filmed games, rendered videos out of linked ones, and YouTube uploads out of renders. A section with something left to do is yellow, and a card with any is outlined red. **Mark complete** (on the card or the tournament's page) stops the highlighting when nothing more will be filmed there; **Reopen** brings it back. Cards are grouped by year, newest first; **Find a tournament by name** (beside the player choice) narrows the list to tournaments whose name has every word typed. **Find a player** searches everyone in imported badminfo tournaments: ☆ stars one, **Add** puts them on the list without a star. Drag a card by its ⠿ grip (or focus the grip and press the arrow keys) to put the players in your own order, within Favourites or Other players; the Tournaments page groups and its player choice follow that order. Unstarring keeps a player on the list, under *Other players*, for custom tournaments or to star again; **Remove** takes them off.
-
-For a player with a badminfo link, **Import tournaments** (on their card or page) brings in every tournament they have entered on badminfo, upcoming ones too, skipping any already in the app (also those first imported from a Badminton England link), so nothing is doubled. Tournaments badminfo lists without a Badminton England page (leagues) are reported and left out. **Update their results** reads their imported tournaments again, except finished ones that are already up to date, to save fetching the same pages: ones with every result, events with no matches at all (such as camps) read since they ended, and ones read again at least 3 days after they ended (a match still without a result by then was never played, a walkover say, and never gets one). The Open buttons on a player's page (and in the home page search) open each game's video when a match was filmed game by game; a single tournament has **Update results** on its page, for new draws, times and results as an upcoming one is played. Your tagging stays.
-
-Tournaments imported from a badminfo link also bring everyone entered, with their badminfo grades and ratings. Each badminfo player has a page with their rating over time and every match of theirs in imported tournaments, grouped by year, tournament and event (WS, WD, XD, …, read from the draw name however the tournament wrote it). Their latest tournament is open and the rest folded; filters pick by year, event, result (won, lost, no result), video (filmed, not filmed, rendered, on YouTube), ★ favourites only and any words (opponent, partner, tournament), and are remembered. The ☆ beside a match marks it a favourite match: the same star is on the tournament page (list and grid) and in the editor's heading, and on the tournament page each game with a row of its own has its own star. The tournament page's star filter shows only **Favourite matches**, or **Favourite games** (only those games under their match; Share YouTube links then shares just those). Tournament pages show each player's rating for the event, badminfo's win chance for matches it has rated, and upsets (the side with under a 35% chance won). The editor's Players tab adds earlier meetings between the same players and the opponents' other filmed matches. Settings choose whether the YouTube description adds the players' badminfo pages and the win chance, and whether an upset goes in the title.
-
-## Shuttle tracking
-
-Optional. [TrackNetV3](https://github.com/qaz812345/TrackNetV3) (MIT licence) follows the shuttle on an NVIDIA GPU. Set it up once in **Settings → Tracking tools**, which also sets up Find players and voice removal: one button, with nothing else to install. It downloads about 3.5 GB, keeps about 6 GB, says up front if the PC has no NVIDIA card or too little room, and carries on from where it got to if stopped. It goes in the app's own folder (in a checkout, `analysis\`, kept out of the repo) or one you name, such as on another drive, and every part has a fixed version (`analysis\requirements.txt`, `lib/analysis-setup.js`). **Remove them** takes it all away again.
-
-In a match: **Mark the court** (click its four outer corners; a tip on the video names the corner to click next and shows it on a small court, and the name follows the pointer; Esc stops). Afterwards drag any yellow corner to move it, with the court lines following, or nudge a focused corner with the arrow keys. Then choose who is at the near end when the video starts and **Track the shuttle**. **Show the shuttle on the video** (ticked unless you untick it, remembered on this PC) draws it on every tab, not only Tracking. The red dot shows only the shuttle in play over the court: sightings beside the court (when the camera is far enough back for there to be any), sightings that stay put for half a second (the shuttle on the floor, or a light mistaken for it) and stray ones off the shuttle's path are hidden. The tracked data keeps them all, for the landing map and clips. The tracked shuttle drives upright clips and the landing map. Works best with the phone behind a baseline, high up, with the whole court in view. Winners are tagged by hand: finding rallies by sound and suggesting winners (from the shuttle or the official result) were tried and taken out, as on real footage they weren't reliable enough to save time.
-
-### Sending links to the enrolment planner
-
-**Settings → Enrolment planner** connects the app to a planner website with a code made there. From then on the YouTube links of your matches and games go to it by themselves: after each upload, when a link is pasted, replaced or removed, and every hour for anything that couldn’t be sent. Matches are told apart by badminfo’s tournament, draw and players, so a match that isn’t exactly one on badminfo (such as one in a custom tournament) is listed in Settings instead of guessed. **Send all links** sends everything again.
-
-### Comment for YouTube
-
-The **Comment** box on the editor's Export tab keeps a note on the match (or on one game of it). It goes at the end of the YouTube description of that match's videos: the whole video, the highlights and the rally clips, including ones rendered before the comment was written, and the YouTube box shows the description with it. It's saved as you type, up to 2,000 characters; if the description and the comment are too long for YouTube together, the description gives way, never the comment.
-
-Tracking takes about 1½ minutes per minute of video on an RTX 3090 (a 6-minute game: 9 minutes). `analysis\run_tracknet.py` runs TrackNetV3 with a faster frame reader that gives it exactly the same input; `analysis\check_tracknet_reader.py <TrackNetV3 folder> <video>` checks that. Each run's full output is in `tracking.log` in the match's work folder (`<output>\.work\match-<id>\track\`).
-
-## Players on the video
-
-**Find players** (Tracking tab) runs [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) pose with its ByteTrack tracker over the whole video on the GPU (about 3½ minutes for an 8-minute game), so each person is followed from frame to frame. It's set up along with the shuttle tracker; Ultralytics is AGPL-3.0 and is only downloaded to your PC by that set-up, never part of the app or the installer.
-
-**Show players and their names** then draws a box on each player, with their name in their team's colour, on every tab while the video plays. The players are the people whose feet are on the marked court (at most a team's worth per end) and who are usually on it, so an umpire or coach by the court is never named; a name stays on its person, and when a player isn't seen, no one else takes their name; their team comes from who was at the near end when the video started and the score, as ends change after each game and at the deciding game's mid-point. In singles that gives each name; doubles partners are told apart by shirt colour, and **Swap A's names** / **Swap B's names** puts a pair the other way round if they come out wrong. Until the court is marked, everyone found is boxed without names.
-
-## Removing voices
-
-Optional. [Demucs](https://github.com/facebookresearch/demucs) (MIT licence) takes players' shouts, coaching and talk by the court out of the sound and keeps everything else, shuttle hits included. It's set up along with the shuttle tracker. Switch it on in Settings → Video size, or per render in the editor's Export tab; reels and clips follow Settings and the Export tab's box.
-
-Only the vocals model of Demucs' fine-tuned set runs, and the result is the original sound minus the voices, so nothing else is changed. The first render of a match works out its voice-free sound (about 15 seconds for a 6-minute video on an RTX 3090) and keeps it as `court.flac` in the match's work folder (`<output>\.work\match-<id>\voices\`); later renders reuse it until the video file changes. Loud shouts go; very quiet distant talk may partly stay.
-
-## YouTube upload
-
-Optional, for uploading straight from the app with the YouTube Data API:
-
-1. In [Google Cloud](https://console.cloud.google.com), make a project, turn on **YouTube Data API v3**, set up the OAuth consent screen (External, Testing, with your Google account as a test user) and create an OAuth client of type **Desktop app**.
-2. Download the client's JSON and save it as `data\youtube\client.json` (the `data` folder is never committed).
-3. In the editor's YouTube box, **Sign in to YouTube**. Google says the app isn't verified: that's expected for your own project; continue. The sign-in is kept in `data\youtube\token.json`; **Sign out** forgets it.
-
-Pick which finished file to upload: the whole match, the ★ highlights or a rally clip (newest first); the match keeps the link of its latest upload. Uploads are resumable (16 MB pieces; a dropped connection carries on from what YouTube has), one at a time, and show on the Jobs page. Choose Unlisted, Private or Public, and whether to add the video to the tournament's playlist (made the first time, remembered in `data\youtube\playlists.json`). When the tournament's last upload waiting is finished, even one YouTube refused, the playlist is put in match order: by start time, a match's games together. Only videos out of place move, and videos the app doesn't link to a match keep their places. The playlist's order on YouTube must be Manual. The title and description are the ones in the render's `.txt`; the category is Sports and the recording date is the match's.
-
-While the consent screen is in Testing, Google ends the sign-in after 7 days, so sign in again then. Google's documentation disagrees about whether a project that hasn't passed its [API audit](https://support.google.com/youtube/contact/yt_api_form) has its uploads locked as Private: after each upload the app asks YouTube and says so if it was locked (such videos stay private even after an audit, so upload those by hand).
-
-## Logs
-
-The server writes `logs\app.log` in its data folder (`data\` for `npm start`): starts and stops, and when each background job started, finished or failed, with the full error. When something fails, the red box's **Details** shows the longer story, the job's log (**Show log**), and buttons to open the log file and copy the details. Closing or restarting the server stops any job that is running.
-
-## How it works
-
-- `server.js`: a small Node HTTP server bound to 127.0.0.1 only. It serves `public/`, the JSON API in `api/` and match videos with byte ranges. Writes are accepted only from the app's own origin.
-- `lib/`: server logic. `badminfo.js` and `schedule.js` read the tournament sources. `media.js` reads recording times, `matching.js` suggests links, `hits.js` and `analyse.js` read the sound for the editor's sound strip and shot counts, `overlay.js` writes the ASS scoreboard (laid out by `public/shared/board.js`, which the Settings preview also draws), `render.js` plans cuts, chapters and FFmpeg commands, `pipeline.js` runs them, and `db.js` holds the SQLite database (`node:sqlite`) with `migrations/`.
-- `public/`: the page (plain HTML, CSS and ES modules). `public/shared/` holds the scoring rules and name helpers, used by both the page and the server.
-- Rendering cuts each kept part with the scoreboard drawn by FFmpeg's `ass` filter, several parts at once, then joins them without re-encoding. HDR phone footage is tone-mapped to standard video at the brightness chosen in Settings (Bright, Normal or Darker, each previewed on a frame of your newest HDR video), and every output is tagged as BT.709 so YouTube shows its colours as intended.
-- Merging and splitting (`lib/video-tools.js`) copy streams with FFmpeg, then `lib/mp4.js` puts the original's `moov/udta` and `moov/meta` boxes back in place of FFmpeg's (safe because FFmpeg writes `moov` after the media), and `lib/filetimes.js` sets the file times (the created time through PowerShell). Names, parts and time shifts are in `public/shared/video-files.js`.
-
-## Not yet
-
-- Updates on other PCs (the app updates itself only from installers built on the same PC) and a code-signed installer.
+- `server.js` is a small Node server on 127.0.0.1 with a JSON API in `api/`.
+- `lib/` holds the server logic: importing tournaments, matching videos, rendering with FFmpeg, YouTube upload, and the SQLite database (`node:sqlite`, with `migrations/`).
+- `public/` is the page: plain HTML, CSS and JavaScript modules. `public/shared/` (scoring rules, scoreboard layout) is used by both the page and the server.
 
 ## Licence
 
-MIT: see [LICENSE](LICENSE). The installer also brings FFmpeg, which has its own licence (GPL v3, included under `resources\ffmpeg` in the install folder). The scoreboard's lettering, D-DIN Condensed (© 2017 Datto Inc.), is a free font under the SIL Open Font License 1.1; it comes unchanged in `public/fonts` with its licence ([OFL-D-DIN.txt](public/fonts/OFL-D-DIN.txt)).
+MIT: see [LICENSE](LICENSE). The installer includes FFmpeg, which has its own licence (GPL v3, in `resources\ffmpeg` in the install folder). The scoreboard font, D-DIN Condensed (© 2017 Datto Inc.), is under the SIL Open Font License 1.1 and comes with its licence in [public/fonts/OFL-D-DIN.txt](public/fonts/OFL-D-DIN.txt). Shuttle tracking uses [TrackNetV3](https://github.com/qaz812345/TrackNetV3) (MIT), player finding [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (AGPL-3.0, downloaded only by the optional set-up) and voice removal [Demucs](https://github.com/facebookresearch/demucs) (MIT).
