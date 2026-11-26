@@ -298,11 +298,15 @@ async function renderHome() {
   const listTitle = h('div', { class: 'section-title' });
   const list = h('div');
   const firstName = (f) => f.name.split(' ')[0];
+  // The favourites playing in a tournament, in the Players list's order.
+  const favsIn = (t) => favs.filter((f) => Object.hasOwn(f.tournaments, t.id));
+  const anyFavCount = tournaments.filter((t) => favsIn(t).length).length;
   const playerSel = favs.length ? h('select', { 'aria-label': 'Whose tournaments', onchange: () => { writeHomePlayer(playerSel.value); drawList(); } },
     h('option', { value: 'group' }, 'Grouped by player'),
     h('option', { value: 'all' }, 'Every tournament'),
+    favs.length > 1 ? h('option', { value: 'favs' }, `★ All favourites (${anyFavCount})`) : null,
     favs.map((f) => h('option', { value: String(f.key) }, `★ ${f.name} (${Object.keys(f.tournaments).length})`))) : null;
-  if (playerSel) playerSel.value = ['group', 'all', ...favs.map((f) => String(f.key))].includes(readHomePlayer()) ? readHomePlayer() : 'group';
+  if (playerSel) playerSel.value = ['group', 'all', ...(favs.length > 1 ? ['favs'] : []), ...favs.map((f) => String(f.key))].includes(readHomePlayer()) ? readHomePlayer() : 'group';
   // Progress for the card's player (or all favourites): a section not done yet is yellow, a card with one is outlined red.
   const noProgress = (t) => ({ total: t.matches, matches: 0, filmedMatches: 0, games: 0, filmedGames: 0, taggedGames: 0, videos: 0, rendered: 0, uploaded: 0 });
   const notDone = (n, d) => d > 0 && n < d;
@@ -333,7 +337,8 @@ async function renderHome() {
       }
     },
   }, icon(t.completedAt ? 'refresh' : 'check', 14), t.completedAt ? 'Reopen' : 'Mark complete');
-  const tournamentCard = (t, f = null) => {
+  // `who`: the favourites to name on the card (the All favourites list); its progress is theirs together.
+  const tournamentCard = (t, f = null, who = null) => {
     const s = f ? t.stats?.players?.[f.key] ?? noProgress(t) : t.stats?.mine ?? noProgress(t);
     const done = Boolean(t.completedAt);
     const open = !done && unfinished(s);
@@ -342,6 +347,8 @@ async function renderHome() {
       h('div', { class: 'muted small' }, t.start === t.end || !t.end ? day(t.start) : `${day(t.start)} – ${day(t.end)}`),
       f ? h('div', { class: 'small' }, h('span', { class: 'pill ok' }, '★ ', f.tournaments[t.id]
         ? `${firstName(f)}: ${f.tournaments[t.id]} match${f.tournaments[t.id] === 1 ? '' : 'es'}` : `${firstName(f)} entered, no matches yet`)) : null,
+      who?.length ? h('div', { class: 'row tight small' }, who.map((p) => h('span', { class: 'pill ok', title: p.tournaments[t.id] ? `${p.name}: ${p.tournaments[t.id]} match${p.tournaments[t.id] === 1 ? '' : 'es'}` : `${p.name} entered, no matches yet` },
+        `★ ${firstName(p)}${p.tournaments[t.id] ? ` · ${p.tournaments[t.id]}` : ''}`))) : null,
       progressTiles(s, f, !done),
       h('div', { class: 'row spread card-foot' },
         done ? h('span', { class: 'pill ok', title: `Marked complete ${day(t.completedAt.slice(0, 10))}` }, '✓ Complete') : h('span'),
@@ -357,9 +364,9 @@ async function renderHome() {
     }
     return [...years];
   };
-  const yearCards = (ts, f = null) => byYear(ts).map(([y, list]) => h('div', { class: 'year-group' },
+  const yearCards = (ts, f = null, named = false) => byYear(ts).map(([y, list]) => h('div', { class: 'year-group' },
     h('div', { class: 'year-title' }, y, h('span', { class: 'muted' }, ` · ${list.length}`)),
-    h('div', { class: 'tournament-list' }, list.map((t) => tournamentCard(t, f)))));
+    h('div', { class: 'tournament-list' }, list.map((t) => tournamentCard(t, f, named ? favsIn(t) : null)))));
   const libraryEmpty = () => illustratedEmpty('Your match library starts here.', 'Paste a badminfo or Badminton England link above to bring in the matches, or make your own tournament, then link your footage.');
   // Finding a tournament by name among many: every word typed must be in its name.
   const nameFilter = h('input', { type: 'search', class: 'tournament-find', placeholder: 'Find a tournament by name', 'aria-label': 'Find a tournament by name', oninput: () => drawList() });
@@ -383,6 +390,14 @@ async function renderHome() {
           h('h3', { class: 'group-title' }, favs.length ? 'Other tournaments' : 'Tournaments', h('span', { class: 'muted small' }, favs.length ? ' none of your favourites in them' : ' none of your favourites in them yet')),
           yearCards(rest)) : null,
       ]);
+      return;
+    }
+    if (choice === 'favs') {
+      // Every tournament with at least one favourite, once each, in one list by year.
+      const shown = pool.filter((t) => favsIn(t).length);
+      fill(listTitle, icon('trophy', 15), `Your favourites’ tournaments (${shown.length} of ${tournaments.length})`);
+      fill(list, shown.length ? yearCards(shown, null, true)
+        : words.length ? noneNamed() : illustratedEmpty('No tournaments for your favourites yet.', 'Import a tournament they have entered to see it here.'));
       return;
     }
     const f = favs.find((x) => String(x.key) === choice);

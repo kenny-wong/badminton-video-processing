@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.99.0', date: '2026-11-26', notes: [
+    'Tournaments page: choose ★ All favourites to list every tournament any of your starred players is in, once each, with their names and match counts on each card.',
+  ] },
   { version: '1.98.1', date: '2026-11-26', notes: [
     'On the Videos page, the list of tournaments without videos shows only your starred players’ tournaments. Find a tournament by name to see the others.',
   ] },
