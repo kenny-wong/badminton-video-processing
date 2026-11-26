@@ -597,6 +597,10 @@ async function renderTournament(id, notice = null, who = null) {
 
   const linkedCell = (u) => {
     const v = byId.get(u.videoIds[0]);
+    // One video for a whole match of 2 or more games: Split opens it on the Tools page, to cut it into game videos.
+    const split = !u.parent && (u.games?.length ?? 0) >= 2 && v && !v.missing
+      ? h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: `This video holds all ${u.games.length} games: cut it into one video per game on the Tools page` }, icon('scissors', 13), 'Split')
+      : null;
     // The video (name, length) with Open editor and Unlink under it, as one block at the right: both act on
     // this video. Its next steps (Render, Upload) sit after its status labels instead (stepsOf).
     return h('div', { class: 'video-link' },
@@ -607,6 +611,7 @@ async function renderTournament(id, notice = null, who = null) {
         h('div', { class: 'row video-actions' },
           h('span', { class: 'video-buttons' },
             h('a', { class: 'btn primary small', href: `#/m/${u.id}` }, icon('play', 13), 'Open editor'),
+            split,
             h('button', { class: 'small ghost unlink-video', title: `Unlink this ${unitName(u)}’s video`, onclick: () => link(u, []) }, 'Unlink')))));
   };
 

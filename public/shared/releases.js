@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.100.0', date: '2026-11-26', notes: [
+    'Tournaments page: a match filmed in one video that holds two or more games has a Split button beside Open editor, which opens that video straight in Tools → Split a video.',
+  ] },
   { version: '1.99.0', date: '2026-11-26', notes: [
     'Tournaments page: choose ★ All favourites to list every tournament any of your starred players is in, once each, with their names and match counts on each card.',
   ] },
