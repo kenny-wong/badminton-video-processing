@@ -213,6 +213,10 @@ export async function linkVideos({ request, params, app }) {
   if (ids.length > 1) return fail(400, 'oneVideo', 'A match or game takes one video. For games filmed separately, link each video to its game.');
   const { match, videos } = loaded;
   const { db } = app;
+  // A match of one game takes its video as Game 1 (oneGameToGameOne moves one linked before).
+  if (!match.game && match.games.length === 1 && !videos.length) {
+    return linkVideos({ request: new Request(request.url, { method: 'PUT', body: JSON.stringify(body) }), params: { id: String(gameRow(db, match.id, 1)) }, app });
+  }
   let tagging = null;
   db.exec('BEGIN');
   try {

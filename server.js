@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { openDb } from './lib/db.js';
 import { labelGroupMatches } from './lib/group-rounds.js';
+import { oneGameToGameOne } from './lib/tagging.js';
 import { fail, idParam, serverError } from './lib/http.js';
 import { loadMatch, sourceFor } from './lib/pipeline.js';
 import { renderedFile } from './lib/rendered.js';
@@ -349,6 +350,12 @@ export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.d
     if (n) console.log(`Group matches numbered in play order: ${n} rows updated in ${Date.now() - t} ms`);
   } catch (err) {
     console.error('Numbering group matches', err);
+  }
+  try {
+    const n = oneGameToGameOne(db); // a match of one game takes its video as Game 1
+    if (n) console.log(`Matches of one game: ${n} videos moved to Game 1`);
+  } catch (err) {
+    console.error('Moving one-game matches to Game 1', err);
   }
   const app = { db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart, pickFolder, update, drives: listDrives };
   checkLibrary(app); // videos on a drive that has another letter now, or isn't connected; the page doesn't wait

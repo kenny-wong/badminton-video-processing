@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '2.0.1', date: '2026-11-26', notes: [
+    'A match of one game always takes its video as Game 1, shown the same way as every other match’s games. Matches of two or three games still take one video for the whole match, or one per game. Videos linked to a whole match of one game before move to its Game 1 by themselves.',
+  ] },
   { version: '2.0.0', date: '2026-11-26', notes: [
     'The app updates itself: when a new version is ready, a bar at the top says so, with what’s new. Restart now saves your work, backs up your records and reopens the app on the new version; Later leaves it until you close the app, which installs it too.',
   ] },

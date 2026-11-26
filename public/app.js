@@ -824,7 +824,11 @@ async function renderTournament(id, notice = null, who = null) {
   // A filmed video's next steps, after its status labels; nothing for one without a video.
   const stepsOf = (u) => (u.videoIds?.length ? nextStep(u) : null);
 
-  const perGame = (m) => m.units.length >= 2 || m.units.some((u) => u.videoIds.length);
+  // A match of one game takes its video as Game 1, never the whole match (one linked before the move stays shown as it is).
+  const oneGame = (m) => m.games?.length === 1 && !m.videoIds.length;
+  const perGame = (m) => m.units.length >= 2 || oneGame(m) || m.units.some((u) => u.videoIds.length);
+  // Where a video dropped on a match goes: its Game 1 for a match of one game.
+  const dropUnit = (m) => (oneGame(m) && m.units.length ? { ...m.units[0], parent: m } : m);
   const gamesLinked = (m) => m.units.some((u) => u.videoIds.length);
   const unitsOf = (m) => m.units.map((u) => ({ ...u, parent: m }));
   const hasVideo = (m) => m.videoIds.length > 0 || gamesLinked(m);
@@ -847,6 +851,7 @@ async function renderTournament(id, notice = null, who = null) {
 
   const videoCell = (m) => {
     if (m.videoIds.length) return linkedCell(m);
+    if (oneGame(m)) return h('div', { class: 'game-video-summary small' }, icon('film', 15), gamesLinked(m) ? 'Game 1 filmed' : 'One game: its video goes on Game 1 below');
     if (gamesLinked(m)) return h('div', { class: 'game-video-summary small' }, icon('film', 15), `${filmedUnits(m).length} of ${m.units.length} games filmed`);
     const s = suggestionOf(m);
     if (s) return suggestedCell(m, s);
@@ -998,6 +1003,8 @@ async function renderTournament(id, notice = null, who = null) {
     const linked = units.filter((u) => u.videoIds.length);
     const rest = units.filter((u) => !u.videoIds.length);
     const suggested = gameSuggestions(m).length;
+    // One game: its row always shows, filmed or not (nothing to fold away).
+    if (oneGame(m)) return h('div', { class: 'match-games-filmed' }, h('div', { class: 'game-video-list' }, units.map(gameRow)));
     const fold = rest.length ? h('details', { class: 'match-games', open: viewState.stars === 'games' || expandedGames.has(m.id), ontoggle: (e) => {
       if (viewState.stars === 'games') return; // opened for the filter: not the user's own choice
       if (e.target.open) expandedGames.add(m.id);
@@ -1012,7 +1019,7 @@ async function renderTournament(id, notice = null, who = null) {
 
   const listView = (list) => h('div', { class: 'table-scroll tournament-table' }, h('table', {},
     h('thead', {}, h('tr', {}, ['Time / court', 'Match & result', 'Win chance', 'Video', 'Progress'].map((x) => h('th', { scope: 'col' }, x)))),
-    list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(m) },
+    list.map((m) => h('tbody', { class: `match-group${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(dropUnit(m)) },
       h('tr', { class: `match-main${m.mine ? ' mine' : ''}` },
         h('td', { class: 'match-schedule' },
           h('div', { class: 'row tight' }, matchStar(m.id, m.favourite, { onChange: starChanged(m) }), h('strong', {}, m.time)),
@@ -1034,7 +1041,7 @@ async function renderTournament(id, notice = null, who = null) {
   const gridView = (list) => h('div', { class: 'match-grid' }, list.map((m) => {
     const filmed = m.videoIds.length > 0;
     const games = perGame(m) && !filmed;
-    return h('article', { class: `match-card${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(m) },
+    return h('article', { class: `match-card${m.mine ? ' mine' : ''}`, 'data-anchor': `m${m.id}`, ...dropOn(dropUnit(m)) },
       filmed
         ? thumbOf(m, lengthOf(m))
         : null,
@@ -1173,7 +1180,7 @@ async function renderTournament(id, notice = null, who = null) {
         // In time order, each with its own link and its games' links.
         matches: () => shownMatches().map((m) => ({ ...m, links: [m.youtubeUrl && viewState.stars !== 'games' ? { game: 0, url: m.youtubeUrl } : null, ...starredUnits(m.units, viewState.stars).filter((u) => u.youtubeUrl).map((u) => ({ game: u.game, url: u.youtubeUrl }))].filter(Boolean) })),
       })),
-    matches.some((m) => perGame(m) && !hasVideo(m)) ? h('p', { class: 'hint' }, 'A match takes one video for the whole match, or one per game under Game videos.') : null);
+    matches.some((m) => m.units.length >= 2 && !hasVideo(m)) ? h('p', { class: 'hint' }, 'A match takes one video for the whole match, or one per game under Game videos.') : null);
 
   const filmed = matches.flatMap(filmedUnits);
   // The whole tournament's totals, whatever the filters: matches, then videos (a match filmed game by game has one per

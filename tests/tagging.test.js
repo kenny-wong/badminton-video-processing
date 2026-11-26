@@ -7,7 +7,7 @@ import { saveTournament } from '../lib/tournaments.js';
 import { parseMatches } from '../lib/schedule.js';
 import { PAGE } from './fixtures/be-pages.js';
 
-async function withServer(fn) {
+async function withServer(fn, opts = {}) {
   const app = { db: openDb(), port: 0 };
   const server = createApp(app);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -20,6 +20,8 @@ async function withServer(fn) {
   try {
     const tid = saveTournament(app.db, { beId: 'b997c3c5-38fb-4caf-a402-009664189ad6', badminfoId: null, name: 'Example', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') });
     const ids = app.db.prepare('SELECT id FROM matches WHERE tournament_id = ? ORDER BY id').all(tid).map((r) => r.id);
+    // Two games, so these tests can link a video to the whole match (a match of one game takes it as Game 1).
+    if (opts.twoGames !== false) app.db.prepare(`UPDATE matches SET games = '[[21,13],[21,17]]' WHERE id = ?`).run(ids[0]);
     app.db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at, duration) VALUES ('C:/v/a.mp4', 1, 'x', '2026-10-24T08:20:00Z', 900), ('C:/v/b.mp4', 1, 'x', '2026-10-24T13:50:00Z', 900)`).run();
     await fn({ db: app.db, call, matches: ids, tid });
   } finally {
@@ -246,6 +248,42 @@ test('automatic tagging is marked until reviewed, survives the editor’s saves 
   });
 });
 
+test('a match of one game takes its video as Game 1: linking, suggestions, and a video linked before moved over', async () => {
+  const { oneGameToGameOne } = await import('../lib/tagging.js');
+  await withServer(async ({ db, call, matches: [oneGame, threeGames] }) => {
+    const gameOne = () => db.prepare('SELECT * FROM matches WHERE parent_id = ? AND game = 1').get(oneGame);
+    const video = (id) => db.prepare('SELECT match_id FROM videos WHERE id = ?').get(id).match_id;
+    // The 09:20 video is suggested for Game 1 of the 09:00 match, not the whole match.
+    const t = await call('/api/tournaments/1');
+    const s = t.body.suggestions.find((x) => x.matchId === oneGame);
+    assert.equal(s.game, 1);
+    assert.equal(t.body.matches.find((m) => m.id === oneGame).units.length, 1);
+
+    // Linked through the match's own address, it goes on Game 1.
+    assert.equal((await call(`/api/matches/${oneGame}/videos`, 'PUT', { videoIds: [1] })).status, 200);
+    assert.equal(video(1), gameOne().id);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM videos WHERE match_id = ?').get(oneGame).n, 0);
+    // A match of more games still takes one video for the whole match.
+    await call(`/api/matches/${threeGames}/videos`, 'PUT', { videoIds: [2] });
+    assert.equal(video(2), threeGames);
+
+    // A video linked to the whole match before (or before its result came in) moves to Game 1 with its work.
+    await call(`/api/matches/${gameOne().id}/videos`, 'PUT', { videoIds: [] });
+    db.prepare('DELETE FROM matches WHERE parent_id = ?').run(oneGame);
+    db.prepare('UPDATE videos SET match_id = ? WHERE id = 1').run(oneGame);
+    db.prepare(`UPDATE matches SET rallies = ?, server_set = 1, output_path = 'C:/out/x.mp4', youtube_url = 'https://youtu.be/dQw4w9WgXcQ', comment = 'Good one', favourite = 1 WHERE id = ?`)
+      .run(JSON.stringify(RALLIES), oneGame);
+    assert.equal(oneGameToGameOne(db), 1);
+    const g = matchFromRow(gameOne());
+    assert.equal(video(1), g.id);
+    assert.deepEqual([g.rallies, g.serverSet, g.outputPath, g.youtubeUrl, g.comment], [RALLIES, true, 'C:/out/x.mp4', 'https://youtu.be/dQw4w9WgXcQ', 'Good one']);
+    const m = get(db, oneGame);
+    assert.deepEqual([m.rallies, m.outputPath, m.youtubeUrl, m.comment, m.favourite], [[], null, null, '', true]); // the match keeps its star
+    assert.equal(oneGameToGameOne(db), 0); // nothing more to move; the three-game match's video stays
+    assert.equal(video(2), threeGames);
+  }, { twoGames: false });
+});
+
 test('splitting a whole match’s video links part n to game n and takes the original off the match', async () => {
   const { linkSplitParts } = await import('../lib/tagging.js');
   await withServer(async ({ db, call, matches: [oneGame, threeGames, noResult] }) => {
@@ -266,9 +304,10 @@ test('splitting a whole match’s video links part n to game n and takes the ori
     }
 
     // Left alone: more parts than games, a tagged match, a game's own video, a single part.
-    await call(`/api/matches/${oneGame}/videos`, 'PUT', { videoIds: [2] });
-    assert.match(linkSplitParts(db, 2, [5, 6]).note, /2 parts but the match had 1 games/);
-    assert.equal(video(2).match_id, oneGame);
+    db.prepare(`INSERT INTO videos (path, size, modified_at, duration) VALUES ('C:/v/p5.mp4', 1, 'x', 400), ('C:/v/p6.mp4', 1, 'x', 400), ('C:/v/p7.mp4', 1, 'x', 400)`).run();
+    await call(`/api/matches/${oneGame}/videos`, 'PUT', { videoIds: [5] });
+    assert.match(linkSplitParts(db, 5, [6, 7, 2]).note, /3 parts but the match had 2 games/);
+    assert.equal(video(5).match_id, oneGame);
     await call(`/api/matches/${noResult}/videos`, 'PUT', { videoIds: [2] });
     await call(`/api/matches/${noResult}`, 'PUT', { rallies: RALLIES });
     assert.match(linkSplitParts(db, 2, [5, 6]).note, /tagged/);

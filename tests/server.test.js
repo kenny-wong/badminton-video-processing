@@ -52,6 +52,8 @@ test('the API serves settings, tournaments and match tagging', async () => {
 
     const tid = saveTournament(db, { beId: 'b997c3c5-38fb-4caf-a402-009664189ad6', badminfoId: null, name: 'Example', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') });
     db.prepare(`INSERT INTO videos (path, size, modified_at, recorded_at, duration, width, height, fps) VALUES ('C:/v/a.mp4', 1, 'x', '2026-10-24T08:20:00Z', 900, 1920, 1080, 30)`).run();
+    // Two games, so the video can go to the whole match (a match of one game takes it as Game 1: tests/tagging.test.js).
+    db.prepare(`UPDATE matches SET games = '[[21,13],[21,17]]' WHERE tournament_id = ? AND draw = 'XD U15 - Group A'`).run(tid);
     const t = await (await fetch(`${base}/api/tournaments/${tid}`)).json();
     assert.equal(t.matches.length, 3);
     // Sorted by time, then event; Amy plays in both XD matches.
@@ -72,7 +74,7 @@ test('the API serves settings, tournaments and match tagging', async () => {
     assert.equal(m.match.firstServer, 'b');
     assert.equal(m.source.ready, true);
     assert.equal(m.source.url, `/media/match/${mid}`);
-    assert.match(m.output.title, /^Example · XD U15 - Group A Match 1 · Amy Lee \/ Ben Ng v Cat Ho \/ Dan Wu · 21-13$/);
+    assert.match(m.output.title, /^Example · XD U15 - Group A Match 1 · Amy Lee \/ Ben Ng v Cat Ho \/ Dan Wu · 21-13 21-17$/);
 
     // Start score, match bounds and the YouTube link.
     const putMatch = (body) => fetch(`${base}/api/matches/${mid}`, { method: 'PUT', headers: { Origin: base }, body: JSON.stringify(body) });
