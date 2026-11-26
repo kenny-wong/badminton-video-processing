@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '2.0.2', date: '2026-11-26', notes: [
+    'Tournaments page: the win chance is less cramped. Each side’s chance sits on the same line as its players, with Upset beside the side that won, and the bar is level with the event name.',
+  ] },
   { version: '2.0.1', date: '2026-11-26', notes: [
     'A match of one game always takes its video as Game 1, shown the same way as every other match’s games. Matches of two or three games still take one video for the whole match, or one per game. Videos linked to a whole match of one game before move to its Game 1 by themselves.',
   ] },

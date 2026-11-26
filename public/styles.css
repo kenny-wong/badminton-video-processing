@@ -958,8 +958,18 @@ table.parts .part-pick { white-space: nowrap; }
 .fav-name a.plain { color: inherit; }
 .team-won .fav-name { color: var(--yes); }
 .team-lost .fav-name { color: var(--no); }
-.chance-cell { font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.5; }
+.chance-cell { display: grid; gap: 4px; align-content: start; font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.5; }
+.chance-row { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; }
 .chance-cell .pct { display: inline-block; min-width: 2.8em; font-weight: 650; }
+.chance-cell .chance-meter { order: 1; margin-top: 4px; }
+/* The list: the bar on the event line's level, each chance on its side's line (score boxes are 27px, 8px apart). */
+@media (min-width: 761px) {
+  .tournament-table .match-main > .match-details, .tournament-table .match-main > .match-chance { vertical-align: top; }
+  .tournament-table .chance-cell { gap: 8px; grid-template-rows: calc(1.5 * var(--fs-sm) + 2px); }
+  .tournament-table .chance-cell .chance-meter { order: 0; align-self: center; margin: 0; }
+  .tournament-table .chance-row { min-height: var(--line-h, auto); }
+  .tournament-table .chance-cell.scored .chance-row { min-height: var(--line-h, 27px); align-items: flex-start; line-height: 27px; }
+}
 .row.tags { gap: 4px; }
 .tag { display: inline-flex; align-items: center; font-size: var(--fs-xs); font-weight: 650; padding: 1px 8px; border-radius: 999px; white-space: nowrap; line-height: 1.5; text-decoration: none; border: 1px solid transparent; }
 .tag.rallies { background: var(--tag-rallies-bg); color: var(--tag-rallies); }

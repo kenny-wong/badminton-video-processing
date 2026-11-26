@@ -951,11 +951,14 @@ async function renderTournament(id, notice = null, who = null) {
   const chanceCell = (m) => {
     if (typeof m.people?.chance !== 'number') return h('span', { class: 'small muted' }, 'Not available');
     const [pa, pb] = percents(m.people.chance);
-    return h('div', { class: 'chance-cell small', title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` },
-      h('div', {}, h('span', { class: 'pct' }, pa), m.teamA.length > 1 ? [' ', shortTeam(m.teamA)] : null),
-      h('div', {}, h('span', { class: 'pct' }, pb), m.teamB.length > 1 ? [' ', shortTeam(m.teamB)] : null),
+    // In the list each side's chance sits level with its names (rows as tall as the score boxes),
+    // the bar level with the event line; the Upset pill goes beside the side that won.
+    const upsetOn = m.people.upset ? (m.winner === 1 ? 0 : 1) : -1;
+    const row = (k, pct, team) => h('div', { class: 'chance-row' }, h('span', { class: 'pct' }, pct), team.length > 1 ? h('span', {}, shortTeam(team)) : null,
+      upsetOn === k ? h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset') : null);
+    return h('div', { class: `chance-cell small${m.games?.length ? ' scored' : ''}`, title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` },
       h('div', { class: 'chance-meter', 'aria-hidden': 'true' }, h('span', { style: { width: pa } })),
-      m.people.upset ? h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset') : null);
+      row(0, pa, m.teamA), row(1, pb, m.teamB));
   };
 
   const gameLabel = (u) => [h('strong', {}, `Game ${u.game}`), u.parent.games[u.game - 1] ? h('span', { class: 'muted' }, ` (${u.parent.games[u.game - 1].join('-')})`) : null];
@@ -1116,6 +1119,19 @@ async function renderTournament(id, notice = null, who = null) {
       return starredUnits(filmedUnits(m), viewState.stars).some((u) => unitPasses(u, progressFilter.value));
     });
   };
+  // The list's win chances sit level with their side's names: each chance row is given its team line's
+  // height (names can wrap to two lines), again whenever that changes. The CSS uses it on wide screens only.
+  const chanceLines = new ResizeObserver((entries) => {
+    for (const { target } of entries) {
+      const rows = target.closest('tr')?.querySelectorAll('.chance-row') ?? [];
+      target.querySelectorAll('.team-line').forEach((line, i) => rows[i]?.style.setProperty('--line-h', `${line.offsetHeight}px`));
+    }
+  });
+  const lineUpChances = () => {
+    chanceLines.disconnect();
+    table.querySelectorAll('.tournament-table tr.match-main .matchup').forEach((el) => chanceLines.observe(el));
+  };
+
   const drawTable = () => {
     const words = search.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
     const shown = shownMatches();
@@ -1152,6 +1168,7 @@ async function renderTournament(id, notice = null, who = null) {
             },
           }, h('summary', {}, `Not filmed (${rest.length})`), view(rest)) : null]);
     }));
+    lineUpChances();
     if (!shown.length) fill(table, h('div', { class: 'match-empty' },
       emptyState('film', custom && !matches.length ? 'No matches yet: add the first one above.' : 'No matches fit these filters.'),
       matches.length ? h('button', { class: 'small', onclick: clearFilters }, 'Clear filters') : null));
