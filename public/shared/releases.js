@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '2.0.4', date: '2026-11-26', notes: [
+    'Win chance: beside the side that won, a grey Favourite won when it had over 50%, an outlined Close when it had 35–50% (nearly an upset), and the gold Upset under 35%. On the tournament page and in the editor’s Players tab.',
+  ] },
   { version: '2.0.3', date: '2026-11-26', notes: [
     'Tournaments page: Upset stays on the same line as the winning pair’s chance in doubles too. The pair’s names aren’t repeated beside each chance, since it sits on their line.',
   ] },

@@ -1,5 +1,7 @@
 // Tiny DOM helpers for the views.
 
+import { RESULT_LABELS } from './shared/players.js';
+
 /**
  * h('button', { class: 'btn', onclick: fn, disabled: true }, 'Save') — attributes
  * starting with "on" become listeners, false/null ones are left out, and
@@ -73,3 +75,6 @@ export function openButtons(units, { small = true } = {}) {
   if (!units?.length) return null;
   return h('span', { class: 'row tight' }, units.map((u) => h('a', { class: cls, href: `#/m/${u.id}`, title: u.game ? `Open game ${u.game}’s video` : 'Open the video' }, u.game ? `Game ${u.game}` : 'Open')));
 }
+
+/** The pill for resultLabel(): gold Upset, outlined Close, grey Favourite won. */
+export const resultPill = (kind) => h('span', { class: `pill result-${kind}`, title: RESULT_LABELS[kind].title }, RESULT_LABELS[kind].text);

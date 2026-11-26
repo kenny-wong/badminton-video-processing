@@ -789,7 +789,8 @@ button.fav-star.on { color: var(--focus); }
 .legend i.s-doubles { background: var(--side-b); }
 .legend i.s-mixed { background: var(--accent); }
 .rating-chip { display: inline-block; margin-left: 6px; font-size: 0.7rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
-.pill.upset { background: var(--gold); color: #3d2f00; }
+.pill.result-upset { background: var(--gold); color: #3d2f00; }
+.pill.result-close { background: transparent; border: 1px solid var(--muted); padding: 1px 8px; }
 .pill.highlight { background: var(--tag-highlight-bg); color: var(--tag-highlight); }
 .chance { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .chance .bar { height: 10px; border-radius: 5px; background: var(--side-b); overflow: hidden; }
@@ -967,8 +968,8 @@ table.parts .part-pick { white-space: nowrap; }
   .tournament-table .match-main > .match-details, .tournament-table .match-main > .match-chance { vertical-align: top; }
   .tournament-table .chance-cell { gap: 8px; grid-template-columns: minmax(0, 1fr); grid-template-rows: calc(1.5 * var(--fs-sm) + 2px); }
   .tournament-table .chance-cell .chance-meter { order: 0; align-self: center; margin: 0; }
-  .tournament-table .chance-row { min-height: var(--line-h, auto); flex-wrap: nowrap; white-space: nowrap; min-width: 0; }
-  /* Each chance is beside its own side's names, so a pair's surnames aren't repeated here: Upset fits on the line. */
+  .tournament-table .chance-row { min-height: var(--line-h, auto); min-width: 0; }
+  /* Each chance is beside its own side's names, so a pair's surnames aren't repeated here: the result pill fits on the line. */
   .tournament-table .chance-row > span:not(.pct):not(.pill) { display: none; }
   .tournament-table .chance-row > .pct, .tournament-table .chance-row > .pill { flex: none; }
   .tournament-table .chance-cell.scored .chance-row { min-height: var(--line-h, 27px); align-items: flex-start; line-height: 27px; }

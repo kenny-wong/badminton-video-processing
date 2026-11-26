@@ -10,7 +10,7 @@
 //   #/releases    release notes, from the header's version (releases-page.js)
 //   #/settings    folders, cutting, scoreboard, output
 
-import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons } from './dom.js';
+import { h, fill, when, day, megabytes, ukDate, gamesView, openButtons, resultPill } from './dom.js';
 import { api, waitJob } from './api.js';
 import { analysisPanel } from './analysis-panel.js';
 import { plannerPanel } from './planner-panel.js';
@@ -26,7 +26,7 @@ import { customTournamentPanel } from './custom-tournament.js';
 import { boardFlags, boardHeading, CORNERS, FONTS, HEADINGS, LAYOUTS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { renderPlayer, renderPlayers } from './players-page.js';
-import { passesStars, percents, starredUnits } from './shared/players.js';
+import { passesStars, percents, resultLabel, starredUnits } from './shared/players.js';
 import { renderJobs, watchJobs } from './jobs-page.js';
 import { renderReleases } from './releases-page.js';
 import { renderTools } from './tools-page.js';
@@ -952,10 +952,10 @@ async function renderTournament(id, notice = null, who = null) {
     if (typeof m.people?.chance !== 'number') return h('span', { class: 'small muted' }, 'Not available');
     const [pa, pb] = percents(m.people.chance);
     // In the list each side's chance sits level with its names (rows as tall as the score boxes),
-    // the bar level with the event line; the Upset pill goes beside the side that won.
-    const upsetOn = m.people.upset ? (m.winner === 1 ? 0 : 1) : -1;
+    // the bar level with the event line; Upset / Close / Favourite won goes beside the side that won.
+    const kind = resultLabel(m.people.chance, m.winner);
     const row = (k, pct, team) => h('div', { class: 'chance-row' }, h('span', { class: 'pct' }, pct), team.length > 1 ? h('span', {}, shortTeam(team)) : null,
-      upsetOn === k ? h('span', { class: 'pill upset', title: 'The side with under a 35% chance won' }, 'Upset') : null);
+      kind && m.winner === k + 1 ? resultPill(kind) : null);
     return h('div', { class: `chance-cell small${m.games?.length ? ' scored' : ''}`, title: `badminfo’s chance before the match: ${teamName(m.teamA)} ${pa}, ${teamName(m.teamB)} ${pb}` },
       h('div', { class: 'chance-meter', 'aria-hidden': 'true' }, h('span', { style: { width: pa } })),
       row(0, pa, m.teamA), row(1, pb, m.teamB));

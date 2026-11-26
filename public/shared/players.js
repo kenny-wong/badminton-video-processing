@@ -70,6 +70,24 @@ export function isUpset(chanceA, winner) {
   return (winner === 'a' ? chanceA : 1 - chanceA) < UPSET_BELOW;
 }
 
+/** What the result was against badminfo's chance, shown as a pill beside the side that won. */
+export const RESULT_LABELS = {
+  upset: { text: 'Upset', title: 'The side with under a 35% chance won' },
+  close: { text: 'Close', title: 'The side that won had a 35–50% chance: nearly an upset' },
+  favourite: { text: 'Favourite won', title: 'The side favoured to win (over 50%) won' },
+};
+
+/**
+ * 'upset' (the winner had under 35%), 'close' (35–50%) or 'favourite' (over 50%), from side A's
+ * chance and the winner ('a' | 'b', or BE's 1 | 2); null without a chance or a result.
+ */
+export function resultLabel(chanceA, winner) {
+  const w = winner === 1 ? 'a' : winner === 2 ? 'b' : winner;
+  if (typeof chanceA !== 'number' || (w !== 'a' && w !== 'b')) return null;
+  const won = w === 'a' ? chanceA : 1 - chanceA;
+  return won < UPSET_BELOW ? 'upset' : won <= 0.5 ? 'close' : 'favourite';
+}
+
 /** 'a' or 'b' from the official result (BE's 1 or 2), else null. */
 export function resultWinner(match) {
   if (match?.winner === 1 || match?.winner === 'a') return 'a';

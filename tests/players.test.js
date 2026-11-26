@@ -5,7 +5,7 @@ import { entrants, playerProfile } from '../lib/badminfo.js';
 import { openDb } from '../lib/db.js';
 import { matchPeople, refreshProfile, saveEntrants, teamIds, tournamentPeople } from '../lib/players.js';
 import { videoDescription, videoTitle } from '../lib/naming.js';
-import { disciplineOf, isUpset, matchChance, passesStars, percents, ratingSeries, record, starredUnits } from '../public/shared/players.js';
+import { disciplineOf, isUpset, matchChance, passesStars, percents, ratingSeries, record, resultLabel, starredUnits } from '../public/shared/players.js';
 import { playerId } from './fixtures/badminfo-sample.js';
 
 const T = 'c7fa0c7e-1adb-412f-a229-190bd893db4f';
@@ -76,6 +76,18 @@ test('an upset is a win with under a 35% chance', () => {
   assert.equal(isUpset(0.6, 'b'), false);
   assert.equal(isUpset(0.2, 'a'), true);
   assert.equal(isUpset(null, 'a'), false);
+});
+
+test('resultLabel: upset under 35%, close 35-50%, favourite won over 50%, from the side that won', () => {
+  assert.equal(resultLabel(0.814, 'b'), 'upset');
+  assert.equal(resultLabel(0.29, 1), 'upset');
+  assert.equal(resultLabel(0.65, 'a'), 'favourite');
+  assert.equal(resultLabel(0.58, 2), 'close');
+  assert.equal(resultLabel(0.35, 'a'), 'close');
+  assert.equal(resultLabel(0.5, 'b'), 'close');
+  assert.equal(resultLabel(0.501, 'a'), 'favourite');
+  assert.equal(resultLabel(0.7, null), null);
+  assert.equal(resultLabel(null, 'a'), null);
 });
 
 test('ratingSeries and record', () => {

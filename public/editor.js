@@ -2,7 +2,7 @@
 // end and winner from the keyboard, watch the score build up, and render the
 // edited video.
 
-import { h, fill, day, gamesView, openButtons, when } from './dom.js';
+import { h, fill, day, gamesView, openButtons, resultPill, when } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, boardAt, firstShown, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
@@ -15,7 +15,7 @@ import { icon } from './icons.js';
 import { bannerText, boardFlags, boardHeading, CORNERS, PRESETS } from './shared/board.js';
 import { boardPreview } from './board-preview.js';
 import { COUNTRIES } from './shared/flags.js';
-import { percent, percents } from './shared/players.js';
+import { percent, percents, resultLabel } from './shared/players.js';
 import { landingNote, landings, matchStats } from './shared/stats.js';
 import { landingMap, momentumChart, saveSvgAsPng, statsTables } from './stats-view.js';
 import { youtubePanel } from './youtube-panel.js';
@@ -1851,7 +1851,7 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
       x.county ? h('div', { class: 'small muted' }, x.county) : null);
     fill(peopleBox,
       p.chance ? h('div', { class: 'stack small' },
-        h('div', { class: 'muted' }, 'badminfo’s chance before the match', p.upset ? [' ', h('span', { class: 'pill upset' }, 'Upset')] : null),
+        h('div', { class: 'muted' }, 'badminfo’s chance before the match', resultLabel(p.chance.a, p.winner) ? [' ', resultPill(resultLabel(p.chance.a, p.winner))] : null),
         h('div', { class: 'chance' }, h('span', { class: 'side-a' }, percent(p.chance.a)), h('div', { class: 'bar' }, h('span', { style: { width: percent(p.chance.a) } })), h('span', { class: 'side-b' }, percents(p.chance.a)[1])))
         : h('p', { class: 'hint' }, 'No win chance: badminfo works it out once the match is played and rated, and only for imports from a badminfo link.'),
       h('div', { class: 'people' }, [0, 1].map((k) => h('div', { class: `team ${k ? 'b' : 'a'}` }, p.teams[k].map(person)))),
