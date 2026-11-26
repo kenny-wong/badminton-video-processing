@@ -1,5 +1,6 @@
 // GET /api/videos: every video found, newest first, with the match it shows and the tournament it belongs to
-//   (its match's, or the one whose folder it's in), and every tournament with its folder.
+//   (its match's, or the one whose folder it's in), and every tournament with its folder and `mine`
+//   (a starred player entered or played there).
 // POST /api/videos/scan: scans the video folders and the tournaments' own, linking the sure ones in those (a job).
 // PUT /api/videos/:id { matchId: null }: unlinks a video.
 
@@ -12,6 +13,7 @@ import { checkLibrary, scanFolders } from '../lib/videos.js';
 import { allFolders, autoLink, currentFolder, folderOwner, getTournament, markScanned } from '../lib/tournament-videos.js';
 import { listDrives } from '../lib/locate.js';
 import { unlinkByHand } from '../lib/tagging.js';
+import { favourites, favouriteTournaments } from '../lib/favourites.js';
 
 export async function onRequestGet({ app }) {
   await checkLibrary(app);
@@ -19,9 +21,13 @@ export async function onRequestGet({ app }) {
     FROM videos v LEFT JOIN matches m ON m.id = v.match_id LEFT JOIN tournaments t ON t.id = m.tournament_id
     ORDER BY v.recorded_at DESC, v.path`).all();
   const folders = allFolders(app.db);
+  // Tournaments a starred player entered or played in: the page lists only those among the ones without videos.
+  const favs = favourites(app.db);
+  const theirs = new Set(Object.values(favouriteTournaments(app.db, favs)).flatMap((ids) => Object.keys(ids).map(Number)));
   return json({
+    favourites: favs.length,
     tournaments: app.db.prepare('SELECT id, name, start_date, end_date, video_folder, videos_scanned_at FROM tournaments ORDER BY start_date DESC, id DESC').all()
-      .map((t) => ({ id: t.id, name: t.name, start: t.start_date, end: t.end_date, folder: t.video_folder, scannedAt: t.videos_scanned_at })),
+      .map((t) => ({ id: t.id, name: t.name, start: t.start_date, end: t.end_date, folder: t.video_folder, scannedAt: t.videos_scanned_at, mine: theirs.has(t.id) })),
     videos: rows.map((r) => ({
       ...videoFromRow(r),
       tournamentId: r.tournament_id ?? folderOwner(folders, r.path),

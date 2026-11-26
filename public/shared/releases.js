@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.98.1', date: '2026-11-26', notes: [
+    'On the Videos page, the list of tournaments without videos shows only your starred players’ tournaments. Find a tournament by name to see the others.',
+  ] },
   { version: '1.98.0', date: '2026-11-26', notes: [
     'Games tagged automatically show an Auto-tagged label on the tournament page and in the editor until you check them and press Mark as reviewed. The progress filter has Auto-tagged: to review, to find them.',
   ] },

@@ -46,7 +46,7 @@ const eventOf = (m) => [m.time, m.draw, m.round, m.game ? `Game ${m.game}` : ''
 
 export async function renderVideos(main, { pageHead, refresh, errorNotice }) {
   document.title = 'Videos · Badminton Video';
-  const { videos, tournaments } = await api('/api/videos');
+  const { videos, tournaments, favourites } = await api('/api/videos');
   const of = new Map();
   for (const v of videos) if (v.tournamentId) of.set(v.tournamentId, [...(of.get(v.tournamentId) ?? []), v]);
   const loose = videos.filter((v) => !v.tournamentId);
@@ -72,10 +72,13 @@ export async function renderVideos(main, { pageHead, refresh, errorNotice }) {
     const words = find.value.toLowerCase().split(/\s+/).filter(Boolean);
     const named = (t) => words.every((w) => t.name.toLowerCase().includes(w));
     const a = used.filter(named);
-    const b = rest.filter(named);
+    // Without videos: only your starred players' tournaments, unless a name is typed (then any by that name).
+    const onlyMine = favourites > 0 && !words.length;
+    const b = rest.filter((t) => named(t) && (!onlyMine || t.mine));
     fill(usedBox, a.length ? h('ul', { class: 'video-tournaments' }, a.map(rowOf)) : h('p', { class: 'hint' }, words.length ? 'None with videos by that name.' : 'No tournament has videos yet. Open one below and choose its folder.'));
     fill(restBox, b.length ? h('details', { class: 'video-rest', open: Boolean(words.length) || !used.length },
-      h('summary', {}, `Tournaments without videos (${b.length})`),
+      h('summary', { title: onlyMine ? 'Only tournaments a starred player entered or played in. Find a tournament by name to see the others.' : null },
+        onlyMine ? `Your players’ tournaments without videos (${b.length})` : `Tournaments without videos (${b.length})`),
       h('ul', { class: 'video-tournaments' }, b.map(rowOf))) : null);
   }
   draw();
