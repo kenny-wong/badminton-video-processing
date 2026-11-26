@@ -3,6 +3,7 @@
 // POST /api/tools/merge { ids, removeOriginal }: joins the videos in that order (a job).
 // POST /api/tools/split { id, parts: [{ start, end }], removeOriginal }: cuts up to 3 parts (a job).
 // With removeOriginal the originals go to the Recycle Bin once the new files are made.
+// A split of a whole match's video links part n to game n of that match (result.linked).
 // POST /api/videos/:id/reveal: shows a library video in Explorer.
 
 import { spawn } from 'node:child_process';

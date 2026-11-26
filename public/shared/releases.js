@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.101.0', date: '2026-11-26', notes: [
+    'Splitting a match’s video into its games links the parts by themselves: part 1 to Game 1, part 2 to Game 2. The original comes off the match and goes to the Recycle Bin. A match that is already tagged, rendered or on YouTube as one video keeps it.',
+  ] },
   { version: '1.100.0', date: '2026-11-26', notes: [
     'Tournaments page: a match filmed in one video that holds two or more games has a Split button beside Open editor, which opens that video straight in Tools → Split a video.',
   ] },

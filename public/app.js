@@ -599,7 +599,7 @@ async function renderTournament(id, notice = null, who = null) {
     const v = byId.get(u.videoIds[0]);
     // One video for a whole match of 2 or more games: Split opens it on the Tools page, to cut it into game videos.
     const split = !u.parent && (u.games?.length ?? 0) >= 2 && v && !v.missing
-      ? h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: `This video holds all ${u.games.length} games: cut it into one video per game on the Tools page` }, icon('scissors', 13), 'Split')
+      ? h('a', { class: 'btn small', href: `#/tools?split=${v.id}`, title: `This video holds all ${u.games.length} games: cut it into one video per game on the Tools page. Part 1 is linked to Game 1, part 2 to Game 2, and the original goes to the Recycle Bin.` }, icon('scissors', 13), 'Split')
       : null;
     // The video (name, length) with Open editor and Unlink under it, as one block at the right: both act on
     // this video. Its next steps (Render, Upload) sit after its status labels instead (stepsOf).

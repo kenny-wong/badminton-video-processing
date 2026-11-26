@@ -84,7 +84,8 @@ export async function renderTools(main, { runJob, refresh, query }) {
   const byId = new Map(library.map((v) => [v.id, v]));
   memory.order = memory.order.filter((id) => byId.has(id));
   const asked = Number(query.get('split'));
-  if (byId.has(asked)) memory.splitId = asked;
+  // Opened on a video by a Split button: the original goes to the Recycle Bin once it's cut (untick to keep it).
+  if (byId.has(asked)) Object.assign(memory, { splitId: asked, removeOriginal: true });
   let mode = byId.has(asked) ? 'split' : readTab();
   let leaveView = null;
   const body = h('div');
@@ -468,8 +469,13 @@ function splitter(area, video, byId, runJob, library, onRemoved) {
         r.parts.map((p) => h('div', { class: 'row' },
           h('span', {}, h('b', {}, p.video.name), ` · ${clock(p.length)} · ${megabytes(p.video.size)}`),
           h('button', { class: 'small', type: 'button', onclick: () => reveal(p.video) }, icon('folder', 14), 'Show in Explorer'))),
+        r.linked ? h('div', { class: 'row' }, icon('link', 16),
+          h('span', {}, `Linked to ${r.linked.games.map((g) => `Game ${g.game}`).join(' and ')} of the match, in place of the original:`),
+          r.linked.games.map((g) => h('a', { class: 'btn small', href: `#/m/${g.id}` }, icon('play', 13), `Game ${g.game}`))) : null,
         removedView(r.removed),
-        h('div', {}, h('a', { href: '#/videos', class: 'btn small' }, 'See videos')))),
+        h('div', { class: 'row' },
+          r.linked ? h('a', { href: `#/t/${r.linked.tournamentId}`, class: 'btn small primary' }, 'Back to the tournament') : null,
+          h('a', { href: '#/videos', class: 'btn small' }, 'See videos')))),
       notesView(r.notes));
       for (const p of r.parts) {
         library.unshift(p.video);

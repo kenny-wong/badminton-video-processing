@@ -245,3 +245,34 @@ test('automatic tagging is marked until reviewed, survives the editor’s saves 
     assert.ok(get(db, second).autoTagged);
   });
 });
+
+test('splitting a whole match’s video links part n to game n and takes the original off the match', async () => {
+  const { linkSplitParts } = await import('../lib/tagging.js');
+  await withServer(async ({ db, call, matches: [oneGame, threeGames, noResult] }) => {
+    db.prepare(`INSERT INTO videos (path, size, modified_at, duration) VALUES ('C:/v/p1.mp4', 1, 'x', 400), ('C:/v/p2.mp4', 1, 'x', 400), ('C:/v/p3.mp4', 1, 'x', 400), ('C:/v/p4.mp4', 1, 'x', 400)`).run();
+    const corners = [[0.1, 0.9], [0.9, 0.9], [0.8, 0.2], [0.2, 0.2]];
+    await call(`/api/matches/${threeGames}/videos`, 'PUT', { videoIds: [1] });
+    await call(`/api/matches/${threeGames}`, 'PUT', { corners });
+
+    const r = linkSplitParts(db, 1, [3, 4]);
+    assert.equal(r.note, null);
+    assert.deepEqual(r.linked.games.map((g) => [g.game, g.videoId]), [[1, 3], [2, 4]]);
+    const video = (id) => db.prepare('SELECT match_id, no_auto FROM videos WHERE id = ?').get(id);
+    assert.deepEqual({ ...video(1) }, { match_id: null, no_auto: 1 }); // off the match, and scans leave it off
+    for (const g of r.linked.games) {
+      assert.equal(video(g.videoId).match_id, g.id);
+      const row = db.prepare('SELECT parent_id, game, court_corners FROM matches WHERE id = ?').get(g.id);
+      assert.deepEqual([row.parent_id, row.game, JSON.parse(row.court_corners)], [threeGames, g.game, corners]);
+    }
+
+    // Left alone: more parts than games, a tagged match, a game's own video, a single part.
+    await call(`/api/matches/${oneGame}/videos`, 'PUT', { videoIds: [2] });
+    assert.match(linkSplitParts(db, 2, [5, 6]).note, /2 parts but the match had 1 games/);
+    assert.equal(video(2).match_id, oneGame);
+    await call(`/api/matches/${noResult}/videos`, 'PUT', { videoIds: [2] });
+    await call(`/api/matches/${noResult}`, 'PUT', { rallies: RALLIES });
+    assert.match(linkSplitParts(db, 2, [5, 6]).note, /tagged/);
+    assert.equal(linkSplitParts(db, 3, [5, 6]).linked, null); // part 3 is game 1's video, not a whole match's
+    assert.deepEqual(linkSplitParts(db, 2, [5]), { linked: null, note: null });
+  });
+});

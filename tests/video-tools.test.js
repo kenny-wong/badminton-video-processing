@@ -14,6 +14,9 @@ import { box, boxes, carryMetadataFile } from '../lib/mp4.js';
 import { fileTimes } from '../lib/filetimes.js';
 import { mergeVideos, packetCounts, removeOriginals, splitVideo, streamProblems } from '../lib/video-tools.js';
 import { splitTime } from '../public/shared/video-files.js';
+import { saveTournament } from '../lib/tournaments.js';
+import { parseMatches } from '../lib/schedule.js';
+import { PAGE } from './fixtures/be-pages.js';
 
 const tools = findTools('');
 const START = Date.UTC(2026, 10, 1, 12, 12, 8);
@@ -106,6 +109,34 @@ test('a video is split losslessly into parts with their own names and times, and
     assert.equal(again.video.madeFrom.kind, 'merge');
     assert.equal(again.video.recordedAt, '2026-11-01T12:12:08Z');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM videos WHERE path = ?').get(p1.path).n, 1);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('splitting a whole match’s video links the parts to its games, and the original goes to the bin', { skip: !tools && 'FFmpeg not found' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bv-tools-'));
+  const db = openDb(':memory:');
+  try {
+    const tid = saveTournament(db, { beId: 'b997c3c5-38fb-4caf-a402-009664189ad6', badminfoId: null, name: 'Example', start: '2026-10-24', end: '2026-10-24', matches: parseMatches(PAGE, '20261024') });
+    const match = db.prepare("SELECT id FROM matches WHERE tournament_id = ? AND json_array_length(games) = 3").get(tid).id;
+    const src = await makeVideo(dir, '20261101_121208.mp4');
+    const id = await saveVideo(db, tools, src);
+    db.prepare('UPDATE videos SET match_id = ? WHERE id = ?').run(match, id);
+    const binned = [];
+    const remove = async (path) => { binned.push(path); rmSync(path); };
+
+    const split = await splitVideo(db, tools, { id, parts: [{ start: 0, end: 2 }, { start: 2, end: 4 }], removeOriginal: true, remove, job: { log: () => {} } });
+    assert.deepEqual(split.notes, []);
+    assert.deepEqual(split.linked.games.map((g) => [g.game, g.videoId]), split.parts.map((p) => [p.n, p.video.id]));
+    assert.equal(split.linked.tournamentId, tid);
+    for (const g of split.linked.games) {
+      assert.deepEqual({ ...db.prepare('SELECT parent_id, game FROM matches m JOIN videos v ON v.match_id = m.id WHERE v.id = ?').get(g.videoId) }, { parent_id: match, game: g.game });
+    }
+    assert.deepEqual(split.removed, [{ id, name: '20261101_121208.mp4' }]);
+    assert.deepEqual(binned, [src]);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM videos WHERE match_id = ?').get(match).n, 0); // the whole match has no video now
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });
