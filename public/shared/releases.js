@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '1.98.0', date: '2026-11-26', notes: [
+    'Games tagged automatically show an Auto-tagged label on the tournament page and in the editor until you check them and press Mark as reviewed. The progress filter has Auto-tagged: to review, to find them.',
+  ] },
   { version: '1.97.1', date: '2026-11-25', notes: [
     'The desktop app no longer acts like a browser: F5 and Ctrl+R don’t reload it, F12 doesn’t open developer tools, and Ctrl+click or a middle click opens a page in the same window.',
   ] },

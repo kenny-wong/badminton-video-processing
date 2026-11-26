@@ -224,3 +224,24 @@ test('the Players list order is saved by PUT /api/favourites/order', async () =>
     for (const keys of [null, ['x'], [a, a]]) assert.equal((await call('/api/favourites/order', 'PUT', { keys })).status, 400);
   });
 });
+
+test('automatic tagging is marked until reviewed, survives the editor’s saves and follows the video', async () => {
+  await withServer(async ({ db, call, matches: [first, second], tid }) => {
+    await call(`/api/matches/${first}/videos`, 'PUT', { videoIds: [1] });
+    const saved = await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES, firstServer: 'a', autoTagged: true });
+    assert.match(saved.body.autoTagged, /^\d{4}-\d\d-\d\dT/);
+    // The editor's own saves don't send it, so it stays; the tournament page sees it.
+    await call(`/api/matches/${first}`, 'PUT', { rallies: RALLIES.slice(0, 1) });
+    assert.equal(get(db, first).autoTagged, saved.body.autoTagged);
+    assert.equal((await call(`/api/tournaments/${tid}`)).body.matches.find((m) => m.id === first).autoTagged, saved.body.autoTagged);
+    // It goes with the tagging when the video moves to another match.
+    await call(`/api/matches/${second}/videos`, 'PUT', { videoIds: [1] });
+    assert.deepEqual([get(db, first).autoTagged, get(db, second).autoTagged], [null, saved.body.autoTagged]);
+    // Reviewed: gone; marked again: back.
+    assert.equal((await call(`/api/matches/${second}`, 'PUT', { autoTagged: false })).body.autoTagged, null);
+    assert.equal(get(db, second).autoTagged, null);
+    assert.ok((await call(`/api/matches/${second}`, 'PUT', { autoTagged: true })).body.autoTagged);
+    assert.equal((await call(`/api/matches/${second}`, 'PUT', { autoTagged: 'yes' })).status, 200); // not a boolean: left alone
+    assert.ok(get(db, second).autoTagged);
+  });
+});

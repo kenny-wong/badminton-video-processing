@@ -1,8 +1,9 @@
 // GET /api/matches/:id: the match, its videos, tagging and the playable source.
-// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle?, inset?, comment? }:
+// PUT /api/matches/:id { rallies?, format?, firstServer?, startScore?, matchStart?, matchEnd?, youtubeUrl?, boardStyle?, inset?, comment?, autoTagged? }:
 //   saves tagging, the score the video starts at, where the match starts and
 //   ends in the video, the YouTube link once uploaded ('' or null clears), and the match's
-//   own scoreboard preset and corner (null uses Settings).
+//   own scoreboard preset and corner (null uses Settings). autoTagged true marks the
+//   tagging as done automatically (to review), false marks it reviewed.
 // PUT /api/matches/:id/favourite { favourite }: stars the match, or the game when :id is a game's row.
 // PUT /api/matches/:id/videos { videoIds }: links this video ([] unlinks; a match or game takes one
 //   video, so two games filmed separately go to the game rows below). A match
@@ -171,7 +172,13 @@ export async function onRequestPut({ request, params, app }) {
   // The comment (at the end of its videos' YouTube descriptions) on its own: only when sent.
   const comment = typeof body.comment === 'string' ? cleanComment(body.comment) : match.comment;
   if (typeof body.comment === 'string') app.db.prepare('UPDATE matches SET comment = ?, updated_at = ? WHERE id = ?').run(comment || null, nowIso(), match.id);
-  return json({ ok: true, comment, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle, inset,
+  // Tagged automatically (true: to review) or reviewed (false): only when sent, so the editor's saves keep it.
+  let { autoTagged } = match;
+  if (typeof body.autoTagged === 'boolean') {
+    autoTagged = body.autoTagged ? nowIso() : null;
+    app.db.prepare('UPDATE matches SET auto_tagged = ? WHERE id = ?').run(autoTagged, match.id);
+  }
+  return json({ ok: true, comment, autoTagged, rallies: rallies.length, startScore, matchStart, matchEnd, youtubeUrl: link, uploadedAt, corners, nearAtStart, boardStyle, inset,
     board: matchBoard(app.db, readSettings(app.db).board, { ...match, boardStyle }, loaded.tournament) });
 }
 

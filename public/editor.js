@@ -2,7 +2,7 @@
 // end and winner from the keyboard, watch the score build up, and render the
 // edited video.
 
-import { h, fill, day, gamesView, openButtons } from './dom.js';
+import { h, fill, day, gamesView, openButtons, when } from './dom.js';
 import { api, waitJob } from './api.js';
 import { boardNames, teamName } from './shared/names.js';
 import { assumedStart, boardAt, firstShown, CAPS, checkResult, cleanFormat, cleanStart, defaultServer, gamesText, parseGames, RALLY_GAP, replay, startFor } from './shared/score.js';
@@ -182,9 +182,43 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
         [match.draw, match.round, match.court, `${day(match.date)} ${match.time}`].filter(Boolean).map((x) => h('span', {}, x)),
         match.games.length ? h('span', { class: 'result' }, ['Result ', gamesView(match.games)]) : null,
         match.beGames ? h('span', { title: correctedTitle(match) }, 'Corrected') : null,
+        reviewButton(),
         tournament.kind !== 'custom' ? h('button', { class: 'small', type: 'button', title: 'Correct the result, when Badminton England has it wrong', onclick: correctScore }, 'Correct score') : null),
       unitSwitch()),
     headRight);
+
+  // Tagged automatically: a label until the user has checked it and says so (or marks it to review again).
+  function reviewButton() {
+    let auto = match.autoTagged ?? null; // a server older than 1.98.0 sends nothing
+    const label = h('span', { class: 'tag auto' }, 'Auto-tagged');
+    const button = h('button', { class: 'small', type: 'button' });
+    const wrap = h('span', { class: 'row review-mark' }, label, button);
+    let reviewed = false; // once marked here, the button stays to undo it
+    const draw = () => {
+      label.hidden = !auto;
+      label.title = auto ? `Tagged automatically on ${when(auto)}: check the rallies, then mark it as reviewed` : '';
+      fill(button, auto ? 'Mark as reviewed' : 'Mark to review again');
+      button.title = auto ? 'You have checked the tagging: the Auto-tagged label goes' : 'Show it as Auto-tagged again, to come back to it';
+      wrap.hidden = !auto && !reviewed;
+    };
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        const r = await api(`/api/matches/${match.id}`, { method: 'PUT', body: { autoTagged: !auto } });
+        auto = r.autoTagged ?? null;
+        reviewed = true;
+        match.autoTagged = auto;
+        button.disabled = false;
+        draw();
+      } catch (err) {
+        button.disabled = false;
+        fill(button, 'Not saved: try again');
+        button.title = err.message;
+      }
+    };
+    draw();
+    return wrap;
+  }
 
   // The result of the whole match, with this video's tagged games beside Badminton England's.
   function correctScore() {

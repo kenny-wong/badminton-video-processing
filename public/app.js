@@ -793,6 +793,8 @@ async function renderTournament(id, notice = null, who = null) {
   };
   const wrongScoreTag = (m, title) => (custom ? h('span', { class: 'tag score-bad', title }, 'Score ≠')
     : h('button', { type: 'button', class: 'tag score-bad', title: `${title} Click to correct the result.`, onclick: () => correctScore(m) }, 'Score ≠'));
+  // Tagged automatically and not reviewed yet: opens the video to check it (the editor has Mark as reviewed).
+  const autoTag = (u) => (u.autoTagged ? h('a', { class: 'tag auto', href: `#/m/${u.id}`, title: `Tagged automatically on ${when(u.autoTagged)}: open it to check the rallies, then Mark as reviewed in the editor` }, 'Auto-tagged') : null);
   const correctedTag = (m) => (m.beGames ? h('button', { type: 'button', class: 'tag score-fixed', title: `${correctedTitle(m)}. Click to change.`, onclick: () => correctScore(m) }, 'Score corrected') : null);
   const statusCell = (m) => {
     if (!m.videoIds?.length && !(m.units && gamesLinked(m))) return m.units ? h('span', { class: 'small muted' }, 'Not filmed') : null;
@@ -812,6 +814,7 @@ async function renderTournament(id, notice = null, who = null) {
         bad ? wrongScoreTag(m, 'A game’s tagged score differs from the result: fix its tagging in the editor to render it here or with Render all tagged.')
           : tag(scoreOk, scoreOk ? 'score-ok' : 'score', scoreOk ? 'Score ✓' : 'Score', 'Tagged game scores checked against the result'),
         correctedTag(m),
+        units.some((u) => u.autoTagged) ? h('span', { class: 'tag auto', title: 'Games tagged automatically and not reviewed yet: open each to check it' }, `${units.filter((u) => u.autoTagged).length} auto-tagged`) : null,
         tag(rendered > 0, 'render', `${rendered}/${total} rendered`, 'Rendered game videos'),
         youtubeTag(m, tag));
     }
@@ -827,6 +830,7 @@ async function renderTournament(id, notice = null, who = null) {
           : wrongScoreTag(m, `Tagged: ${gamesText(m.tagGames)}, not the result. Fix the tagging in the editor to render it here or with Render all tagged.`)
         : tag(false, 'score', 'Score', 'The tagged score, checked against the result once there are rallies'),
       m.parent ? null : correctedTag(m),
+      autoTag(m),
       reRendered(m)
         ? tag(true, 'render part', 'Re-rendered', 'Rendered again since it went on YouTube: the video there is the older one until you upload this')
         : tag(Boolean(m.outputPath), 'render', 'Rendered', m.outputPath ? 'Rendered' : 'Not rendered yet'),
@@ -949,14 +953,14 @@ async function renderTournament(id, notice = null, who = null) {
   // went further: Tagged includes tagged videos since rendered or uploaded, Rendered includes those on YouTube.
   // Next step is where each video is now: Ready for YouTube is rendered and not uploaded yet.
   const DONE = { filmed: ['Filmed', 'linked'], tagged: ['Tagged', 'tagged'], rendered: ['Rendered', 'rendered'], youtube: ['On YouTube', 'on YouTube'] };
-  const NEXT = { unlinked: ['Needs a video'], tag: ['Needs tagging', 'to tag'], render: ['Ready to render', 'ready to render'], upload: ['Ready for YouTube', 'ready for YouTube'], todo: ['To do: tag, render or upload', 'to do'] };
+  const NEXT = { unlinked: ['Needs a video'], tag: ['Needs tagging', 'to tag'], render: ['Ready to render', 'ready to render'], upload: ['Ready for YouTube', 'ready for YouTube'], todo: ['To do: tag, render or upload', 'to do'], review: ['Auto-tagged: to review', 'auto-tagged, to review'] };
   const doneSoFar = {
     filmed: () => true,
     tagged: (u) => isTagged(u),
     rendered: (u) => Boolean(u.outputPath),
     youtube: (u) => Boolean(u.youtubeUrl),
   };
-  const unitPasses = (u, f) => (Object.hasOwn(doneSoFar, f) ? doneSoFar[f](u) : f === 'todo' ? ['tag', 'render', 'upload'].includes(unitStage(u)) : unitStage(u) === f);
+  const unitPasses = (u, f) => (Object.hasOwn(doneSoFar, f) ? doneSoFar[f](u) : f === 'todo' ? ['tag', 'render', 'upload'].includes(unitStage(u)) : f === 'review' ? Boolean(u.autoTagged) : unitStage(u) === f);
   const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   if (viewState.progress === 'done') viewState.progress = 'youtube'; // its name before 1.60.0
   const progressFilter = h('select', { 'aria-label': 'Filter by progress', onchange: () => setProgress(progressFilter.value) },
