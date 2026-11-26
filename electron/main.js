@@ -3,6 +3,8 @@
 // (database, logs, thumbnails, YouTube sign-in, the window's own storage)
 // lives in %LOCALAPPDATA%\Badminton Video; FFmpeg comes with the installer.
 // The Python tools' scripts do too; the big rest of them is set up from Settings.
+// A new version left by `npm run dist` in the updates folder is offered in the page
+// ("Restart now") and installed silently: lib/app-update.js.
 
 import { app, BrowserWindow, Menu, dialog, shell } from 'electron';
 import { existsSync } from 'node:fs';
@@ -10,6 +12,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { linkAction, openAction, windowKey } from './links.js';
+import { createUpdater, updatesFolder } from '../lib/app-update.js';
 
 const NAME = 'Badminton Video';
 // 8791 is `npm start`'s, so the installed app and a development copy can run side by side.
@@ -28,6 +31,8 @@ if (app.isPackaged) {
 }
 
 let win = null;
+let updater = null;
+let quitting = false;
 
 /** The first port from `port` that nothing else listens on (localStorage is per port, so it stays put when free). */
 function freePort(port, tries = 20) {
@@ -91,7 +96,17 @@ async function start() {
   const { startServer } = await import('../server.js');
   const { listJobs } = await import('../lib/jobs.js');
   const port = await freePort(PORT);
-  startServer({
+  // Only the installed app updates itself (BADMINTON_VIDEO_UPDATES lets a test copy try it).
+  const updates = app.isPackaged || process.env.BADMINTON_VIDEO_UPDATES ? updatesFolder() : null;
+  const update = updates && {
+    ready: () => updater?.ready() ?? null,
+    install: (options) => updater.install(options),
+    quit: () => {
+      quitting = true;
+      app.exit(0);
+    },
+  };
+  const { db } = startServer({
     dataDir,
     port,
     restart: () => {
@@ -103,8 +118,13 @@ async function start() {
       const r = await dialog.showOpenDialog(win, { title: 'Choose the folder with this tournament’s videos', defaultPath: start, properties: ['openDirectory'] });
       return r.canceled ? null : r.filePaths[0] ?? null;
     },
+    update,
     onListening: (address) => openWindow(address, listJobs),
   });
+  if (updates) {
+    updater = createUpdater({ dir: updates, current: app.getVersion(), db, dataDir });
+    updater.start();
+  }
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -116,6 +136,15 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
   app.on('window-all-closed', () => app.quit());
+  // Closing the app with a new version waiting installs it (silently, without reopening).
+  app.on('will-quit', (event) => {
+    if (quitting || !updater?.ready()) return;
+    event.preventDefault();
+    quitting = true;
+    updater.install({ reopen: false })
+      .catch((err) => console.error('Installing the new version on closing', err))
+      .finally(() => app.exit(0));
+  });
   app.whenReady().then(start).catch((err) => {
     dialog.showErrorBox(NAME, `The app couldn’t start:\n${err.stack ?? err.message}`);
     app.exit(1);

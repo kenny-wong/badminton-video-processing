@@ -35,7 +35,7 @@ import { matchStar } from './match-star.js';
 import { correctedTitle, openScoreDialog } from './score-dialog.js';
 import { doubtNotice } from './link-doubts.js';
 import { courtDisplay } from './shared/venues.js';
-import { versionAdvice } from './shared/version.js';
+import { updatedSince, versionAdvice } from './shared/version.js';
 import { backLinks, pageShown } from './nav.js';
 import { readPrefs as readUploadPrefs } from './youtube-panel.js';
 import { shareButton } from './share-dialog.js';
@@ -93,7 +93,13 @@ async function checkServerVersion() {
   const advice = versionAdvice(PAGE_VERSION, server.version);
   shown.hidden = !advice;
   shown.textContent = advice ? `server ${server.version}` : '';
-  banner.hidden = !advice;
+  if (!advice) {
+    showUpdate(banner, server.update);
+    return;
+  }
+  banner.hidden = false;
+  banner.dataset.kind = 'advice';
+  banner.classList.remove('update');
   fill(banner, advice === 'reload'
     ? [h('span', {}, `Server version ${server.version} doesn’t match this window (${PAGE_VERSION}). Reload this window.`),
       h('button', { class: 'small primary', onclick: () => location.reload() }, 'Reload')]
@@ -102,6 +108,83 @@ async function checkServerVersion() {
         h('button', { class: 'small primary', onclick: (e) => restartServer(e.currentTarget, server.boot) }, 'Restart server')]
       : null);
 }
+// The installed app found a new version (left by `npm run dist`, lib/app-update.js): offer to restart into it.
+// Later hides it until this window reloads; closing the app installs it anyway.
+let updateLater = null;
+let installingUpdate = false;
+function showUpdate(banner, update) {
+  if (installingUpdate || banner.dataset.kind === 'updated') return;
+  const offer = update && update.version !== updateLater ? update : null;
+  if (!offer) {
+    if (banner.dataset.kind) {
+      banner.hidden = true;
+      delete banner.dataset.kind;
+      fill(banner, null);
+    }
+    return;
+  }
+  if (banner.dataset.kind === `update ${offer.version}`) return; // already shown (keeps What's new open)
+  banner.dataset.kind = `update ${offer.version}`;
+  banner.classList.add('update');
+  banner.hidden = false;
+  const notes = offer.notes?.length ? h('ul', { class: 'update-notes', hidden: true }, offer.notes.map((n) => h('li', {}, n))) : null;
+  fill(banner,
+    h('span', {}, `Version ${offer.version} is ready. Restart the app to install it (it takes about half a minute).`),
+    notes ? h('button', { class: 'link-button', 'aria-expanded': 'false', onclick: (e) => {
+      notes.hidden = !notes.hidden;
+      e.currentTarget.setAttribute('aria-expanded', String(!notes.hidden));
+    } }, 'What’s new') : null,
+    h('button', { class: 'small primary', onclick: (e) => installUpdate(e.currentTarget, offer) }, 'Restart now'),
+    h('button', { class: 'small', title: 'Hides this until the app is opened again. Closing the app installs the new version too.', onclick: () => {
+      updateLater = offer.version;
+      banner.hidden = true;
+      delete banner.dataset.kind;
+    } }, 'Later'),
+    notes);
+}
+// Saves what the page has open, then the app backs up the database, starts the installer and closes; it reopens by itself.
+async function installUpdate(button, offer) {
+  const banner = document.querySelector('.version-banner');
+  button.disabled = true;
+  installingUpdate = true;
+  const saving = leaving?.(); // the editor's last changes go first
+  leaving = null;
+  await Promise.resolve(saving).catch(() => {});
+  try {
+    await api('/api/update/install', { method: 'POST', body: {} }).catch((err) => {
+      if (err.code !== 'jobsRunning') throw err;
+      if (!confirm(`${err.message}.
+
+Restart anyway?`)) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
+      return api('/api/update/install', { method: 'POST', body: { force: true } });
+    });
+  } catch (err) {
+    installingUpdate = false;
+    button.disabled = false;
+    router(); // the page left above comes back
+    if (err.code === 'cancelled') return;
+    delete banner.dataset.kind;
+    fill(banner, h('span', {}, `Version ${offer.version} couldn’t be installed: ${err.message}`));
+    return;
+  }
+  fill(banner, h('span', {}, `Installing version ${offer.version}… The app closes and opens again by itself in about half a minute.`));
+}
+// After an update: one line saying so, with the release notes a click away.
+const SEEN_KEY = 'badminton-video:seen-version:v1';
+try {
+  const seen = localStorage.getItem(SEEN_KEY);
+  const banner = document.querySelector('.version-banner');
+  if (banner && updatedSince(seen, PAGE_VERSION)) {
+    banner.dataset.kind = 'updated';
+    banner.classList.add('update');
+    banner.hidden = false;
+    fill(banner,
+      h('span', {}, `Updated to version ${PAGE_VERSION}.`),
+      h('a', { href: '#/releases', onclick: () => { banner.hidden = true; delete banner.dataset.kind; } }, 'What’s new'),
+      h('button', { class: 'small', onclick: () => { banner.hidden = true; delete banner.dataset.kind; } }, 'Close'));
+  }
+  if (seen !== PAGE_VERSION && PAGE_VERSION) localStorage.setItem(SEEN_KEY, PAGE_VERSION);
+} catch { /* storage blocked */ }
 // A development copy (not the installed app): yellow mark, a DEV badge, and "(dev)" after every page title.
 const DEV_SUFFIX = ' (dev)';
 const devTitle =(title) => (title.endsWith(DEV_SUFFIX) ? title : `${title}${DEV_SUFFIX}`);

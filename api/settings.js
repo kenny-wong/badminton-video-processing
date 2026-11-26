@@ -1,5 +1,7 @@
 // GET /api/version: the version this server runs, its run id, when it started and whether it's a development copy.
 // POST /api/restart { force? }: restarts the server (409 while jobs run, unless force).
+// POST /api/update/install { force? }: installs the new version waiting in the updates folder and
+//   reopens the app (409 while jobs run, unless force; 404 when there's none). See lib/app-update.js.
 // GET /api/settings: the settings, the app version, whether FFmpeg was found, and a
 //   frame of the latest linked video for the scoreboard preview.
 // PUT /api/settings: saves them.
@@ -23,7 +25,30 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 const STARTED = new Date().toISOString();
 
 // dev: not the installed app (a development copy: `npm run app`, `npm start`), so the page can say so.
-export const versionRoute = () => json({ version, boot: BOOT, startedAt: STARTED, dev: process.env.BADMINTON_VIDEO_DEV === '1' });
+// update: a newer installed-app version that is ready to install ({ version, notes }), or null.
+export const versionRoute = ({ app } = {}) => {
+  const ready = app?.update?.ready();
+  return json({ version, boot: BOOT, startedAt: STARTED, dev: process.env.BADMINTON_VIDEO_DEV === '1', update: ready ? { version: ready.version, notes: ready.notes } : null });
+};
+
+export async function installUpdate({ request, app }) {
+  const body = (await readJson(request)) ?? {};
+  const ready = app?.update?.ready();
+  if (!ready) return fail(404, 'noUpdate', 'There’s no new version to install');
+  const running = listJobs().filter((j) => j.status === 'running' || j.status === 'queued');
+  if (running.length && body.force !== true) {
+    return fail(409, 'jobsRunning', `${running.length} job${running.length === 1 ? ' is' : 's are'} still running and would stop: ${running.map((j) => j.label || j.key).join('; ')}`);
+  }
+  try {
+    await app.update.install({ reopen: true });
+  } catch (err) {
+    console.error('Installing the new version', err);
+    return fail(err.code === 'noUpdate' ? 404 : 500, err.code ?? 'installFailed', err.message);
+  }
+  // The app closes after the answer has gone; the installer waits for it, then opens it again.
+  setTimeout(() => app.update.quit(), 300);
+  return json({ ok: true, version: ready.version }, 202);
+}
 
 export async function restart({ request, app }) {
   const body = (await readJson(request)) ?? {};

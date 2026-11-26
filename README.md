@@ -25,11 +25,13 @@ Needs Windows 10/11, [Node.js](https://nodejs.org/) 24 or later and FFmpeg (`win
 npm start      # the app on http://127.0.0.1:8791 in a Chrome app window, data in data/
 npm run dev    # the same without opening Chrome, restarting when files change
 npm run app    # the desktop (Electron) version, port 8793, data in %LOCALAPPDATA%\Badminton Video (development)
-npm run dist   # builds dist\Badminton-Video-Setup-<version>.exe, with this PC's FFmpeg copied in and the icon drawn from public/visual-kit/app-mark.svg
+npm run dist   # builds dist\Badminton-Video-Setup-<version>.exe, with this PC's FFmpeg copied in and the icon drawn from public/visual-kit/app-mark.svg, and offers it to the app installed on this PC
 npm test       # unit tests (Node's built-in test runner)
 ```
 
 The desktop version (`electron/main.js`) runs the same server inside Electron's own process on port 8792, in its own window; web links open in the default browser. `BADMINTON_VIDEO_DATA` points it at another data folder.
+
+Updating the installed app: `npm run dist` ends by copying the installer to `%LOCALAPPDATA%\Badminton Video\updates` with a `latest.json` saying its version, size, SHA-256 and release notes (`scripts/offer-update.mjs`; `npm run dist -- --no-offer` skips it, `BADMINTON_VIDEO_UPDATES` sets another folder). The installed app looks there every minute, checks the file, and shows **Version n is installed and ready. Restart now / Later**. Restart now saves the open editor, backs up the database to `data\backups` (the newest 5 are kept), starts the installer silently (`/S /currentuser --updated --force-run`, which keeps the shortcuts and taskbar pin) and closes; the installer replaces the files and opens the app again. Windows doesn't let a running program's files be replaced, so that step waits for the restart. Closing the app with a version waiting installs it too, without reopening it. After an update the page says **Updated to version n**, with the release notes a click away.
 
 ## Using it
 
@@ -143,7 +145,7 @@ The server writes `logs\app.log` in its data folder (`data\` for `npm start`): s
 
 ## Not yet
 
-- Automatic updates and a code-signed installer.
+- Updates on other PCs (the app updates itself only from installers built on the same PC) and a code-signed installer.
 
 ## Licence
 

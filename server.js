@@ -43,6 +43,7 @@ const ROOT = fileURLToPath(new URL('./public/', import.meta.url));
 const ROUTES = [
   ['GET', '/api/version', settings.versionRoute],
   ['POST', '/api/restart', settings.restart],
+  ['POST', '/api/update/install', settings.installUpdate],
   ['GET', '/api/settings', settings.onRequestGet],
   ['PUT', '/api/settings', settings.onRequestPut],
   ['PUT', '/api/settings/logo', settings.putLogo],
@@ -330,9 +331,10 @@ const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 /**
  * Opens the log and database in `dataDir` and listens on 127.0.0.1:`port`.
  * Used by `npm start` below and by the desktop app (electron/main.js), which
- * passes its own folder, port, `restart` and `pickFolder` (its folder dialog).
+ * passes its own folder, port, `restart`, `pickFolder` (its folder dialog) and `update`
+ * ({ ready(), install({ reopen }), quit() }: the new version waiting to be installed, lib/app-update.js).
  */
-export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.db'), port = PORT, restart = null, pickFolder = null, onListening = () => {} }) {
+export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.db'), port = PORT, restart = null, pickFolder = null, update = null, onListening = () => {} }) {
   mkdirSync(dataDir, { recursive: true });
   startLog(join(dataDir, 'logs', 'app.log'));
   const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -348,7 +350,7 @@ export function startServer({ dataDir, dbPath = join(dataDir, 'badminton-video.d
   } catch (err) {
     console.error('Numbering group matches', err);
   }
-  const app = { db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart, pickFolder, drives: listDrives };
+  const app = { db, port, thumbDir: join(dataDir, 'thumbs'), dataDir, restart, pickFolder, update, drives: listDrives };
   checkLibrary(app); // videos on a drive that has another letter now, or isn't connected; the page doesn't wait
   const server = createApp(app);
   keepSending(app);

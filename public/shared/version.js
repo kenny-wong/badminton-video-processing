@@ -24,3 +24,8 @@ export function versionAdvice(page, server) {
   const c = compareVersions(server, page);
   return c > 0 ? 'reload' : c < 0 ? 'restart' : null;
 }
+
+/** True when this window's version is newer than the one it last showed (an update was installed since). */
+export function updatedSince(seen, page) {
+  return Boolean(seen && page) && compareVersions(page, seen) > 0;
+}

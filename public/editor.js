@@ -2180,19 +2180,22 @@ export async function renderEditor(main, id, { runJob, errorNotice, progressBar 
   resizedHead.observe(header);
   headHeight();
 
+  // Returns the saves still under way, for a caller that must wait for them (installing an update).
   return () => {
+    const saving = [];
     resizedHead.disconnect();
     document.documentElement.style.removeProperty('--editor-head-h');
-    if (commentTimer) saveComment(); // a comment typed just before leaving is still saved
+    if (commentTimer) saving.push(saveComment()); // a comment typed just before leaving is still saved
     window.removeEventListener('keydown', onKey);
     keysDialog.remove();
     clearTimeout(framesTimer);
     resized.disconnect();
     resizedPlayer.disconnect();
     clearTimeout(saveTimer);
-    if (saveState.textContent === 'Saving…') save();
+    if (saveState.textContent === 'Saving…') saving.push(save());
     video.pause();
     video.removeAttribute('src');
     video.load();
+    return Promise.all(saving);
   };
 }
