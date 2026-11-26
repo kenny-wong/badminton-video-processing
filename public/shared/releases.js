@@ -1,7 +1,7 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
-  { version: '1.102.0', date: '2026-11-26', notes: [
+  { version: '2.0.0', date: '2026-11-26', notes: [
     'The app updates itself: when a new version is ready, a bar at the top says so, with what’s new. Restart now saves your work, backs up your records and reopens the app on the new version; Later leaves it until you close the app, which installs it too.',
   ] },
   { version: '1.101.0', date: '2026-11-26', notes: [
