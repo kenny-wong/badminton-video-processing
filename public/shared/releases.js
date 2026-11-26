@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '2.0.3', date: '2026-11-26', notes: [
+    'Tournaments page: Upset stays on the same line as the winning pair’s chance in doubles too. The pair’s names aren’t repeated beside each chance, since it sits on their line.',
+  ] },
   { version: '2.0.2', date: '2026-11-26', notes: [
     'Tournaments page: the win chance is less cramped. Each side’s chance sits on the same line as its players, with Upset beside the side that won, and the bar is level with the event name.',
   ] },
