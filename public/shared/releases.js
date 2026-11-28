@@ -1,6 +1,9 @@
 // Release notes, newest first. Each new version adds its entry at the top
 // (tests/releases.test.js checks the first one is package.json's version).
 export const RELEASES = [
+  { version: '2.1.0', date: '2026-11-28', notes: [
+    'Rallies from the enrolment planner: a match or game whose video has no rallies tagged takes them from the game recorded rally by rally on the planner (by you or any VIP account), each placed on the video by the time it was tapped, with its winner, who served first and the score the video starts at. Rallies you tagged are never replaced, a tagging you clear isn’t filled again, and filled ones are marked tagged automatically, to review. Only games recorded to their end with tap times are used. Settings → Enrolment planner lists what was filled and what is waiting, and why.',
+  ] },
   { version: '2.0.4', date: '2026-11-26', notes: [
     'Win chance: beside the side that won, a grey Favourite won when it had over 50%, an outlined Close when it had 35–50% (nearly an upset), and the gold Upset under 35%. On the tournament page and in the editor’s Players tab.',
   ] },

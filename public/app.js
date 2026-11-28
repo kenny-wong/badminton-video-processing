@@ -1769,7 +1769,7 @@ async function renderSettings() {
       section('Tagging', 'Pressing A or B without S first ends a rally whose start wasn’t marked.',
         h('div', { class: 'row' }, h('label', { for: 'rally-gap' }, 'Such a rally starts'), rallyGap, h('span', {}, 'seconds after the previous rally ended.')),
         h('p', { class: 'hint' }, 'The first rally starts at the match start (M), or 10 seconds before A / B. Press S at a serve to mark a start exactly; Q moves a selected rally’s start to now.')),
-      section('Enrolment planner', 'Sends your matches’ YouTube links to your planner’s Strategy tab automatically, after each upload and whenever a link changes.',
+      section('Enrolment planner', 'Sends your matches’ YouTube links to your planner’s Strategy tab automatically, after each upload and whenever a link changes, and fills in rallies for untagged videos from games recorded on the planner.',
         plannerPanel({ errorNotice }).element),
       section('Tracking tools', 'Shuttle tracking, Find players and removing voices. They’re a big download, so they’re set up separately, once.',
         analysis.element,

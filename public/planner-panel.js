@@ -6,6 +6,19 @@ import { api } from './api.js';
 
 const n = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
+/** Rallies filled in from the planner's recorded games, and the videos still waiting for one. */
+function recordsBox(s) {
+  const r = s.records ?? { filled: [], waiting: [] };
+  const line = (x, extra) => h('li', {}, h('a', { href: `#/m/${x.matchId}` }, x.label), extra);
+  return h('div', { class: 'stack' },
+    h('p', { class: 'hint' }, 'A video with no rallies tagged takes them from a game recorded on the planner (by you or any VIP account), placed by the time of each tap. Rallies you tag are never replaced; filled ones are marked tagged automatically, to review.'),
+    s.recordsError ? h('div', { class: 'notice bad' }, `Recorded games couldn’t be read: ${s.recordsError}. Tried again after the next change, and every hour.`) : null,
+    r.filled.length ? h('div', { class: 'notice ok' }, h('p', {}, 'Filled from recorded games lately:'),
+      h('ul', { class: 'planner-problems' }, r.filled.map((x) => line(x, `: ${n(x.rallies, 'rally', 'rallies')}${x.rallies < x.of ? ` of ${x.of} (the rest is outside the video)` : ''}`)))) : null,
+    r.waiting.length ? h('div', { class: 'notice warn' }, h('p', {}, `Recorded on the planner but not filled in (${r.waiting.length}):`),
+      h('ul', { class: 'planner-problems' }, r.waiting.map((x) => line(x, `: ${x.why}`)))) : null);
+}
+
 export function plannerPanel({ errorNotice }) {
   const box = h('div', { class: 'stack' });
   const msg = h('div', {});
@@ -35,7 +48,7 @@ export function plannerPanel({ errorNotice }) {
         h('div', { class: 'row' }, h('label', { for: 'planner-code' }, 'Code'), code, go));
       return;
     }
-    const send = h('button', { type: 'button', class: 'small', onclick: () => run(send, 'Looking up every match and sending its links…', () => api('/api/planner/send', { method: 'POST' })) }, 'Send all links');
+    const send = h('button', { type: 'button', class: 'small', onclick: () => run(send, 'Looking up every match, sending its links and reading recorded games…', () => api('/api/planner/send', { method: 'POST' })) }, 'Send all links and read recorded games');
     const end = h('button', { type: 'button', class: 'small danger', onclick: () => {
       if (confirm('Disconnect from the planner? Links already sent stay there. To end the code itself, press Disconnect in the planner too.')) run(end, '', () => api('/api/planner', { method: 'DELETE' }));
     } }, 'Disconnect');
@@ -44,6 +57,7 @@ export function plannerPanel({ errorNotice }) {
       s.error ? h('div', { class: 'notice bad' }, `Not sent: ${s.error}. It’s tried again after the next change, and every hour.`) : null,
       s.problems.length ? h('div', { class: 'notice warn' }, h('p', {}, `The links of ${n(s.problems.length, 'match', 'matches')} can’t be sent:`),
         h('ul', { class: 'planner-problems' }, s.problems.map((p) => h('li', {}, h('a', { href: `#/m/${p.matchId}` }, p.label), `: ${p.why}`)))) : null,
+      recordsBox(s),
       h('div', { class: 'row' }, send, end));
   }
   api('/api/planner').then(draw).catch((err) => fill(box, errorNotice(err)));
